@@ -215,12 +215,23 @@ Panel {
       }
       return []
     }
+    if (activeSport === "f1") {
+      var f1Key = (id === "Constructors" || id.indexOf("Construct") !== -1) ? "Constructors" : "Drivers"
+      if (multiSportStandings && multiSportStandings[f1Key] && multiSportStandings[f1Key].length > 0) {
+        return Model.arrayFrom(multiSportStandings[f1Key])
+      }
+      for (var f in multiSportStandings) {
+        if (multiSportStandings[f] && multiSportStandings[f].length > 0)
+          return Model.arrayFrom(multiSportStandings[f])
+      }
+      return []
+    }
     if (multiSportStandings && multiSportStandings[id]) {
       return Model.arrayFrom(multiSportStandings[id])
     }
     for (var k in multiSportStandings) {
       if (multiSportStandings[k] && multiSportStandings[k].length > 0)
-        return multiSportStandings[k]
+        return Model.arrayFrom(multiSportStandings[k])
     }
     return []
   }
@@ -344,10 +355,23 @@ Panel {
       if (selectedLeagueIds.length === 0) selectedLeagueIds = ["61"]
       selectedTeamId = String(fb.teamId || "")
       standingsLeagueId = String(fb.standingsLeagueId || selectedLeagueIds[0])
+      if (fb.tab === "standings") root.tabIndex = 2
+      else if (fb.tab === "live") root.tabIndex = 1
+      else root.tabIndex = 0
+    } else if (activeSport === "f1") {
+      var f1 = savedState.f1 || {}
+      selectedTeamId = String(f1.teamId || "")
+      standingsLeagueId = String(f1.standingsGroup || "Drivers")
+      if (f1.tab === "standings") root.tabIndex = 2
+      else if (f1.tab === "live") root.tabIndex = 1
+      else root.tabIndex = 0
     } else {
       var sp = savedState[activeSport] || {}
       selectedTeamId = String(sp.teamId || "")
       standingsLeagueId = String(sp.standingsGroup || (standingsOptions.length > 0 ? standingsOptions[0].value : ""))
+      if (sp.tab === "standings") root.tabIndex = 2
+      else if (sp.tab === "live") root.tabIndex = 1
+      else root.tabIndex = 0
     }
   }
 
@@ -1089,7 +1113,8 @@ Panel {
         workerF1Drivers.handled = true
         var drivers = Model.parseF1DriverStandings(String(text || ""))
         if (drivers && drivers.length > 0) {
-          var cur = multiSportStandings || {}
+          var cur = {}
+          for (var k in multiSportStandings) cur[k] = multiSportStandings[k]
           cur["Drivers"] = drivers
           multiSportStandings = cur
         }
@@ -1115,9 +1140,10 @@ Panel {
         workerF1Constructors.handled = true
         var con = Model.parseF1ConstructorStandings(String(text || ""))
         if (con && con.length > 0) {
-          var cur = multiSportStandings || {}
-          cur["Constructors"] = con
-          multiSportStandings = cur
+          var cur2 = {}
+          for (var k2 in multiSportStandings) cur2[k2] = multiSportStandings[k2]
+          cur2["Constructors"] = con
+          multiSportStandings = cur2
         }
         root.checkF1Done()
       }
@@ -1517,7 +1543,13 @@ Panel {
                     hasCursor: root.focusSection === 0 && root.tabIndex === index && !root.anyPopupOpen()
                     foreground: root.fgColor
                     accent: Color.accent
-                    onClicked: root.tabIndex = index
+                    onClicked: {
+                      root.tabIndex = index
+                      if (index === 2) {
+                        root.ensureStandingsSelection()
+                        if (root.standingsRows.length === 0 && !root.loading) root.refresh()
+                      }
+                    }
                   }
                 }
               }
@@ -2551,7 +2583,7 @@ Panel {
 
                     // F1 Drivers Header
                     Row {
-                      visible: root.activeSport === "f1" && root.standingsLeagueId === "Drivers"
+                      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Drivers" || root.standingsLeagueId === "" || root.standingsLeagueId.indexOf("Construct") === -1)
                       width: parent.width
                       anchors.leftMargin: Style.space(6)
                       anchors.rightMargin: Style.space(6)
@@ -2565,7 +2597,7 @@ Panel {
 
                     // F1 Constructors Header
                     Row {
-                      visible: root.activeSport === "f1" && root.standingsLeagueId !== "Drivers"
+                      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Constructors" || root.standingsLeagueId.indexOf("Construct") !== -1)
                       width: parent.width
                       anchors.leftMargin: Style.space(6)
                       anchors.rightMargin: Style.space(6)
@@ -3599,7 +3631,7 @@ Panel {
 
     // F1 Drivers Standings Row
     Row {
-      visible: root.activeSport === "f1" && root.standingsLeagueId === "Drivers"
+      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Drivers" || root.standingsLeagueId === "" || root.standingsLeagueId.indexOf("Construct") === -1)
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
@@ -3690,7 +3722,7 @@ Panel {
 
     // F1 Constructors Standings Row
     Row {
-      visible: root.activeSport === "f1" && root.standingsLeagueId !== "Drivers"
+      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Constructors" || root.standingsLeagueId.indexOf("Construct") !== -1)
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
