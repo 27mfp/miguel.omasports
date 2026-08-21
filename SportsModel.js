@@ -544,6 +544,7 @@ function parseEspnStandings(raw, sportName) {
       var pts = (statMap.pts && statMap.pts.displayValue) || (statMap.points && statMap.points.displayValue) || (statMap.winPercent && statMap.winPercent.displayValue) || (wins + "W")
       var diff = (statMap.differential && statMap.differential.displayValue) || (statMap.pointDifferential && statMap.pointDifferential.displayValue) || (statMap.runDifferential && statMap.runDifferential.displayValue) || (statMap.gamesBehind && statMap.gamesBehind.displayValue) || "-"
       var seed = parseInt((statMap.playoffSeed && statMap.playoffSeed.displayValue), 10) || (e + 1)
+      var logoUrl = (team.logos && team.logos[0] && team.logos[0].href) || (team.logo) || ""
 
       var zone = ""
       if (seed <= 6) zone = "europe"
@@ -554,6 +555,8 @@ function parseEspnStandings(raw, sportName) {
         id: String(team.id || ""),
         name: String(team.displayName || team.name || "Team"),
         shortName: String(team.shortDisplayName || team.name || team.abbreviation || "Team"),
+        abbr: String(team.abbreviation || ""),
+        logo: String(logoUrl),
         played: played,
         wins: wins,
         draws: ties,
@@ -592,7 +595,10 @@ function parseF1Calendar(raw) {
       else if (now >= raceMs) status = "live"
     }
 
-    var shortName = String(r.raceName || "Grand Prix").replace(" Grand Prix", " GP")
+    var raceName = String(r.raceName || "Grand Prix")
+    var circuitName = (r.Circuit && r.Circuit.circuitName) || "Circuit"
+    var locality = (r.Circuit && r.Circuit.Location && r.Circuit.Location.locality) || ""
+    var country = (r.Circuit && r.Circuit.Location && r.Circuit.Location.country) || ""
 
     matches.push({
       id: "f1-2026-" + r.round,
@@ -600,17 +606,23 @@ function parseF1Calendar(raw) {
       leagueId: "f1",
       leagueName: "Formula 1",
       round: "Round " + r.round,
+      raceName: raceName,
+      circuitName: circuitName,
+      locality: locality,
+      country: country,
       home: {
         id: "f1-gp-" + r.round,
-        name: String(r.raceName || "Grand Prix"),
-        shortName: shortName,
-        record: (r.Circuit && r.Circuit.Location && r.Circuit.Location.locality) || ""
+        name: raceName,
+        shortName: raceName.replace(" Grand Prix", " GP"),
+        record: locality ? (locality + ", " + country) : country,
+        logo: ""
       },
       away: {
         id: "f1-circuit-" + r.round,
-        name: (r.Circuit && r.Circuit.circuitName) || "Circuit",
-        shortName: (r.Circuit && r.Circuit.Location && r.Circuit.Location.country) || "",
-        record: ""
+        name: circuitName,
+        shortName: country || circuitName,
+        record: "",
+        logo: ""
       },
       status: status,
       homeScore: 0,
@@ -638,12 +650,16 @@ function parseF1DriverStandings(raw) {
     var driver = d.Driver || {}
     var constructor = (d.Constructors && d.Constructors[0]) || {}
     var pos = parseInt(d.position, 10) || (i + 1)
+    var conId = String(constructor.constructorId || constructor.name || "").toLowerCase()
 
     rows.push({
       pos: String(pos),
       id: String(driver.driverId || ""),
       name: (driver.givenName || "") + " " + (driver.familyName || ""),
       shortName: String(driver.code || driver.familyName || "Driver"),
+      abbr: String(driver.code || driver.familyName || "DRV").slice(0, 3).toUpperCase(),
+      teamId: conId,
+      teamName: String(constructor.name || ""),
       played: parseInt(d.wins, 10) || 0,
       wins: parseInt(d.wins, 10) || 0,
       draws: 0,
@@ -668,12 +684,16 @@ function parseF1ConstructorStandings(raw) {
     if (!c) continue
     var constructor = c.Constructor || {}
     var pos = parseInt(c.position, 10) || (i + 1)
+    var conId = String(constructor.constructorId || constructor.name || "").toLowerCase()
 
     rows.push({
       pos: String(pos),
-      id: String(constructor.constructorId || ""),
+      id: conId,
       name: String(constructor.name || "Constructor"),
       shortName: String(constructor.name || "Constructor"),
+      abbr: String(constructor.name || "CON").slice(0, 2).toUpperCase(),
+      teamId: conId,
+      teamName: String(constructor.name || ""),
       played: parseInt(c.wins, 10) || 0,
       wins: parseInt(c.wins, 10) || 0,
       draws: 0,
@@ -950,7 +970,11 @@ function teamOptionsForSport(sport, matches) {
   return list
 }
 
-function matchesForTeam(matches, teamId) {
+function matchesForTeam(matches, teamId, sport) {
+  var s = String(sport || "football").toLowerCase()
+  if (s === "f1") {
+    return arrayFrom(matches)
+  }
   var id = String(teamId || "").toLowerCase()
   if (!id) return []
   var result = []
@@ -962,8 +986,10 @@ function matchesForTeam(matches, teamId) {
     var awayId = String(m.away && m.away.id || "").toLowerCase()
     var homeName = String(m.home && m.home.name || "").toLowerCase()
     var awayName = String(m.away && m.away.name || "").toLowerCase()
+    var homeShort = String(m.home && m.home.shortName || "").toLowerCase()
+    var awayShort = String(m.away && m.away.shortName || "").toLowerCase()
 
-    if (homeId === id || awayId === id || homeName.indexOf(id) !== -1 || awayName.indexOf(id) !== -1) {
+    if (homeId === id || awayId === id || homeName.indexOf(id) !== -1 || awayName.indexOf(id) !== -1 || homeShort.indexOf(id) !== -1 || awayShort.indexOf(id) !== -1) {
       result.push(m)
     }
   }

@@ -88,10 +88,18 @@ Panel {
   }
 
   // ---- Fixtures League / Matchday / Team Filter --------------------------
-  property string fixtureFilterId: "team"
+  property string fixtureFilterId: activeSport === "f1" ? "all" : (selectedTeamId !== "" ? "team" : "all")
 
   readonly property var fixtureFilterOptions: {
     var opts = []
+    if (activeSport === "f1") {
+      opts.push({ value: "all", label: "🏁 2026 Grand Prix Calendar" })
+      if (selectedTeamId !== "") {
+        opts.push({ value: "team", label: "★ " + (selectedTeamName || "My Favorite Driver") })
+      }
+      return opts
+    }
+
     if (selectedTeamId !== "") {
       opts.push({ value: "team", label: "★ " + (selectedTeamName || "My Favorite") })
     }
@@ -106,6 +114,7 @@ Panel {
   }
 
   readonly property var activeFixturesList: {
+    if (activeSport === "f1") return allMatches
     if (fixtureFilterId === "team" && selectedTeamId !== "") {
       return teamMatches
     }
@@ -118,6 +127,7 @@ Panel {
   readonly property var matchGroups: Model.groupMatches(activeFixturesList, new Date(), function(d) { return Qt.formatDate(d, "ddd d MMM") })
 
   readonly property string activeFixtureHeader: {
+    if (activeSport === "f1") return "FIA FORMULA 1 WORLD CHAMPIONSHIP · CALENDAR"
     if (fixtureFilterId === "team" && selectedTeamId !== "") return "MATCH SCHEDULE"
     if (fixtureFilterId === "all") return "ALL " + activeSportMeta.label.toUpperCase() + " FIXTURES"
     var lName = Model.leagueLabel(fixtureFilterId).toUpperCase()
@@ -215,6 +225,19 @@ Panel {
     return []
   }
 
+  // Driver standings summary for F1 spotlight
+  readonly property var favoriteDriverStanding: {
+    if (activeSport !== "f1" || selectedTeamId === "") return null
+    var drivers = (multiSportStandings && multiSportStandings["Drivers"]) || []
+    var fav = String(selectedTeamId).toLowerCase()
+    for (var i = 0; i < drivers.length; i++) {
+      var d = drivers[i]
+      if (d.id === fav || d.shortName.toLowerCase() === fav || d.name.toLowerCase().indexOf(fav) !== -1)
+        return d
+    }
+    return null
+  }
+
   // ---- Fetch round bookkeeping -------------------------------------------
   property int requestSerial: 0
   property var roundQueue: []
@@ -258,8 +281,9 @@ Panel {
 
   // Multi-competition team fixtures
   readonly property var teamMatches: {
+    if (activeSport === "f1") return allMatches
     if (teamMatchesRaw && teamMatchesRaw.length > 0) return teamMatchesRaw
-    return Model.matchesForTeam(allMatches, selectedTeamId)
+    return Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
   }
   readonly property var featuredMatch: Model.featuredMatchForTeam(teamMatches)
   readonly property string selectedTeamName: selectedTeamLabel()
@@ -303,6 +327,7 @@ Panel {
     activeSport = String(sportValue)
     savedState.sport = activeSport
     restoreSportSelections()
+    fixtureFilterId = activeSport === "f1" ? "all" : (selectedTeamId !== "" ? "team" : "all")
     persistState()
     allMatches = []
     teamMatchesRaw = []
@@ -866,9 +891,13 @@ Panel {
   }
 
   function matchSubline(match) {
+    if (!match) return ""
+    if (match.sport === "f1") {
+      return (match.circuitName || "Circuit") + (match.locality ? " · " + match.locality : "") + (match.country ? ", " + match.country : "")
+    }
     var parts = []
-    if (match && match.round) parts.push(match.round)
-    var d = match ? matchDetails[String(match.id)] : null
+    if (match.round) parts.push(match.round)
+    var d = matchDetails[String(match.id)]
     if (d && d.stadium) parts.push("📍 " + d.stadium + (d.city ? ", " + d.city : ""))
     if (d && d.referee) parts.push("Ref. " + d.referee)
     if (d && d.attendance) parts.push("👥 " + Number(d.attendance).toLocaleString())
@@ -1737,6 +1766,7 @@ Panel {
                 visible: (root.selectedTeamId !== "" && root.featuredMatch !== null) || (root.activeSport === "f1" && root.allMatches.length > 0)
 
                 readonly property var match: root.featuredMatch || (root.activeSport === "f1" && root.allMatches.length > 0 ? root.allMatches[0] : null)
+                readonly property bool isF1: root.activeSport === "f1"
                 readonly property bool isLive: match && match.status === "live"
                 readonly property bool isUpcoming: match && match.status === "upcoming"
                 readonly property bool isFinished: match && match.status === "finished"
@@ -1789,7 +1819,7 @@ Panel {
                           Text {
                             id: spotlightTagLabel
                             anchors.centerIn: parent
-                            text: "SPOTLIGHT"
+                            text: spotlightCard.isF1 ? "GRAND PRIX" : "SPOTLIGHT"
                             color: Color.accent
                             font.family: Style.font.family
                             font.pixelSize: Style.font.caption
@@ -1857,34 +1887,125 @@ Panel {
                       }
                     }
 
-                    // Main Match Core
+                    // F1 Specific Spotlight Layout
                     Item {
                       width: parent.width
-                      implicitHeight: Math.max(homeCol.implicitHeight, awayCol.implicitHeight, centerScoreBadge.implicitHeight)
+                      implicitHeight: f1HeroCol.implicitHeight
+                      visible: spotlightCard.isF1
 
-                      Row {
-                        id: homeCol
+                      Column {
+                        id: f1HeroCol
+                        width: parent.width
+                        spacing: Style.space(4)
+
+                        Row {
+                          width: parent.width
+                          spacing: Style.space(10)
+
+                          Text {
+                            text: "🏎"
+                            font.pixelSize: Style.font.title
+                            anchors.verticalCenter: parent.verticalCenter
+                          }
+
+                          Column {
+                            width: parent.width - Style.space(40)
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Style.space(2)
+
+                            Text {
+                              width: parent.width
+                              text: spotlightCard.match ? (spotlightCard.match.raceName || spotlightCard.match.home.name) : "Grand Prix"
+                              color: root.fgColor
+                              font.family: Style.font.family
+                              font.pixelSize: Style.font.title
+                              font.bold: true
+                              elide: Text.ElideRight
+                            }
+
+                            Text {
+                              width: parent.width
+                              text: spotlightCard.match ? ((spotlightCard.match.circuitName || "") + (spotlightCard.match.locality ? " · " + spotlightCard.match.locality : "") + (spotlightCard.match.country ? ", " + spotlightCard.match.country : "")) : ""
+                              color: Qt.darker(root.fgColor, 1.45)
+                              font.family: Style.font.family
+                              font.pixelSize: Style.font.bodySmall
+                              elide: Text.ElideRight
+                            }
+                          }
+                        }
+
+                        // Driver standing badge if driver followed
+                        Rectangle {
+                          visible: root.favoriteDriverStanding !== null
+                          implicitWidth: driverPillRow.implicitWidth + Style.space(14)
+                          implicitHeight: driverPillRow.implicitHeight + Style.space(6)
+                          radius: Math.min(4, Style.cornerRadius)
+                          color: Util.alpha(Color.accent, 0.12)
+                          border.width: 1
+                          border.color: Color.accent
+
+                          Row {
+                            id: driverPillRow
+                            anchors.centerIn: parent
+                            spacing: Style.space(6)
+
+                            TeamCrest {
+                              sport: "f1"
+                              teamId: root.favoriteDriverStanding ? root.favoriteDriverStanding.teamId : ""
+                              teamName: root.favoriteDriverStanding ? root.favoriteDriverStanding.teamName : ""
+                              crestSize: Style.space(16)
+                              anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                              text: "★ " + root.selectedTeamName + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
+                              color: Color.accent
+                              font.family: Style.font.family
+                              font.pixelSize: Style.font.caption
+                              font.bold: true
+                              anchors.verticalCenter: parent.verticalCenter
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    // Standard Team vs Team Core Layout (Football, NBA, NFL, MLB, NHL)
+                    Item {
+                      width: parent.width
+                      implicitHeight: Math.max(homeBounding.implicitHeight, awayBounding.implicitHeight, centerScoreBadge.implicitHeight)
+                      visible: !spotlightCard.isF1
+
+                      // Left Side (Home)
+                      Item {
+                        id: homeBounding
                         anchors.left: parent.left
                         anchors.right: centerScoreBadge.left
-                        anchors.rightMargin: Style.space(12)
+                        anchors.rightMargin: Style.space(10)
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: Style.space(8)
-                        layoutDirection: Qt.RightToLeft
+                        implicitHeight: Math.max(homeCrest.height, homeTextCol.implicitHeight)
 
                         TeamCrest {
+                          id: homeCrest
+                          anchors.right: parent.right
+                          anchors.verticalCenter: parent.verticalCenter
                           sport: spotlightCard.match ? spotlightCard.match.sport : "football"
                           teamId: spotlightCard.match ? spotlightCard.match.home.id : ""
                           teamName: spotlightCard.match ? spotlightCard.match.home.name : ""
                           source: spotlightCard.match && spotlightCard.match.home.logo ? spotlightCard.match.home.logo : ""
                           crestSize: Style.space(32)
-                          anchors.verticalCenter: parent.verticalCenter
                         }
 
                         Column {
+                          id: homeTextCol
+                          anchors.left: parent.left
+                          anchors.right: homeCrest.left
+                          anchors.rightMargin: Style.space(8)
                           anchors.verticalCenter: parent.verticalCenter
                           spacing: Style.space(2)
 
                           Text {
+                            width: parent.width
                             text: spotlightCard.match ? spotlightCard.match.home.name || spotlightCard.match.home.shortName : ""
                             color: String(spotlightCard.match && spotlightCard.match.home.id) === String(root.selectedTeamId) ? Color.accent : root.fgColor
                             font.family: Style.font.family
@@ -1895,15 +2016,18 @@ Panel {
                           }
 
                           Text {
+                            width: parent.width
                             text: spotlightCard.match && spotlightCard.match.home.record ? spotlightCard.match.home.record : (String(spotlightCard.match && spotlightCard.match.home.id) === String(root.selectedTeamId) ? "HOME · FAVORITE" : "HOME")
                             color: Qt.darker(root.fgColor, 1.55)
                             font.family: Style.font.family
                             font.pixelSize: Style.font.caption
                             horizontalAlignment: Text.AlignRight
+                            elide: Text.ElideRight
                           }
                         }
                       }
 
+                      // Center Score Box
                       Item {
                         id: centerScoreBadge
                         anchors.centerIn: parent
@@ -1938,28 +2062,36 @@ Panel {
                         }
                       }
 
-                      Row {
-                        id: awayCol
+                      // Right Side (Away)
+                      Item {
+                        id: awayBounding
                         anchors.left: centerScoreBadge.right
+                        anchors.leftMargin: Style.space(10)
                         anchors.right: parent.right
-                        anchors.leftMargin: Style.space(12)
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: Style.space(8)
+                        implicitHeight: Math.max(awayCrest.height, awayTextCol.implicitHeight)
 
                         TeamCrest {
+                          id: awayCrest
+                          anchors.left: parent.left
+                          anchors.verticalCenter: parent.verticalCenter
                           sport: spotlightCard.match ? spotlightCard.match.sport : "football"
                           teamId: spotlightCard.match ? spotlightCard.match.away.id : ""
                           teamName: spotlightCard.match ? spotlightCard.match.away.name : ""
                           source: spotlightCard.match && spotlightCard.match.away.logo ? spotlightCard.match.away.logo : ""
                           crestSize: Style.space(32)
-                          anchors.verticalCenter: parent.verticalCenter
                         }
 
                         Column {
+                          id: awayTextCol
+                          anchors.left: awayCrest.right
+                          anchors.leftMargin: Style.space(8)
+                          anchors.right: parent.right
                           anchors.verticalCenter: parent.verticalCenter
                           spacing: Style.space(2)
 
                           Text {
+                            width: parent.width
                             text: spotlightCard.match ? spotlightCard.match.away.name || spotlightCard.match.away.shortName : ""
                             color: String(spotlightCard.match && spotlightCard.match.away.id) === String(root.selectedTeamId) ? Color.accent : root.fgColor
                             font.family: Style.font.family
@@ -1970,11 +2102,13 @@ Panel {
                           }
 
                           Text {
+                            width: parent.width
                             text: spotlightCard.match && spotlightCard.match.away.record ? spotlightCard.match.away.record : (String(spotlightCard.match && spotlightCard.match.away.id) === String(root.selectedTeamId) ? "AWAY · FAVORITE" : "AWAY")
                             color: Qt.darker(root.fgColor, 1.55)
                             font.family: Style.font.family
                             font.pixelSize: Style.font.caption
                             horizontalAlignment: Text.AlignLeft
+                            elide: Text.ElideRight
                           }
                         }
                       }
@@ -2049,7 +2183,7 @@ Panel {
                   id: fixtureFilterScope
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(200)
+                  width: Style.space(220)
                   height: fixtureFilterDropdown.implicitHeight
                   visible: root.fixtureFilterOptions.length > 1
 
@@ -2062,7 +2196,7 @@ Panel {
                     options: root.fixtureFilterOptions
                     foreground: root.fgColor
                     background: Color.popups.background
-                    onChanged: function(val) { root.fixtureFilterId = String(val || "team") }
+                    onChanged: function(val) { root.fixtureFilterId = String(val || "all") }
                   }
                 }
               }
@@ -2262,7 +2396,7 @@ Panel {
                   id: standingsScope
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(220)
+                  width: Style.space(230)
                   height: standingsPicker.implicitHeight
                   visible: root.standingsOptions.length > 1
 
@@ -2309,20 +2443,71 @@ Panel {
                   anchors.margins: Style.space(8)
                   spacing: Style.space(2)
 
-                  // Table Header
-                  Row {
+                  // Table Header adapted by Sport
+                  Item {
                     width: parent.width
-                    anchors.leftMargin: Style.space(6)
-                    anchors.rightMargin: Style.space(6)
+                    implicitHeight: Style.space(20)
 
-                    Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-                    Text { width: parent.width - Style.space(216); text: root.activeSport === "f1" ? (root.standingsLeagueId === "Drivers" ? "DRIVER" : "CONSTRUCTOR") : (root.activeSport === "football" ? "CLUB" : "TEAM"); color: root.tableHeaderColor(); font: root.tableFont() }
-                    Text { width: Style.space(26); text: root.activeSport === "f1" ? "W" : "P"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    Text { width: Style.space(26); text: root.activeSport === "nba" ? "L" : (root.activeSport === "f1" ? "-" : "D"); horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    Text { width: Style.space(26); text: root.activeSport === "nba" ? "PCT" : (root.activeSport === "f1" ? "-" : "L"); horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    Text { width: Style.space(32); text: root.activeSport === "f1" ? "TEAM" : (root.activeSport === "nba" ? "GB" : "DIFF"); horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    Text { width: Style.space(32); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                    // Football Header
+                    Row {
+                      visible: root.activeSport === "football"
+                      width: parent.width
+                      anchors.leftMargin: Style.space(6)
+                      anchors.rightMargin: Style.space(6)
+
+                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+                      Text { width: parent.width - Style.space(216); text: "CLUB"; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(26); text: "P"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(26); text: "D"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(32); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(32); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                    }
+
+                    // NBA / NHL / MLB / NFL Header
+                    Row {
+                      visible: root.activeSport === "nba" || root.activeSport === "nhl" || root.activeSport === "mlb" || root.activeSport === "nfl"
+                      width: parent.width
+                      anchors.leftMargin: Style.space(6)
+                      anchors.rightMargin: Style.space(6)
+
+                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+                      Text { width: parent.width - Style.space(190); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(36); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(34); text: root.activeSport === "mlb" ? "GB" : "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(36); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                    }
+
+                    // F1 Drivers Header
+                    Row {
+                      visible: root.activeSport === "f1" && root.standingsLeagueId === "Drivers"
+                      width: parent.width
+                      anchors.leftMargin: Style.space(6)
+                      anchors.rightMargin: Style.space(6)
+
+                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+                      Text { width: Style.space(160); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: parent.width - Style.space(290); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(36); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(52); text: "POINTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                    }
+
+                    // F1 Constructors Header
+                    Row {
+                      visible: root.activeSport === "f1" && root.standingsLeagueId !== "Drivers"
+                      width: parent.width
+                      anchors.leftMargin: Style.space(6)
+                      anchors.rightMargin: Style.space(6)
+
+                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+                      Text { width: Style.space(170); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: parent.width - Style.space(300); text: "COUNTRY"; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(36); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                      Text { width: Style.space(52); text: "POINTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+                    }
                   }
 
                   Rectangle {
@@ -2402,6 +2587,7 @@ Panel {
     id: matchDelegate
     required property var modelData
 
+    readonly property bool isF1: root.activeSport === "f1"
     readonly property bool isLive: modelData.status === "live"
     readonly property bool isUpcoming: modelData.status === "upcoming"
     readonly property bool isFinished: modelData.status === "finished"
@@ -2417,7 +2603,7 @@ Panel {
     Rectangle {
       id: matchCard
       width: parent.width
-      implicitHeight: matchRowLayout.implicitHeight + Style.space(14)
+      implicitHeight: matchDelegate.isF1 ? (f1RowLayout.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
       radius: Math.min(6, Style.cornerRadius)
       color: matchMouse.containsMouse
         ? Style.hoverFillFor(root.fgColor, Color.accent)
@@ -2441,8 +2627,89 @@ Panel {
         color: root.urgentColor
       }
 
+      // F1 Grand Prix Row Layout
+      Row {
+        id: f1RowLayout
+        visible: matchDelegate.isF1
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: Style.space(12)
+        anchors.rightMargin: Style.space(12)
+        spacing: Style.space(10)
+
+        Column {
+          width: Style.space(84)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: 1
+
+          Text {
+            text: matchDelegate.dateBadge
+            color: Qt.darker(root.fgColor, 1.35)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+
+          Text {
+            text: modelData.round || "GP"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+
+        Column {
+          width: parent.width - Style.space(190)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: 1
+
+          Text {
+            width: parent.width
+            text: modelData.raceName || modelData.home.name
+            color: root.fgColor
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Text {
+            width: parent.width
+            text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
+            color: Qt.darker(root.fgColor, 1.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
+          }
+        }
+
+        Rectangle {
+          anchors.verticalCenter: parent.verticalCenter
+          implicitWidth: f1StatusText.implicitWidth + Style.space(12)
+          implicitHeight: f1StatusText.implicitHeight + Style.space(4)
+          radius: Math.min(4, Style.cornerRadius)
+          color: matchDelegate.isLive
+            ? root.urgentColor
+            : (matchDelegate.isFinished ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08) : Util.alpha(Color.accent, 0.15))
+
+          Text {
+            id: f1StatusText
+            anchors.centerIn: parent
+            text: matchDelegate.isFinished ? "Official" : (matchDelegate.isLive ? "RACE DAY" : root.kickoffTime(modelData))
+            color: matchDelegate.isLive ? "#ffffff" : (matchDelegate.isFinished ? Qt.darker(root.fgColor, 1.3) : Color.accent)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+      }
+
+      // Standard Team vs Team Match Row Layout
       Row {
         id: matchRowLayout
+        visible: !matchDelegate.isF1
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
@@ -2451,7 +2718,7 @@ Panel {
         spacing: Style.space(6)
 
         Column {
-          width: Style.space(92)
+          width: Style.space(88)
           anchors.verticalCenter: parent.verticalCenter
           spacing: 1
 
@@ -2474,30 +2741,35 @@ Panel {
         }
 
         Item {
-          width: parent.width - Style.space(98)
+          width: parent.width - Style.space(94)
           height: Math.max(homeTeamLayout.implicitHeight, awayTeamLayout.implicitHeight, centerScoreHolder.implicitHeight)
           anchors.verticalCenter: parent.verticalCenter
 
-          Row {
+          // Left Side (Home)
+          Item {
             id: homeTeamLayout
             anchors.left: parent.left
             anchors.right: centerScoreHolder.left
             anchors.rightMargin: Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(6)
-            layoutDirection: Qt.RightToLeft
+            implicitHeight: Math.max(homeRowCrest.height, homeTeamText.implicitHeight)
 
             TeamCrest {
+              id: homeRowCrest
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
               sport: modelData.sport || "football"
               teamId: modelData.home.id
               teamName: modelData.home.name
               source: modelData.home.logo || ""
               crestSize: Style.space(18)
-              anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
               id: homeTeamText
+              anchors.left: parent.left
+              anchors.right: homeRowCrest.left
+              anchors.rightMargin: Style.space(6)
               anchors.verticalCenter: parent.verticalCenter
               text: (matchDelegate.favIsHome ? "★ " : "") + (modelData.home.name || modelData.home.shortName)
               color: matchDelegate.favIsHome ? Color.accent : root.fgColor
@@ -2509,10 +2781,11 @@ Panel {
             }
           }
 
+          // Center Score
           Item {
             id: centerScoreHolder
             anchors.centerIn: parent
-            width: Style.space(60)
+            width: Style.space(56)
             height: parent.height
 
             Row {
@@ -2553,25 +2826,31 @@ Panel {
             }
           }
 
-          Row {
+          // Right Side (Away)
+          Item {
             id: awayTeamLayout
             anchors.left: centerScoreHolder.right
-            anchors.right: parent.right
             anchors.leftMargin: Style.space(8)
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(6)
+            implicitHeight: Math.max(awayRowCrest.height, awayTeamText.implicitHeight)
 
             TeamCrest {
+              id: awayRowCrest
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               sport: modelData.sport || "football"
               teamId: modelData.away.id
               teamName: modelData.away.name
               source: modelData.away.logo || ""
               crestSize: Style.space(18)
-              anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
               id: awayTeamText
+              anchors.left: awayRowCrest.right
+              anchors.leftMargin: Style.space(6)
+              anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: (modelData.away.name || modelData.away.shortName) + (matchDelegate.favIsAway ? " ★" : "")
               color: matchDelegate.favIsAway ? Color.accent : root.fgColor
@@ -2733,28 +3012,33 @@ Panel {
 
         Item {
           width: parent.width
-          height: Math.max(liveHomeLayout.implicitHeight, liveAwayLayout.implicitHeight, liveScorePill.implicitHeight)
+          implicitHeight: Math.max(liveHomeBounding.implicitHeight, liveAwayBounding.implicitHeight, liveScorePill.implicitHeight)
 
-          Row {
-            id: liveHomeLayout
+          // Home Side (Left)
+          Item {
+            id: liveHomeBounding
             anchors.left: parent.left
             anchors.right: liveScorePill.left
-            anchors.rightMargin: Style.space(12)
+            anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(8)
-            layoutDirection: Qt.RightToLeft
+            implicitHeight: Math.max(liveHomeCrest.height, liveHomeText.implicitHeight)
 
             TeamCrest {
+              id: liveHomeCrest
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
               sport: liveDelegate.modelData.sport || "football"
               teamId: liveDelegate.modelData.home.id
               teamName: liveDelegate.modelData.home.name
               source: liveDelegate.modelData.home.logo || ""
               crestSize: Style.space(26)
-              anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
               id: liveHomeText
+              anchors.left: parent.left
+              anchors.right: liveHomeCrest.left
+              anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
               text: liveDelegate.modelData.home.name || liveDelegate.modelData.home.shortName
               color: root.fgColor
@@ -2766,6 +3050,7 @@ Panel {
             }
           }
 
+          // Center Score
           Rectangle {
             id: liveScorePill
             anchors.centerIn: parent
@@ -2786,25 +3071,31 @@ Panel {
             }
           }
 
-          Row {
-            id: liveAwayLayout
+          // Away Side (Right)
+          Item {
+            id: liveAwayBounding
             anchors.left: liveScorePill.right
+            anchors.leftMargin: Style.space(10)
             anchors.right: parent.right
-            anchors.leftMargin: Style.space(12)
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(8)
+            implicitHeight: Math.max(liveAwayCrest.height, liveAwayText.implicitHeight)
 
             TeamCrest {
+              id: liveAwayCrest
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               sport: liveDelegate.modelData.sport || "football"
               teamId: liveDelegate.modelData.away.id
               teamName: liveDelegate.modelData.away.name
               source: liveDelegate.modelData.away.logo || ""
               crestSize: Style.space(26)
-              anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
               id: liveAwayText
+              anchors.left: liveAwayCrest.right
+              anchors.leftMargin: Style.space(8)
+              anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: liveDelegate.modelData.away.name || liveDelegate.modelData.away.shortName
               color: root.fgColor
@@ -2895,7 +3186,9 @@ Panel {
       Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
     }
 
+    // Football Standings Row
     Row {
+      visible: root.activeSport === "football"
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
@@ -2937,14 +3230,16 @@ Panel {
         spacing: Style.space(6)
 
         TeamCrest {
-          sport: root.activeSport
+          sport: "football"
           teamId: tableDelegate.modelData.id
           teamName: tableDelegate.modelData.name
+          source: tableDelegate.modelData.logo || ""
           crestSize: Style.space(16)
           anchors.verticalCenter: parent.verticalCenter
         }
 
         Text {
+          width: parent.width - Style.space(22)
           anchors.verticalCenter: parent.verticalCenter
           text: (tableDelegate.isFavorite ? "★ " : "") + (tableDelegate.modelData.shortName || tableDelegate.modelData.name)
           color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
@@ -2972,6 +3267,286 @@ Panel {
 
       Text {
         width: Style.space(32)
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(tableDelegate.modelData.pts || "0")
+        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        horizontalAlignment: Text.AlignRight
+      }
+    }
+
+    // NBA / NHL / MLB / NFL Standings Row
+    Row {
+      visible: root.activeSport === "nba" || root.activeSport === "nhl" || root.activeSport === "mlb" || root.activeSport === "nfl"
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(6)
+      anchors.rightMargin: Style.space(6)
+
+      Item {
+        width: Style.space(28)
+        height: Style.space(20)
+        anchors.verticalCenter: parent.verticalCenter
+
+        Rectangle {
+          anchors.centerIn: parent
+          width: Style.space(20)
+          height: Style.space(18)
+          radius: 3
+          color: tableDelegate.modelData.zone === "europe"
+            ? Util.alpha(Color.accent, 0.18)
+            : (tableDelegate.modelData.zone === "relegation"
+               ? Util.alpha(root.urgentColor, 0.18)
+               : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent"))
+
+          Text {
+            anchors.centerIn: parent
+            text: tableDelegate.modelData.pos
+            color: tableDelegate.modelData.zone === "europe"
+              ? Color.accent
+              : (tableDelegate.modelData.zone === "relegation" ? root.urgentColor : Qt.darker(tableDelegate.rowFg, 1.4))
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+      }
+
+      Row {
+        width: parent.width - Style.space(190)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(6)
+
+        TeamCrest {
+          sport: root.activeSport
+          teamId: tableDelegate.modelData.id
+          teamName: tableDelegate.modelData.name
+          abbr: tableDelegate.modelData.abbr || ""
+          source: tableDelegate.modelData.logo || ""
+          crestSize: Style.space(16)
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          width: parent.width - Style.space(22)
+          anchors.verticalCenter: parent.verticalCenter
+          text: (tableDelegate.isFavorite ? "★ " : "") + (tableDelegate.modelData.shortName || tableDelegate.modelData.name)
+          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.bold: tableDelegate.isFavorite
+          elide: Text.ElideRight
+        }
+      }
+
+      Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.wins; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+      Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.losses; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+      Text {
+        width: Style.space(36)
+        anchors.verticalCenter: parent.verticalCenter
+        text: tableDelegate.modelData.played > 0 ? (tableDelegate.modelData.wins / tableDelegate.modelData.played).toFixed(3).replace(/^0/, "") : ".000"
+        color: Qt.darker(tableDelegate.rowFg, 1.35)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        horizontalAlignment: Text.AlignRight
+      }
+      Text {
+        width: Style.space(34)
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(tableDelegate.modelData.gd || "-")
+        color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : Qt.darker(tableDelegate.rowFg, 1.4))
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        horizontalAlignment: Text.AlignRight
+        elide: Text.ElideRight
+      }
+      Text {
+        width: Style.space(36)
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(tableDelegate.modelData.pts || "0")
+        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        horizontalAlignment: Text.AlignRight
+      }
+    }
+
+    // F1 Drivers Standings Row
+    Row {
+      visible: root.activeSport === "f1" && root.standingsLeagueId === "Drivers"
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(6)
+      anchors.rightMargin: Style.space(6)
+
+      Item {
+        width: Style.space(28)
+        height: Style.space(20)
+        anchors.verticalCenter: parent.verticalCenter
+
+        Rectangle {
+          anchors.centerIn: parent
+          width: Style.space(20)
+          height: Style.space(18)
+          radius: 3
+          color: tableDelegate.modelData.zone === "europe"
+            ? Util.alpha(Color.accent, 0.18)
+            : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent")
+
+          Text {
+            anchors.centerIn: parent
+            text: tableDelegate.modelData.pos
+            color: tableDelegate.modelData.zone === "europe" ? Color.accent : Qt.darker(tableDelegate.rowFg, 1.4)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+      }
+
+      Row {
+        width: Style.space(160)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(6)
+
+        TeamCrest {
+          sport: "f1"
+          teamId: tableDelegate.modelData.teamId || ""
+          teamName: tableDelegate.modelData.teamName || ""
+          crestSize: Style.space(16)
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          width: parent.width - Style.space(22)
+          anchors.verticalCenter: parent.verticalCenter
+          text: (tableDelegate.isFavorite ? "★ " : "") + tableDelegate.modelData.name
+          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.bold: tableDelegate.isFavorite
+          elide: Text.ElideRight
+        }
+      }
+
+      Text {
+        width: parent.width - Style.space(290)
+        anchors.verticalCenter: parent.verticalCenter
+        text: tableDelegate.modelData.gd || tableDelegate.modelData.teamName || ""
+        color: Qt.darker(tableDelegate.rowFg, 1.4)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+      }
+
+      Text {
+        width: Style.space(36)
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(tableDelegate.modelData.wins)
+        color: Qt.darker(tableDelegate.rowFg, 1.35)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        horizontalAlignment: Text.AlignRight
+      }
+
+      Text {
+        width: Style.space(52)
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(tableDelegate.modelData.pts || "0")
+        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        horizontalAlignment: Text.AlignRight
+      }
+    }
+
+    // F1 Constructors Standings Row
+    Row {
+      visible: root.activeSport === "f1" && root.standingsLeagueId !== "Drivers"
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(6)
+      anchors.rightMargin: Style.space(6)
+
+      Item {
+        width: Style.space(28)
+        height: Style.space(20)
+        anchors.verticalCenter: parent.verticalCenter
+
+        Rectangle {
+          anchors.centerIn: parent
+          width: Style.space(20)
+          height: Style.space(18)
+          radius: 3
+          color: tableDelegate.modelData.zone === "europe"
+            ? Util.alpha(Color.accent, 0.18)
+            : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent")
+
+          Text {
+            anchors.centerIn: parent
+            text: tableDelegate.modelData.pos
+            color: tableDelegate.modelData.zone === "europe" ? Color.accent : Qt.darker(tableDelegate.rowFg, 1.4)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+      }
+
+      Row {
+        width: Style.space(170)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(6)
+
+        TeamCrest {
+          sport: "f1"
+          teamId: tableDelegate.modelData.id || ""
+          teamName: tableDelegate.modelData.name || ""
+          crestSize: Style.space(16)
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          width: parent.width - Style.space(22)
+          anchors.verticalCenter: parent.verticalCenter
+          text: (tableDelegate.isFavorite ? "★ " : "") + tableDelegate.modelData.name
+          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.bold: tableDelegate.isFavorite
+          elide: Text.ElideRight
+        }
+      }
+
+      Text {
+        width: parent.width - Style.space(300)
+        anchors.verticalCenter: parent.verticalCenter
+        text: tableDelegate.modelData.gd || ""
+        color: Qt.darker(tableDelegate.rowFg, 1.4)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+      }
+
+      Text {
+        width: Style.space(36)
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(tableDelegate.modelData.wins)
+        color: Qt.darker(tableDelegate.rowFg, 1.35)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        horizontalAlignment: Text.AlignRight
+      }
+
+      Text {
+        width: Style.space(52)
         anchors.verticalCenter: parent.verticalCenter
         text: String(tableDelegate.modelData.pts || "0")
         color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
