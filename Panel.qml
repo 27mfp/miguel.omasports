@@ -712,6 +712,7 @@ Panel {
     }
     ensureStandingsSelection()
     startDetailFetch()
+    downloadMissingLogos()
 
     if (pages.length === 0 && !hasData) {
       errorMessage = "Unable to load matches. Check your connection."
@@ -762,6 +763,7 @@ Panel {
     if (!workerScoreboard.running && !workerStandings.running) {
       loading = false
       ensureStandingsSelection()
+      downloadMissingLogos()
       if (allMatches.length === 0 && Object.keys(multiSportStandings).length === 0) {
         errorMessage = "Unable to load " + activeSportMeta.label + " data. Check connection."
       }
@@ -790,9 +792,69 @@ Panel {
     if (!workerF1Calendar.running && !workerF1Drivers.running && !workerF1Constructors.running) {
       loading = false
       ensureStandingsSelection()
+      downloadMissingLogos()
       if (allMatches.length === 0) {
         errorMessage = "Unable to load F1 race calendar. Check connection."
       }
+    }
+  }
+
+  function downloadMissingLogos() {
+    if (logoCacheProc.running) return
+    var items = []
+    var seen = {}
+
+    // Collect all matches home/away
+    var ms = Model.arrayFrom(allMatches)
+    for (var i = 0; i < ms.length; i++) {
+      var m = ms[i]
+      if (!m) continue
+      var sp = String(m.sport || root.activeSport || "football").toLowerCase()
+      if (m.home && m.home.id && m.home.logo && m.home.logo.indexOf("http") === 0) {
+        var k1 = sp + "-" + (m.home.abbr || m.home.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+        if (!seen[k1]) {
+          seen[k1] = true
+          items.push({ url: m.home.logo, key: k1 })
+        }
+      }
+      if (m.away && m.away.id && m.away.logo && m.away.logo.indexOf("http") === 0) {
+        var k2 = sp + "-" + (m.away.abbr || m.away.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+        if (!seen[k2]) {
+          seen[k2] = true
+          items.push({ url: m.away.logo, key: k2 })
+        }
+      }
+    }
+
+    // Collect all standings logos
+    var st = Model.arrayFrom(standingsRows)
+    for (var j = 0; j < st.length; j++) {
+      var row = st[j]
+      if (row && row.id && row.logo && row.logo.indexOf("http") === 0) {
+        var sp2 = String(root.activeSport || "football").toLowerCase()
+        var k3 = sp2 + "-" + (row.abbr || row.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+        if (!seen[k3]) {
+          seen[k3] = true
+          items.push({ url: row.logo, key: k3 })
+        }
+      }
+    }
+
+    if (items.length === 0) return
+
+    var cmd = ["curl", "-sL", "--parallel", "--create-dirs"]
+    var count = 0
+    var cacheDir = Quickshell.env("HOME") + "/.cache/omarchy-matchday/logos/"
+    for (var c = 0; c < items.length && count < 36; c++) {
+      var it = items[c]
+      if (it.url && it.url.indexOf("http") === 0) {
+        cmd.push("-o", cacheDir + it.key + ".png", it.url)
+        count++
+      }
+    }
+    if (count > 0) {
+      logoCacheProc.command = cmd
+      logoCacheProc.running = true
     }
   }
 
@@ -942,6 +1004,7 @@ Panel {
   }
 
   Process { id: matchOpener }
+  Process { id: logoCacheProc }
 
   // ---- Multi-sport Workers -------------------------------------------------
   Process {
@@ -3111,6 +3174,35 @@ Panel {
               horizontalAlignment: Text.AlignLeft
               elide: Text.ElideRight
             }
+          }
+        }
+
+        // Live Game Progression Bar
+        Rectangle {
+          anchors.horizontalCenter: parent.horizontalCenter
+          width: Style.space(88)
+          height: 3
+          radius: 1.5
+          color: Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.18)
+          clip: true
+
+          Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: {
+              var lt = String(liveDelegate.modelData.liveTime || "")
+              var m = parseInt(lt, 10)
+              if (!isNaN(m)) return Math.min(parent.width, Math.max(6, (m / 90) * parent.width))
+              if (lt.indexOf("HT") !== -1) return parent.width * 0.50
+              if (lt.indexOf("Q1") !== -1 || lt.indexOf("1st") !== -1) return parent.width * 0.25
+              if (lt.indexOf("Q2") !== -1 || lt.indexOf("2nd") !== -1) return parent.width * 0.50
+              if (lt.indexOf("Q3") !== -1 || lt.indexOf("3rd") !== -1) return parent.width * 0.75
+              if (lt.indexOf("Q4") !== -1 || lt.indexOf("4th") !== -1) return parent.width * 0.95
+              return parent.width * 0.60
+            }
+            radius: 1.5
+            color: root.urgentColor
           }
         }
 

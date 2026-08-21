@@ -770,14 +770,19 @@ function parseMatch(raw, league) {
 
   var home = raw && raw.home ? raw.home : {}
   var away = raw && raw.away ? raw.away : {}
+  var homeId = String(home.id || "")
+  var awayId = String(away.id || "")
+  var homeLogo = homeId !== "" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + homeId + ".png") : ""
+  var awayLogo = awayId !== "" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + awayId + ".png") : ""
+
   return {
     id: String(raw && raw.id || ""),
     sport: "football",
     leagueId: String(league.id || ""),
     leagueName: String(league.name || ""),
     round: String(raw && raw.round || ""),
-    home: { id: String(home.id || ""), name: String(home.name || ""), shortName: String(home.shortName || home.name || ""), logo: "https://images.fotmob.com/image_resources/logo/teamlogo/" + (home.id || "") + ".png" },
-    away: { id: String(away.id || ""), name: String(away.name || ""), shortName: String(away.shortName || away.name || ""), logo: "https://images.fotmob.com/image_resources/logo/teamlogo/" + (away.id || "") + ".png" },
+    home: { id: homeId, name: String(home.name || ""), shortName: String(home.shortName || home.name || ""), logo: homeLogo },
+    away: { id: awayId, name: String(away.name || ""), shortName: String(away.shortName || away.name || ""), logo: awayLogo },
     status: state,
     homeScore: score.home,
     awayScore: score.away,
@@ -829,11 +834,13 @@ function parseStandings(props) {
   var result = []
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i]
+    var tId = String(r.id || "")
     result.push({
       pos: String(r.idx || (i + 1)),
-      id: String(r.id || ""),
+      id: tId,
       name: String(r.name || ""),
       shortName: String(r.shortName || r.name || ""),
+      logo: tId !== "" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + tId + ".png") : "",
       played: parseInt(r.played, 10) || 0,
       wins: parseInt(r.wins, 10) || 0,
       draws: parseInt(r.draws, 10) || 0,

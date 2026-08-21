@@ -54,7 +54,7 @@ Item {
 
   // Computed CDN logo URL if source is empty
   readonly property string resolvedSource: {
-    if (source && (source.indexOf("http://") === 0 || source.indexOf("https://") === 0)) {
+    if (source && (source.indexOf("http://") === 0 || source.indexOf("https://") === 0) && source.indexOf("/.png") === -1) {
       return source
     }
     var id = String(teamId || "").trim()
