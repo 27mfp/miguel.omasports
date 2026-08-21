@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "miguel.matchday",
+  "name": "Matchday",
+  "version": "1.0.0",
+  "author": "Miguel",
+  "license": "MIT",
+  "description": "Live football scores, club fixtures, and league standings on your Omarchy bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Matchday",
+    "description": "Track live football scores, favorite club fixtures, and league standings.",
+    "category": "Sports",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "schema": [
+      {
+        "key": "backgroundUpdates",
+        "type": "boolean",
+        "label": "Update in background",
+        "description": "Keep fetching matches on the refresh interval even while the panel is closed, so the bar badge shows live games. Disabled by default.",
+        "defaultValue": false
+      }
+    ]
+  }
+}
