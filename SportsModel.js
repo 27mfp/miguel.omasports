@@ -449,8 +449,9 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
         id: String(team.id || ""),
         name: String(team.displayName || team.name || "Team"),
         shortName: String(team.shortDisplayName || team.name || team.abbreviation || "Team"),
+        abbr: String(team.abbreviation || ""),
         record: rec,
-        logo: String(team.logo || "")
+        logo: String(team.logo || (team.logos && team.logos[0] && team.logos[0].href) || "")
       }
       if (item.homeAway === "home") {
         home = tObj

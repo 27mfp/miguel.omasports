@@ -1992,6 +1992,7 @@ Panel {
                           sport: spotlightCard.match ? spotlightCard.match.sport : "football"
                           teamId: spotlightCard.match ? spotlightCard.match.home.id : ""
                           teamName: spotlightCard.match ? spotlightCard.match.home.name : ""
+                          abbr: spotlightCard.match && spotlightCard.match.home.abbr ? spotlightCard.match.home.abbr : ""
                           source: spotlightCard.match && spotlightCard.match.home.logo ? spotlightCard.match.home.logo : ""
                           crestSize: Style.space(32)
                         }
@@ -2078,6 +2079,7 @@ Panel {
                           sport: spotlightCard.match ? spotlightCard.match.sport : "football"
                           teamId: spotlightCard.match ? spotlightCard.match.away.id : ""
                           teamName: spotlightCard.match ? spotlightCard.match.away.name : ""
+                          abbr: spotlightCard.match && spotlightCard.match.away.abbr ? spotlightCard.match.away.abbr : ""
                           source: spotlightCard.match && spotlightCard.match.away.logo ? spotlightCard.match.away.logo : ""
                           crestSize: Style.space(32)
                         }
@@ -2761,6 +2763,7 @@ Panel {
               sport: modelData.sport || "football"
               teamId: modelData.home.id
               teamName: modelData.home.name
+              abbr: modelData.home.abbr || ""
               source: modelData.home.logo || ""
               crestSize: Style.space(18)
             }
@@ -2842,6 +2845,7 @@ Panel {
               sport: modelData.sport || "football"
               teamId: modelData.away.id
               teamName: modelData.away.name
+              abbr: modelData.away.abbr || ""
               source: modelData.away.logo || ""
               crestSize: Style.space(18)
             }
@@ -3030,6 +3034,7 @@ Panel {
               sport: liveDelegate.modelData.sport || "football"
               teamId: liveDelegate.modelData.home.id
               teamName: liveDelegate.modelData.home.name
+              abbr: liveDelegate.modelData.home.abbr || ""
               source: liveDelegate.modelData.home.logo || ""
               crestSize: Style.space(26)
             }
@@ -3087,6 +3092,7 @@ Panel {
               sport: liveDelegate.modelData.sport || "football"
               teamId: liveDelegate.modelData.away.id
               teamName: liveDelegate.modelData.away.name
+              abbr: liveDelegate.modelData.away.abbr || ""
               source: liveDelegate.modelData.away.logo || ""
               crestSize: Style.space(26)
             }
