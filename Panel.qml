@@ -1966,13 +1966,13 @@ Panel {
                           spacing: Style.space(10)
 
                           Text {
-                            text: "🏎"
-                            font.pixelSize: Style.font.title
+                            text: (spotlightCard.match && spotlightCard.match.countryFlag) ? spotlightCard.match.countryFlag : "🏎"
+                            font.pixelSize: Style.font.display
                             anchors.verticalCenter: parent.verticalCenter
                           }
 
                           Column {
-                            width: parent.width - Style.space(40)
+                            width: parent.width - Style.space(46)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: Style.space(2)
 
@@ -2725,28 +2725,40 @@ Panel {
           }
         }
 
-        Column {
+        Row {
           width: parent.width - Style.space(190)
           anchors.verticalCenter: parent.verticalCenter
-          spacing: 1
+          spacing: Style.space(8)
 
           Text {
-            width: parent.width
-            text: modelData.raceName || modelData.home.name
-            color: root.fgColor
-            font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
-            elide: Text.ElideRight
+            text: modelData.countryFlag || "🏁"
+            font.pixelSize: Style.font.heading
+            anchors.verticalCenter: parent.verticalCenter
           }
 
-          Text {
-            width: parent.width
-            text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
-            color: Qt.darker(root.fgColor, 1.55)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            elide: Text.ElideRight
+          Column {
+            width: parent.width - Style.space(28)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+
+            Text {
+              width: parent.width
+              text: modelData.raceName || modelData.home.name
+              color: root.fgColor
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+              elide: Text.ElideRight
+            }
+
+            Text {
+              width: parent.width
+              text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
+              color: Qt.darker(root.fgColor, 1.55)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
           }
         }
 
@@ -3523,7 +3535,7 @@ Panel {
         Text {
           width: parent.width - Style.space(22)
           anchors.verticalCenter: parent.verticalCenter
-          text: (tableDelegate.isFavorite ? "★ " : "") + tableDelegate.modelData.name
+          text: (tableDelegate.isFavorite ? "★ " : "") + (tableDelegate.modelData.flag ? tableDelegate.modelData.flag + " " : "") + tableDelegate.modelData.name
           color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall

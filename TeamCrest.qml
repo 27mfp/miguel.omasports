@@ -121,14 +121,12 @@ Item {
     return name.slice(0, 2).toUpperCase()
   }
 
-  readonly property bool usable: resolvedSource !== "" && logoImg.status === Image.Ready
-
   // Circular Monogram Fallback
   Rectangle {
     id: fallbackMonogram
     anchors.fill: parent
     radius: width / 2
-    visible: !root.usable
+    visible: logoImg.status !== Image.Ready
     color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
     border.width: 1
     border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.45)
@@ -143,19 +141,16 @@ Item {
     }
   }
 
-  // Downscaled Asynchronous Image
+  // Asynchronous Image
   Image {
     id: logoImg
     anchors.fill: parent
     source: root.resolvedSource
-    sourceSize.width: Math.round(root.crestSize * 2)
-    sourceSize.height: Math.round(root.crestSize * 2)
     fillMode: Image.PreserveAspectFit
     asynchronous: true
     cache: true
     smooth: true
-    visible: root.usable
-    opacity: root.usable ? 1.0 : 0.0
-    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+    opacity: status === Image.Ready ? 1.0 : 0.0
+    Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
   }
 }

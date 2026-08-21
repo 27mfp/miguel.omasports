@@ -573,6 +573,51 @@ function parseEspnStandings(raw, sportName) {
   return result
 }
 
+function f1CountryFlag(countryName, raceName) {
+  var c = String(countryName || "").toLowerCase()
+  var r = String(raceName || "").toLowerCase()
+
+  if (c.indexOf("australia") !== -1 || r.indexOf("australian") !== -1) return "🇦🇺"
+  if (c.indexOf("china") !== -1 || r.indexOf("chinese") !== -1 || r.indexOf("shanghai") !== -1) return "🇨🇳"
+  if (c.indexOf("japan") !== -1 || r.indexOf("japanese") !== -1 || r.indexOf("suzuka") !== -1) return "🇯🇵"
+  if (c.indexOf("bahrain") !== -1 || r.indexOf("sakhir") !== -1) return "🇧🇭"
+  if (c.indexOf("saudi") !== -1 || r.indexOf("jeddah") !== -1) return "🇸🇦"
+  if (r.indexOf("miami") !== -1 || r.indexOf("las vegas") !== -1 || r.indexOf("united states") !== -1 || c.indexOf("united states") !== -1 || c.indexOf("usa") !== -1 || r.indexOf("austin") !== -1) return "🇺🇸"
+  if (c.indexOf("italy") !== -1 || r.indexOf("emilia") !== -1 || r.indexOf("imola") !== -1 || r.indexOf("monza") !== -1 || r.indexOf("italian") !== -1) return "🇮🇹"
+  if (c.indexOf("monaco") !== -1 || r.indexOf("monte carlo") !== -1) return "🇲🇨"
+  if (c.indexOf("spain") !== -1 || r.indexOf("spanish") !== -1 || r.indexOf("catalunya") !== -1 || r.indexOf("madrid") !== -1) return "🇪🇸"
+  if (c.indexOf("canada") !== -1 || r.indexOf("canadian") !== -1 || r.indexOf("montreal") !== -1) return "🇨🇦"
+  if (c.indexOf("austria") !== -1 || r.indexOf("austrian") !== -1 || r.indexOf("spielberg") !== -1 || r.indexOf("red bull ring") !== -1) return "🇦🇹"
+  if (c.indexOf("uk") !== -1 || c.indexOf("great britain") !== -1 || r.indexOf("british") !== -1 || r.indexOf("silverstone") !== -1) return "🇬🇧"
+  if (c.indexOf("belgium") !== -1 || r.indexOf("belgian") !== -1 || r.indexOf("spa") !== -1) return "🇧🇪"
+  if (c.indexOf("hungary") !== -1 || r.indexOf("hungarian") !== -1 || r.indexOf("hungaroring") !== -1) return "🇭🇺"
+  if (c.indexOf("netherlands") !== -1 || r.indexOf("dutch") !== -1 || r.indexOf("zandvoort") !== -1) return "🇳🇱"
+  if (c.indexOf("azerbaijan") !== -1 || r.indexOf("baku") !== -1) return "🇦🇿"
+  if (c.indexOf("singapore") !== -1 || r.indexOf("marina bay") !== -1) return "🇸🇬"
+  if (c.indexOf("mexico") !== -1 || r.indexOf("rodriguez") !== -1) return "🇲🇽"
+  if (c.indexOf("brazil") !== -1 || r.indexOf("são paulo") !== -1 || r.indexOf("interlagos") !== -1) return "🇧🇷"
+  if (c.indexOf("qatar") !== -1 || r.indexOf("lusail") !== -1) return "🇶🇦"
+  if (c.indexOf("abu dhabi") !== -1 || c.indexOf("uae") !== -1 || c.indexOf("emirates") !== -1 || r.indexOf("yas marina") !== -1) return "🇦🇪"
+  return "🏁"
+}
+
+function f1DriverFlag(driverIdOrNat) {
+  var d = String(driverIdOrNat || "").toLowerCase()
+  if (d.indexOf("hamilton") !== -1 || d.indexOf("norris") !== -1 || d.indexOf("russell") !== -1 || d.indexOf("bearman") !== -1 || d.indexOf("british") !== -1) return "🇬🇧"
+  if (d.indexOf("verstappen") !== -1 || d.indexOf("dutch") !== -1) return "🇳🇱"
+  if (d.indexOf("leclerc") !== -1 || d.indexOf("monegasque") !== -1) return "🇲🇨"
+  if (d.indexOf("piastri") !== -1 || d.indexOf("australian") !== -1) return "🇦🇺"
+  if (d.indexOf("alonso") !== -1 || d.indexOf("sainz") !== -1 || d.indexOf("spanish") !== -1) return "🇪🇸"
+  if (d.indexOf("antonelli") !== -1 || d.indexOf("italian") !== -1) return "🇮🇹"
+  if (d.indexOf("gasly") !== -1 || d.indexOf("ocon") !== -1 || d.indexOf("french") !== -1) return "🇫🇷"
+  if (d.indexOf("hulkenberg") !== -1 || d.indexOf("german") !== -1) return "🇩🇪"
+  if (d.indexOf("tsunoda") !== -1 || d.indexOf("japanese") !== -1) return "🇯🇵"
+  if (d.indexOf("albon") !== -1 || d.indexOf("thai") !== -1) return "🇹🇭"
+  if (d.indexOf("stroll") !== -1 || d.indexOf("canadian") !== -1) return "🇨🇦"
+  if (d.indexOf("bortoleto") !== -1 || d.indexOf("brazilian") !== -1) return "🇧🇷"
+  return "🏎"
+}
+
 // ============================================================================
 // FORMULA 1 CALENDAR & STANDINGS PARSER (JOLPICA / ERGAST)
 // ============================================================================
@@ -600,6 +645,7 @@ function parseF1Calendar(raw) {
     var circuitName = (r.Circuit && r.Circuit.circuitName) || "Circuit"
     var locality = (r.Circuit && r.Circuit.Location && r.Circuit.Location.locality) || ""
     var country = (r.Circuit && r.Circuit.Location && r.Circuit.Location.country) || ""
+    var flag = f1CountryFlag(country, raceName)
 
     matches.push({
       id: "f1-2026-" + r.round,
@@ -611,6 +657,7 @@ function parseF1Calendar(raw) {
       circuitName: circuitName,
       locality: locality,
       country: country,
+      countryFlag: flag,
       home: {
         id: "f1-gp-" + r.round,
         name: raceName,
@@ -652,6 +699,7 @@ function parseF1DriverStandings(raw) {
     var constructor = (d.Constructors && d.Constructors[0]) || {}
     var pos = parseInt(d.position, 10) || (i + 1)
     var conId = String(constructor.constructorId || constructor.name || "").toLowerCase()
+    var driverFlag = f1DriverFlag(driver.driverId || driver.nationality)
 
     rows.push({
       pos: String(pos),
@@ -659,6 +707,7 @@ function parseF1DriverStandings(raw) {
       name: (driver.givenName || "") + " " + (driver.familyName || ""),
       shortName: String(driver.code || driver.familyName || "Driver"),
       abbr: String(driver.code || driver.familyName || "DRV").slice(0, 3).toUpperCase(),
+      flag: driverFlag,
       teamId: conId,
       teamName: String(constructor.name || ""),
       played: parseInt(d.wins, 10) || 0,
