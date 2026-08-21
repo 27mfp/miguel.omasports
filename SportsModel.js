@@ -1,7 +1,20 @@
 .pragma library
 
-// The league catalogue follows Golazo's supported FotMob IDs. The page is
-// deliberately kept local so opening the picker never needs a discovery call.
+// ============================================================================
+// MATCHDAY MULTI-SPORT DATA ENGINE
+// Supports: Football (FotMob), NBA, F1, NFL, MLB, NHL (ESPN / Jolpica)
+// ============================================================================
+
+var supportedSports = [
+  { value: "football", label: "Football", icon: "⚽", description: "100+ Leagues & Cups" },
+  { value: "nba", label: "NBA", icon: "🏀", description: "National Basketball Assn" },
+  { value: "f1", label: "Formula 1", icon: "🏎", description: "FIA F1 World Championship" },
+  { value: "nfl", label: "NFL", icon: "🏈", description: "National Football League" },
+  { value: "mlb", label: "MLB", icon: "⚾", description: "Major League Baseball" },
+  { value: "nhl", label: "NHL", icon: "🏒", description: "National Hockey League" }
+]
+
+// FotMob league catalogue
 var supportedLeagues = [
   { value: "47", label: "Premier League", description: "England", region: "Europe" },
   { value: "87", label: "La Liga", description: "Spain", region: "Europe" },
@@ -112,19 +125,200 @@ var supportedLeagues = [
   { value: "114", label: "International Friendlies", description: "International", region: "Global" }
 ]
 
-var supportedSports = [
-  { value: "football", label: "Football / soccer", description: "FotMob data" }
+// Pre-populated NBA Teams Catalogue
+var nbaTeams = [
+  { value: "1", label: "Atlanta Hawks", description: "Eastern · Southeast" },
+  { value: "2", label: "Boston Celtics", description: "Eastern · Atlantic" },
+  { value: "17", label: "Brooklyn Nets", description: "Eastern · Atlantic" },
+  { value: "30", label: "Charlotte Hornets", description: "Eastern · Southeast" },
+  { value: "4", label: "Chicago Bulls", description: "Eastern · Central" },
+  { value: "5", label: "Cleveland Cavaliers", description: "Eastern · Central" },
+  { value: "6", label: "Dallas Mavericks", description: "Western · Southwest" },
+  { value: "7", label: "Denver Nuggets", description: "Western · Northwest" },
+  { value: "8", label: "Detroit Pistons", description: "Eastern · Central" },
+  { value: "9", label: "Golden State Warriors", description: "Western · Pacific" },
+  { value: "10", label: "Houston Rockets", description: "Western · Southwest" },
+  { value: "11", label: "Indiana Pacers", description: "Eastern · Central" },
+  { value: "12", label: "LA Clippers", description: "Western · Pacific" },
+  { value: "13", label: "Los Angeles Lakers", description: "Western · Pacific" },
+  { value: "29", label: "Memphis Grizzlies", description: "Western · Southwest" },
+  { value: "14", label: "Miami Heat", description: "Eastern · Southeast" },
+  { value: "15", label: "Milwaukee Bucks", description: "Eastern · Central" },
+  { value: "16", label: "Minnesota Timberwolves", description: "Western · Northwest" },
+  { value: "3", label: "New Orleans Pelicans", description: "Western · Southwest" },
+  { value: "18", label: "New York Knicks", description: "Eastern · Atlantic" },
+  { value: "25", label: "Oklahoma City Thunder", description: "Western · Northwest" },
+  { value: "19", label: "Orlando Magic", description: "Eastern · Southeast" },
+  { value: "20", label: "Philadelphia 76ers", description: "Eastern · Atlantic" },
+  { value: "21", label: "Phoenix Suns", description: "Western · Pacific" },
+  { value: "22", label: "Portland Trail Blazers", description: "Western · Northwest" },
+  { value: "23", label: "Sacramento Kings", description: "Western · Pacific" },
+  { value: "24", label: "San Antonio Spurs", description: "Western · Southwest" },
+  { value: "28", label: "Toronto Raptors", description: "Eastern · Atlantic" },
+  { value: "26", label: "Utah Jazz", description: "Western · Northwest" },
+  { value: "27", label: "Washington Wizards", description: "Eastern · Southeast" }
+]
+
+// Pre-populated F1 Drivers & Teams
+var f1Drivers = [
+  { value: "antonelli", label: "Andrea Kimi Antonelli", description: "Mercedes" },
+  { value: "hamilton", label: "Lewis Hamilton", description: "Ferrari" },
+  { value: "russell", label: "George Russell", description: "Mercedes" },
+  { value: "leclerc", label: "Charles Leclerc", description: "Ferrari" },
+  { value: "norris", label: "Lando Norris", description: "McLaren" },
+  { value: "piastri", label: "Oscar Piastri", description: "McLaren" },
+  { value: "verstappen", label: "Max Verstappen", description: "Red Bull Racing" },
+  { value: "alonso", label: "Fernando Alonso", description: "Aston Martin" },
+  { value: "stroll", label: "Lance Stroll", description: "Aston Martin" },
+  { value: "gasly", label: "Pierre Gasly", description: "Alpine" },
+  { value: "albon", label: "Alexander Albon", description: "Williams" },
+  { value: "sainz", label: "Carlos Sainz", description: "Williams" },
+  { value: "hulkenberg", label: "Nico Hülkenberg", description: "Sauber / Audi" },
+  { value: "tsunoda", label: "Yuki Tsunoda", description: "RB F1 Team" }
+]
+
+// Pre-populated NFL Teams
+var nflTeams = [
+  { value: "1", label: "Atlanta Falcons", description: "NFC South" },
+  { value: "2", label: "Buffalo Bills", description: "AFC East" },
+  { value: "3", label: "Chicago Bears", description: "NFC North" },
+  { value: "4", label: "Cincinnati Bengals", description: "AFC North" },
+  { value: "5", label: "Cleveland Browns", description: "AFC North" },
+  { value: "6", label: "Dallas Cowboys", description: "NFC East" },
+  { value: "7", label: "Denver Broncos", description: "AFC West" },
+  { value: "8", label: "Detroit Lions", description: "NFC North" },
+  { value: "9", label: "Green Bay Packers", description: "NFC North" },
+  { value: "10", label: "Tennessee Titans", description: "AFC South" },
+  { value: "11", label: "Indianapolis Colts", description: "AFC South" },
+  { value: "12", label: "Kansas City Chiefs", description: "AFC West" },
+  { value: "13", label: "Las Vegas Raiders", description: "AFC West" },
+  { value: "14", label: "Los Angeles Rams", description: "NFC West" },
+  { value: "15", label: "Miami Dolphins", description: "AFC East" },
+  { value: "16", label: "Minnesota Vikings", description: "NFC North" },
+  { value: "17", label: "New England Patriots", description: "AFC East" },
+  { value: "18", label: "New Orleans Saints", description: "NFC South" },
+  { value: "19", label: "New York Giants", description: "NFC East" },
+  { value: "20", label: "New York Jets", description: "AFC East" },
+  { value: "21", label: "Philadelphia Eagles", description: "NFC East" },
+  { value: "22", label: "Arizona Cardinals", description: "NFC West" },
+  { value: "23", label: "Pittsburgh Steelers", description: "AFC North" },
+  { value: "24", label: "Los Angeles Chargers", description: "AFC West" },
+  { value: "25", label: "San Francisco 49ers", description: "NFC West" },
+  { value: "26", label: "Seattle Seahawks", description: "NFC West" },
+  { value: "27", label: "Tampa Bay Buccaneers", description: "NFC South" },
+  { value: "28", label: "Washington Commanders", description: "NFC East" },
+  { value: "29", label: "Carolina Panthers", description: "NFC South" },
+  { value: "30", label: "Jacksonville Jaguars", description: "AFC South" },
+  { value: "33", label: "Baltimore Ravens", description: "AFC North" },
+  { value: "34", label: "Houston Texans", description: "AFC South" }
+]
+
+// Pre-populated MLB Teams
+var mlbTeams = [
+  { value: "14", label: "New York Yankees", description: "AL East" },
+  { value: "2", label: "Boston Red Sox", description: "AL East" },
+  { value: "19", label: "Los Angeles Dodgers", description: "NL West" },
+  { value: "21", label: "New York Mets", description: "NL East" },
+  { value: "15", label: "Atlanta Braves", description: "NL East" },
+  { value: "16", label: "Chicago Cubs", description: "NL Central" },
+  { value: "26", label: "San Francisco Giants", description: "NL West" },
+  { value: "18", label: "Houston Astros", description: "AL West" },
+  { value: "22", label: "Philadelphia Phillies", description: "NL East" },
+  { value: "25", label: "San Diego Padres", description: "NL West" },
+  { value: "29", label: "Arizona Diamondbacks", description: "NL West" },
+  { value: "1", label: "Baltimore Orioles", description: "AL East" },
+  { value: "3", label: "Chicago White Sox", description: "AL Central" },
+  { value: "4", label: "Cincinnati Reds", description: "NL Central" },
+  { value: "5", label: "Cleveland Guardians", description: "AL Central" },
+  { value: "6", label: "Colorado Rockies", description: "NL West" },
+  { value: "7", label: "Detroit Tigers", description: "AL Central" },
+  { value: "8", label: "Kansas City Royals", description: "AL Central" },
+  { value: "9", label: "Los Angeles Angels", description: "AL West" },
+  { value: "10", label: "Miami Marlins", description: "NL East" },
+  { value: "11", label: "Milwaukee Brewers", description: "NL Central" },
+  { value: "12", label: "Minnesota Twins", description: "AL Central" },
+  { value: "13", label: "Oakland Athletics", description: "AL West" },
+  { value: "17", label: "Pittsburgh Pirates", description: "NL Central" },
+  { value: "20", label: "Washington Nationals", description: "NL East" },
+  { value: "23", label: "Seattle Mariners", description: "AL West" },
+  { value: "24", label: "St. Louis Cardinals", description: "NL Central" },
+  { value: "27", label: "Tampa Bay Rays", description: "AL East" },
+  { value: "28", label: "Texas Rangers", description: "AL West" },
+  { value: "30", label: "Toronto Blue Jays", description: "AL East" }
+]
+
+// Pre-populated NHL Teams
+var nhlTeams = [
+  { value: "10", label: "Toronto Maple Leafs", description: "Atlantic" },
+  { value: "6", label: "Boston Bruins", description: "Atlantic" },
+  { value: "13", label: "New York Rangers", description: "Metropolitan" },
+  { value: "8", label: "Montreal Canadiens", description: "Atlantic" },
+  { value: "22", label: "Edmonton Oilers", description: "Pacific" },
+  { value: "20", label: "Colorado Avalanche", description: "Central" },
+  { value: "16", label: "Chicago Blackhawks", description: "Central" },
+  { value: "17", label: "Detroit Red Wings", description: "Atlantic" },
+  { value: "15", label: "Washington Capitals", description: "Metropolitan" },
+  { value: "14", label: "Tampa Bay Lightning", description: "Atlantic" },
+  { value: "37", label: "Vegas Golden Knights", description: "Pacific" },
+  { value: "38", label: "Seattle Kraken", description: "Pacific" },
+  { value: "23", label: "Vancouver Canucks", description: "Pacific" },
+  { value: "21", label: "Dallas Stars", description: "Central" },
+  { value: "24", label: "Calgary Flames", description: "Pacific" },
+  { value: "18", label: "Nashville Predators", description: "Central" },
+  { value: "19", label: "St. Louis Blues", description: "Central" },
+  { value: "4", label: "Philadelphia Flyers", description: "Metropolitan" },
+  { value: "5", label: "Pittsburgh Penguins", description: "Metropolitan" },
+  { value: "1", label: "New Jersey Devils", description: "Metropolitan" },
+  { value: "2", label: "New York Islanders", description: "Metropolitan" },
+  { value: "3", label: "Carolina Hurricanes", description: "Metropolitan" },
+  { value: "7", label: "Buffalo Sabres", description: "Atlantic" },
+  { value: "9", label: "Ottawa Senators", description: "Atlantic" },
+  { value: "12", label: "Florida Panthers", description: "Atlantic" },
+  { value: "25", label: "San Jose Sharks", description: "Pacific" },
+  { value: "26", label: "Los Angeles Kings", description: "Pacific" },
+  { value: "27", label: "Anaheim Ducks", description: "Pacific" },
+  { value: "29", label: "Columbus Blue Jackets", description: "Metropolitan" },
+  { value: "30", label: "Minnesota Wild", description: "Central" },
+  { value: "52", label: "Winnipeg Jets", description: "Central" },
+  { value: "59", label: "Utah Hockey Club", description: "Central" }
 ]
 
 function defaultState() {
   return {
-    version: 1,
+    version: 2,
     sport: "football",
-    leagueIds: ["61"],
-    teamId: "",
-    teamName: "",
-    refreshMinutes: 15,
-    standingsLeagueId: ""
+    football: {
+      leagueIds: ["61"],
+      teamId: "",
+      teamName: "",
+      standingsLeagueId: "61"
+    },
+    nba: {
+      teamId: "",
+      teamName: "",
+      standingsGroup: "Eastern Conference"
+    },
+    f1: {
+      teamId: "",
+      teamName: "",
+      standingsGroup: "Drivers"
+    },
+    nfl: {
+      teamId: "",
+      teamName: "",
+      standingsGroup: "American Football Conference"
+    },
+    mlb: {
+      teamId: "",
+      teamName: "",
+      standingsGroup: "American League"
+    },
+    nhl: {
+      teamId: "",
+      teamName: "",
+      standingsGroup: "Eastern Conference"
+    },
+    refreshMinutes: 15
   }
 }
 
@@ -140,99 +334,378 @@ function normalizeLeagueIds(value) {
   var seen = {}
   var source = arrayFrom(value)
   for (var i = 0; i < source.length && result.length < 12; i++) {
-    var id = String(source[i] || "")
-    if (!id || seen[id]) continue
-    seen[id] = true
-    result.push(id)
+    var raw = String(source[i] || "").trim()
+    if (!raw || seen[raw]) continue
+    seen[raw] = true
+    result.push(raw)
   }
   return result
 }
 
 function parseState(raw) {
-  var fallback = defaultState()
+  var defaults = defaultState()
   var parsed = null
   try {
     parsed = JSON.parse(String(raw || ""))
   } catch (e) {
-    return fallback
+    return defaults
   }
-  if (!parsed || typeof parsed !== "object") return fallback
+  if (!parsed || typeof parsed !== "object") return defaults
 
-  var ids = parsed.leagueIds
-  if (!ids || typeof ids.length !== "number") ids = parsed.leagueId ? [parsed.leagueId] : fallback.leagueIds
-  var minutes = parseInt(parsed.refreshMinutes, 10)
-  if (isNaN(minutes)) minutes = fallback.refreshMinutes
+  var sport = String(parsed.sport || "football").toLowerCase()
+  var validSport = false
+  for (var s = 0; s < supportedSports.length; s++) {
+    if (supportedSports[s].value === sport) { validSport = true; break }
+  }
+  if (!validSport) sport = "football"
+
+  // V1 legacy migration
+  var fb = parsed.football && typeof parsed.football === "object" ? parsed.football : {}
+  var fbLeagues = normalizeLeagueIds(fb.leagueIds || parsed.leagueIds)
+  if (fbLeagues.length === 0) fbLeagues = ["61"]
 
   return {
-    version: 1,
-    sport: "football",
-    leagueIds: normalizeLeagueIds(ids),
-    teamId: String(parsed.teamId || ""),
-    teamName: String(parsed.teamName || ""),
-    refreshMinutes: Math.max(5, Math.min(60, minutes)),
-    standingsLeagueId: String(parsed.standingsLeagueId || "")
+    version: 2,
+    sport: sport,
+    football: {
+      leagueIds: fbLeagues,
+      teamId: String(fb.teamId || parsed.teamId || ""),
+      teamName: String(fb.teamName || parsed.teamName || ""),
+      standingsLeagueId: String(fb.standingsLeagueId || parsed.standingsLeagueId || fbLeagues[0])
+    },
+    nba: parsed.nba && typeof parsed.nba === "object" ? parsed.nba : defaults.nba,
+    f1: parsed.f1 && typeof parsed.f1 === "object" ? parsed.f1 : defaults.f1,
+    nfl: parsed.nfl && typeof parsed.nfl === "object" ? parsed.nfl : defaults.nfl,
+    mlb: parsed.mlb && typeof parsed.mlb === "object" ? parsed.mlb : defaults.mlb,
+    nhl: parsed.nhl && typeof parsed.nhl === "object" ? parsed.nhl : defaults.nhl,
+    refreshMinutes: Math.max(5, Math.min(60, parseInt(parsed.refreshMinutes, 10) || 15))
   }
 }
 
-function statePayload(sport, leagueIds, teamId, teamName, refreshMinutes, standingsLeagueId) {
-  return {
-    version: 1,
-    sport: String(sport || "football"),
-    leagueIds: normalizeLeagueIds(leagueIds),
-    teamId: String(teamId || ""),
-    teamName: String(teamName || ""),
-    refreshMinutes: Math.max(5, Math.min(60, parseInt(refreshMinutes, 10) || 15)),
-    standingsLeagueId: String(standingsLeagueId || "")
+function statePayload(sport, fbLeagues, fbTeamId, fbTeamName, refreshMinutes, fbStandingsId, sportSettings) {
+  var state = defaultState()
+  state.sport = String(sport || "football")
+  state.refreshMinutes = Math.max(5, Math.min(60, parseInt(refreshMinutes, 10) || 15))
+  state.football = {
+    leagueIds: normalizeLeagueIds(fbLeagues),
+    teamId: String(fbTeamId || ""),
+    teamName: String(fbTeamName || ""),
+    standingsLeagueId: String(fbStandingsId || (fbLeagues && fbLeagues[0]) || "61")
   }
+  if (sportSettings && typeof sportSettings === "object") {
+    if (sportSettings.nba) state.nba = sportSettings.nba
+    if (sportSettings.f1) state.f1 = sportSettings.f1
+    if (sportSettings.nfl) state.nfl = sportSettings.nfl
+    if (sportSettings.mlb) state.mlb = sportSettings.mlb
+    if (sportSettings.nhl) state.nhl = sportSettings.nhl
+  }
+  return state
 }
+
+// ============================================================================
+// ESPN SCOREBOARD & STANDINGS PARSERS (NBA, NFL, MLB, NHL)
+// ============================================================================
+
+function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
+  var json = null
+  try { json = JSON.parse(String(raw || "")) } catch (e) { return [] }
+  if (!json || typeof json !== "object") return []
+  var events = arrayFrom(json.events)
+  var matches = []
+
+  for (var i = 0; i < events.length; i++) {
+    var e = events[i]
+    if (!e) continue
+    var comp = (e.competitions && e.competitions[0]) || {}
+    var competitors = arrayFrom(comp.competitors)
+    var home = { id: "", name: "Home", shortName: "Home", record: "" }
+    var away = { id: "", name: "Away", shortName: "Away", record: "" }
+    var homeScore = 0
+    var awayScore = 0
+
+    for (var c = 0; c < competitors.length; c++) {
+      var item = competitors[c]
+      if (!item) continue
+      var team = item.team || {}
+      var rec = (item.records && item.records[0] && item.records[0].summary) || ""
+      var tObj = {
+        id: String(team.id || ""),
+        name: String(team.displayName || team.name || "Team"),
+        shortName: String(team.shortDisplayName || team.name || team.abbreviation || "Team"),
+        record: rec,
+        logo: String(team.logo || "")
+      }
+      if (item.homeAway === "home") {
+        home = tObj
+        homeScore = parseInt(item.score, 10) || 0
+      } else {
+        away = tObj
+        awayScore = parseInt(item.score, 10) || 0
+      }
+    }
+
+    var st = e.status || {}
+    var stType = st.type || {}
+    var stateStr = String(stType.state || "pre").toLowerCase()
+    var status = "upcoming"
+    if (stateStr === "in") status = "live"
+    else if (stateStr === "post") status = "finished"
+    else if (stType.name && String(stType.name).indexOf("CANCEL") !== -1) status = "cancelled"
+
+    var scoreText = ""
+    if (status !== "upcoming") {
+      scoreText = homeScore + "–" + awayScore
+    }
+
+    var liveTime = ""
+    if (status === "live") {
+      liveTime = String(stType.shortDetail || st.displayClock || "LIVE")
+    }
+
+    var leagueTitle = (json.leagues && json.leagues[0] && json.leagues[0].name) || defaultLeagueName
+
+    matches.push({
+      id: String(e.id || ""),
+      sport: sportName,
+      leagueId: sportName,
+      leagueName: leagueTitle,
+      round: (comp.season && comp.season.slug) || "",
+      home: home,
+      away: away,
+      status: status,
+      homeScore: homeScore,
+      awayScore: awayScore,
+      scoreText: scoreText,
+      statusReason: String(stType.shortDetail || ""),
+      liveTime: liveTime,
+      time: String(e.date || ""),
+      pageUrl: (comp.headlines && comp.headlines[0] && comp.headlines[0].video && comp.headlines[0].video.links && comp.headlines[0].video.links.web && comp.headlines[0].video.links.web.href) || ("https://www.espn.com/" + sportName)
+    })
+  }
+  return matches
+}
+
+function parseEspnStandings(raw, sportName) {
+  var json = null
+  try { json = JSON.parse(String(raw || "")) } catch (e) { return {} }
+  if (!json || typeof json !== "object") return {}
+  var groups = arrayFrom(json.children)
+  var result = {}
+
+  for (var g = 0; g < groups.length; g++) {
+    var group = groups[g]
+    if (!group) continue
+    var groupName = String(group.name || ("Group " + (g + 1)))
+    var entries = (group.standings && group.standings.entries) ? arrayFrom(group.standings.entries) : []
+    var rows = []
+
+    for (var e = 0; e < entries.length; e++) {
+      var entry = entries[e]
+      if (!entry) continue
+      var team = entry.team || {}
+      var stats = arrayFrom(entry.stats)
+      var statMap = {}
+      for (var s = 0; s < stats.length; s++) {
+        if (stats[s] && stats[s].name) statMap[stats[s].name] = stats[s]
+      }
+
+      var wins = parseInt((statMap.wins && statMap.wins.displayValue) || (statMap.wins && statMap.wins.value), 10) || 0
+      var losses = parseInt((statMap.losses && statMap.losses.displayValue) || (statMap.losses && statMap.losses.value), 10) || 0
+      var ties = parseInt((statMap.ties && statMap.ties.displayValue) || (statMap.otLosses && statMap.otLosses.displayValue) || (statMap.ties && statMap.ties.value), 10) || 0
+      var played = wins + losses + ties
+      var pts = (statMap.pts && statMap.pts.displayValue) || (statMap.points && statMap.points.displayValue) || (statMap.winPercent && statMap.winPercent.displayValue) || (wins + "W")
+      var diff = (statMap.differential && statMap.differential.displayValue) || (statMap.pointDifferential && statMap.pointDifferential.displayValue) || (statMap.runDifferential && statMap.runDifferential.displayValue) || (statMap.gamesBehind && statMap.gamesBehind.displayValue) || "-"
+      var seed = parseInt((statMap.playoffSeed && statMap.playoffSeed.displayValue), 10) || (e + 1)
+
+      var zone = ""
+      if (seed <= 6) zone = "europe"
+      else if (seed <= 10) zone = "playin"
+
+      rows.push({
+        pos: String(seed),
+        id: String(team.id || ""),
+        name: String(team.displayName || team.name || "Team"),
+        shortName: String(team.shortDisplayName || team.name || team.abbreviation || "Team"),
+        played: played,
+        wins: wins,
+        draws: ties,
+        losses: losses,
+        gd: String(diff),
+        pts: String(pts),
+        zone: zone
+      })
+    }
+    rows.sort(function(a, b) { return (parseInt(a.pos, 10) || 99) - (parseInt(b.pos, 10) || 99) })
+    result[groupName] = rows
+  }
+  return result
+}
+
+// ============================================================================
+// FORMULA 1 CALENDAR & STANDINGS PARSER (JOLPICA / ERGAST)
+// ============================================================================
+
+function parseF1Calendar(raw) {
+  var json = null
+  try { json = JSON.parse(String(raw || "")) } catch (e) { return [] }
+  if (!json || typeof json !== "object") return []
+  var races = (json.MRData && json.MRData.RaceTable && json.MRData.RaceTable.Races) ? arrayFrom(json.MRData.RaceTable.Races) : []
+  var now = Date.now()
+  var matches = []
+
+  for (var i = 0; i < races.length; i++) {
+    var r = races[i]
+    if (!r) continue
+    var raceIso = r.date + "T" + (r.time || "14:00:00Z")
+    var raceMs = Date.parse(raceIso)
+    var status = "upcoming"
+    if (!isNaN(raceMs)) {
+      if (now > raceMs + 3 * 3600 * 1000) status = "finished"
+      else if (now >= raceMs) status = "live"
+    }
+
+    var shortName = String(r.raceName || "Grand Prix").replace(" Grand Prix", " GP")
+
+    matches.push({
+      id: "f1-2026-" + r.round,
+      sport: "f1",
+      leagueId: "f1",
+      leagueName: "Formula 1",
+      round: "Round " + r.round,
+      home: {
+        id: "f1-gp-" + r.round,
+        name: String(r.raceName || "Grand Prix"),
+        shortName: shortName,
+        record: (r.Circuit && r.Circuit.Location && r.Circuit.Location.locality) || ""
+      },
+      away: {
+        id: "f1-circuit-" + r.round,
+        name: (r.Circuit && r.Circuit.circuitName) || "Circuit",
+        shortName: (r.Circuit && r.Circuit.Location && r.Circuit.Location.country) || "",
+        record: ""
+      },
+      status: status,
+      homeScore: 0,
+      awayScore: 0,
+      scoreText: status === "finished" ? "Official" : (status === "live" ? "RACE DAY" : "Round " + r.round),
+      statusReason: status === "finished" ? "Official" : (status === "live" ? "LIVE" : "Scheduled"),
+      liveTime: status === "live" ? "RACE" : "",
+      time: raceIso,
+      pageUrl: r.url || "https://www.formula1.com"
+    })
+  }
+  return matches
+}
+
+function parseF1DriverStandings(raw) {
+  var json = null
+  try { json = JSON.parse(String(raw || "")) } catch (e) { return [] }
+  if (!json || typeof json !== "object") return []
+  var list = (json.MRData && json.MRData.StandingsTable && json.MRData.StandingsTable.StandingsLists && json.MRData.StandingsTable.StandingsLists[0] && json.MRData.StandingsTable.StandingsLists[0].DriverStandings) ? arrayFrom(json.MRData.StandingsTable.StandingsLists[0].DriverStandings) : []
+  var rows = []
+
+  for (var i = 0; i < list.length; i++) {
+    var d = list[i]
+    if (!d) continue
+    var driver = d.Driver || {}
+    var constructor = (d.Constructors && d.Constructors[0]) || {}
+    var pos = parseInt(d.position, 10) || (i + 1)
+
+    rows.push({
+      pos: String(pos),
+      id: String(driver.driverId || ""),
+      name: (driver.givenName || "") + " " + (driver.familyName || ""),
+      shortName: String(driver.code || driver.familyName || "Driver"),
+      played: parseInt(d.wins, 10) || 0,
+      wins: parseInt(d.wins, 10) || 0,
+      draws: 0,
+      losses: 0,
+      gd: String(constructor.name || ""),
+      pts: String(d.points || "0") + " PTS",
+      zone: pos === 1 ? "europe" : (pos <= 3 ? "playin" : "")
+    })
+  }
+  return rows
+}
+
+function parseF1ConstructorStandings(raw) {
+  var json = null
+  try { json = JSON.parse(String(raw || "")) } catch (e) { return [] }
+  if (!json || typeof json !== "object") return []
+  var list = (json.MRData && json.MRData.StandingsTable && json.MRData.StandingsTable.StandingsLists && json.MRData.StandingsTable.StandingsLists[0] && json.MRData.StandingsTable.StandingsLists[0].ConstructorStandings) ? arrayFrom(json.MRData.StandingsTable.StandingsLists[0].ConstructorStandings) : []
+  var rows = []
+
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i]
+    if (!c) continue
+    var constructor = c.Constructor || {}
+    var pos = parseInt(c.position, 10) || (i + 1)
+
+    rows.push({
+      pos: String(pos),
+      id: String(constructor.constructorId || ""),
+      name: String(constructor.name || "Constructor"),
+      shortName: String(constructor.name || "Constructor"),
+      played: parseInt(c.wins, 10) || 0,
+      wins: parseInt(c.wins, 10) || 0,
+      draws: 0,
+      losses: 0,
+      gd: String(constructor.nationality || ""),
+      pts: String(c.points || "0") + " PTS",
+      zone: pos === 1 ? "europe" : (pos <= 3 ? "playin" : "")
+    })
+  }
+  return rows
+}
+
+// ============================================================================
+// FOTMOB FOOTBALL PARSERS
+// ============================================================================
 
 function extractPageProps(html) {
-  var source = String(html || "")
-  var markerIndex = source.indexOf("__NEXT_DATA__")
-  if (markerIndex < 0) throw "FotMob page did not contain __NEXT_DATA__"
-  var start = source.indexOf(">", markerIndex)
-  if (start < 0) throw "FotMob page data tag was incomplete"
-  start += 1
-  var end = source.indexOf("</script>", start)
-  if (end < 0) throw "FotMob page data tag did not close"
-
-  var wrapper
+  if (!html || typeof html !== "string") return {}
+  var marker = '<script id="__NEXT_DATA__" type="application/json">'
+  var start = html.indexOf(marker)
+  if (start === -1) return {}
+  start += marker.length
+  var end = html.indexOf("</script>", start)
+  if (end === -1) return {}
   try {
-    wrapper = JSON.parse(source.slice(start, end))
+    var parsed = JSON.parse(html.substring(start, end))
+    return (parsed && parsed.props && parsed.props.pageProps) || {}
   } catch (e) {
-    throw "FotMob page data was not valid JSON"
+    return {}
   }
-  if (!wrapper || !wrapper.props || !wrapper.props.pageProps)
-    throw "FotMob page data did not include fixtures"
-  return wrapper.props.pageProps
 }
 
-function cleanPageUrl(value) {
-  var url = String(value || "")
-  var hash = url.indexOf("#")
-  return hash >= 0 ? url.slice(0, hash) : url
+function parseScore(status) {
+  if (!status) return { home: 0, away: 0, text: "" }
+  if (typeof status.scoreStr === "string" && status.scoreStr.indexOf("-") !== -1) {
+    var parts = status.scoreStr.split("-")
+    var home = parseInt(parts[0].trim(), 10) || 0
+    var away = parseInt(parts[1].trim(), 10) || 0
+    return { home: home, away: away, text: home + "–" + away }
+  }
+  var aggregate = status.aggregateStr || ""
+  if (aggregate) return { home: 0, away: 0, text: aggregate }
+  return { home: 0, away: 0, text: "" }
 }
 
-function bool(value) {
-  return value === true || value === 1 || value === "true"
-}
-
-function scoreParts(scoreText) {
-  var match = String(scoreText || "").match(/(\d+)\s*[-:]\s*(\d+)/)
-  if (!match) return { home: null, away: null, text: "" }
-  return { home: parseInt(match[1], 10), away: parseInt(match[2], 10), text: match[1] + "–" + match[2] }
+function cleanPageUrl(raw) {
+  var url = String(raw || "").trim()
+  if (!url) return ""
+  if (url.indexOf("http") === 0) return url
+  if (url.charAt(0) === "/") return url
+  return "/" + url
 }
 
 function parseMatch(raw, league) {
+  var score = parseScore(raw && raw.status)
   var status = raw && raw.status ? raw.status : {}
-  var reasonShort = String(status.reason && status.reason.short || "").toUpperCase().trim()
-  var reasonLong = String(status.reason && status.reason.long || "").toUpperCase().trim()
-  var score = scoreParts(status.scoreStr)
-  if (score.home === null && status.score) {
-    score.home = parseInt(status.score.home, 10)
-    score.away = parseInt(status.score.away, 10)
-    if (!isNaN(score.home) && !isNaN(score.away)) score.text = score.home + "–" + score.away
-  }
+  var bool = function(v) { return v === true || v === "true" }
+
+  var reasonShort = String(status.reason && status.reason.short || "").toUpperCase()
+  var reasonLong = String(status.reason && status.reason.long || "").toUpperCase()
 
   var isFinishedReason = reasonShort === "FT" || reasonShort === "AET" || reasonShort === "PEN" || reasonLong.indexOf("FULL") !== -1 || reasonLong.indexOf("AFTER EXTRA") !== -1 || reasonLong.indexOf("PENALTIES") !== -1 || bool(status.finished)
   var isCancelledReason = reasonShort === "CANC" || reasonShort === "POSTP" || reasonShort === "ABD" || reasonLong.indexOf("CANCEL") !== -1 || reasonLong.indexOf("POSTP") !== -1 || reasonLong.indexOf("ABANDON") !== -1 || bool(status.cancelled)
@@ -250,6 +723,7 @@ function parseMatch(raw, league) {
   var away = raw && raw.away ? raw.away : {}
   return {
     id: String(raw && raw.id || ""),
+    sport: "football",
     leagueId: String(league.id || ""),
     leagueName: String(league.name || ""),
     round: String(raw && raw.round || ""),
@@ -266,7 +740,6 @@ function parseMatch(raw, league) {
   }
 }
 
-// Per-match enrichment from the match page: stadium, referee, attendance, halftime.
 function parseDetails(html) {
   var props = extractPageProps(html)
   var content = props.content || {}
@@ -288,52 +761,27 @@ function parseDetails(html) {
   if (gen.leagueRoundName) out.round = String(gen.leagueRoundName)
   if (status.halftimeScore) out.halftimeScore = String(status.halftimeScore)
   if (status.reason && status.reason.long) out.statusLong = String(status.reason.long)
+  if (status.reason && status.reason.short) out.reason = String(status.reason.short)
+  if (status.finished === true) out.finished = true
 
   for (var key in out) return out
   return null
 }
 
-// Classify a zero-based table position through FotMob's own legend so zone
-// colors follow the competition's rules (CL/Europe vs relegation) instead of
-// hardcoding league-specific cutoffs.
-function zoneFromLegend(legend, idx) {
-  var source = arrayFrom(legend)
-  for (var i = 0; i < source.length; i++) {
-    var entry = source[i]
-    var indices = arrayFrom(entry && entry.indices)
-    for (var j = 0; j < indices.length; j++) {
-      if (parseInt(indices[j], 10) !== idx) continue
-      var title = String(entry.title || "").toLowerCase()
-      if (title.indexOf("relegation") >= 0) return "relegation"
-      return "europe"
-    }
-  }
-  return ""
-}
-
-// pageProps.table[0].data.table.all is a flat row list with plain keys;
-// cups and early-season competitions may omit the table entirely.
 function parseStandings(props) {
-  var groups = arrayFrom(props && props.table)
-  var group = groups.length > 0 ? groups[0] : null
-  var data = group && group.data ? group.data : null
-  var views = null
-  var legend = []
-  if (data && data.table) {
-    views = data.table
-    legend = arrayFrom(data.legend)
-  } else if (data && data.tables && data.tables.length > 0) {
-    views = data.tables[0].table
-    legend = arrayFrom(data.tables[0].legend || data.legend)
+  var table = props && props.table ? props.table : []
+  var rows = []
+  if (Array.isArray(table) && table.length > 0 && table[0].data && table[0].data.table) {
+    rows = table[0].data.table.all || []
+  } else if (table && table.data && table.data.table) {
+    rows = table.data.table.all || []
   }
-  var rows = arrayFrom(views && views.all)
-
+  var legend = (props && props.table && props.table[0] && props.table[0].data && props.table[0].data.legend) || []
   var result = []
-  for (var i = 0; i < rows.length && result.length < 30; i++) {
+  for (var i = 0; i < rows.length; i++) {
     var r = rows[i]
-    if (!r || !r.name) continue
     result.push({
-      pos: parseInt(r.idx, 10) || (i + 1),
+      pos: String(r.idx || (i + 1)),
       id: String(r.id || ""),
       name: String(r.name || ""),
       shortName: String(r.shortName || r.name || ""),
@@ -347,6 +795,25 @@ function parseStandings(props) {
     })
   }
   return result
+}
+
+function zoneFromLegend(legend, idx) {
+  var source = arrayFrom(legend)
+  for (var i = 0; i < source.length; i++) {
+    var entry = source[i]
+    if (!entry || !entry.indices) continue
+    var indices = arrayFrom(entry.indices)
+    for (var j = 0; j < indices.length; j++) {
+      if (indices[j] === idx) {
+        var key = String(entry.title || "").toLowerCase()
+        if (key.indexOf("champions league") !== -1 || key.indexOf("promotion") !== -1 || key.indexOf("qualification") !== -1 || key.indexOf("playoff") !== -1)
+          return "europe"
+        if (key.indexOf("relegation") !== -1 || key.indexOf("bottom") !== -1)
+          return "relegation"
+      }
+    }
+  }
+  return ""
 }
 
 function parseLeaguePage(html, requestedId) {
@@ -367,8 +834,6 @@ function parseLeaguePage(html, requestedId) {
   return { league: league, matches: matches, standings: parseStandings(props) }
 }
 
-// Parses a dedicated team page (https://www.fotmob.com/teams/<id>) to extract
-// ALL fixtures across every competition (Champions League, Cups, League, etc.)
 function parseTeamPage(html, requestedTeamId) {
   var props = extractPageProps(html)
   var fallback = props.fallback || {}
@@ -415,282 +880,219 @@ function mergePages(pages) {
   return matches
 }
 
-function teamOptions(matches) {
+// ============================================================================
+// UNIVERSAL MATCH & TEAM DISCOVERY HELPERS
+// ============================================================================
+
+function teamOptionsForSport(sport, matches) {
+  var s = String(sport || "football").toLowerCase()
+  if (s === "nba") return nbaTeams
+  if (s === "f1") return f1Drivers
+  if (s === "nfl") return nflTeams
+  if (s === "mlb") return mlbTeams
+  if (s === "nhl") return nhlTeams
+
   var byId = {}
   var source = arrayFrom(matches)
   for (var i = 0; i < source.length; i++) {
     var match = source[i]
-    var league = match.leagueName || leagueLabel(match.leagueId)
-    var teams = [match.home, match.away]
-    for (var j = 0; j < teams.length; j++) {
-      var team = teams[j]
-      var id = String(team.id || team.name || "")
-      if (!id || !team.name) continue
-      if (!byId[id]) {
-        byId[id] = {
-          value: id,
-          label: team.name,
-          description: league || ""
+    if (!match) continue
+    if (match.home && match.home.id && match.home.name) {
+      if (!byId[match.home.id]) {
+        byId[match.home.id] = {
+          value: match.home.id,
+          label: match.home.name,
+          description: match.leagueName || ""
+        }
+      }
+    }
+    if (match.away && match.away.id && match.away.name) {
+      if (!byId[match.away.id]) {
+        byId[match.away.id] = {
+          value: match.away.id,
+          label: match.away.name,
+          description: match.leagueName || ""
         }
       }
     }
   }
-  var result = []
-  for (var key in byId) result.push(byId[key])
-  result.sort(function(a, b) { return a.label.localeCompare(b.label) })
-  return result
+  var list = []
+  for (var key in byId) list.push(byId[key])
+  list.sort(function(a, b) { return a.label.localeCompare(b.label) })
+  return list
 }
 
 function matchesForTeam(matches, teamId) {
-  var id = String(teamId || "")
+  var id = String(teamId || "").toLowerCase()
   if (!id) return []
   var result = []
   var source = arrayFrom(matches)
   for (var i = 0; i < source.length; i++) {
-    var match = source[i]
-    if (String(match.home.id) === id || String(match.away.id) === id) result.push(match)
+    var m = source[i]
+    if (!m) continue
+    var homeId = String(m.home && m.home.id || "").toLowerCase()
+    var awayId = String(m.away && m.away.id || "").toLowerCase()
+    var homeName = String(m.home && m.home.name || "").toLowerCase()
+    var awayName = String(m.away && m.away.name || "").toLowerCase()
+
+    if (homeId === id || awayId === id || homeName.indexOf(id) !== -1 || awayName.indexOf(id) !== -1) {
+      result.push(m)
+    }
   }
   result.sort(function(a, b) {
-    var rank = { live: 0, upcoming: 1, finished: 2, cancelled: 3 }
-    var stateDifference = (rank[a.status] || 9) - (rank[b.status] || 9)
-    if (stateDifference !== 0) return stateDifference
-    var aTime = Date.parse(a.time || "")
-    var bTime = Date.parse(b.time || "")
-    if (a.status === "finished") return bTime - aTime
-    return aTime - bTime
+    var ta = Date.parse(a.time || "")
+    var tb = Date.parse(b.time || "")
+    if (isNaN(ta)) return 1
+    if (isNaN(tb)) return -1
+    return ta - tb
   })
-  return result.slice(0, 8)
+  return result
 }
 
 function matchesForLeague(matches, leagueId) {
   var id = String(leagueId || "")
-  if (!id) return []
+  if (!id) return arrayFrom(matches)
   var result = []
   var source = arrayFrom(matches)
   for (var i = 0; i < source.length; i++) {
-    var match = source[i]
-    if (String(match.leagueId) === id) result.push(match)
+    var m = source[i]
+    if (m && String(m.leagueId) === id) result.push(m)
   }
   result.sort(function(a, b) {
-    var rank = { live: 0, upcoming: 1, finished: 2, cancelled: 3 }
-    var stateDifference = (rank[a.status] || 9) - (rank[b.status] || 9)
-    if (stateDifference !== 0) return stateDifference
-    var aTime = Date.parse(a.time || "")
-    var bTime = Date.parse(b.time || "")
-    if (a.status === "finished") return bTime - aTime
-    return aTime - bTime
+    var ta = Date.parse(a.time || "")
+    var tb = Date.parse(b.time || "")
+    if (isNaN(ta)) return 1
+    if (isNaN(tb)) return -1
+    return ta - tb
   })
   return result
 }
 
-function teamOutcome(match, teamId) {
-  if (!match) return ""
-  var id = String(teamId || "")
-  if (!id) return ""
-  if (match.status !== "finished" && match.status !== "live") return ""
-  var h = match.homeScore
-  var a = match.awayScore
-  if (h === null || h === undefined || isNaN(h) || a === null || a === undefined || isNaN(a)) {
-    var parts = scoreParts(match.scoreText)
-    h = parts.home
-    a = parts.away
+function featuredMatchForTeam(teamMatches) {
+  var source = arrayFrom(teamMatches)
+  if (source.length === 0) return null
+
+  // 1. Live match first
+  for (var i = 0; i < source.length; i++) {
+    if (source[i] && source[i].status === "live") return source[i]
   }
-  if (h === null || a === null || isNaN(h) || isNaN(a)) return ""
-  var isHome = String(match.home.id) === id
-  var isAway = String(match.away.id) === id
-  if (!isHome && !isAway) return ""
-  var teamGoals = isHome ? h : a
-  var oppGoals = isHome ? a : h
-  if (teamGoals > oppGoals) return "win"
-  if (teamGoals < oppGoals) return "loss"
-  return "draw"
+
+  // 2. Next upcoming match
+  var now = Date.now()
+  var bestUpcoming = null
+  var bestUpcomingTime = Infinity
+  for (var j = 0; j < source.length; j++) {
+    var m = source[j]
+    if (!m || m.status !== "upcoming") continue
+    var t = Date.parse(m.time || "")
+    if (isNaN(t) || t < now) continue
+    if (t < bestUpcomingTime) {
+      bestUpcomingTime = t
+      bestUpcoming = m
+    }
+  }
+  if (bestUpcoming) return bestUpcoming
+
+  // 3. Most recent finished match
+  var bestFinished = null
+  var bestFinishedTime = -Infinity
+  for (var k = 0; k < source.length; k++) {
+    var fm = source[k]
+    if (!fm || fm.status !== "finished") continue
+    var ft = Date.parse(fm.time || "")
+    if (isNaN(ft)) continue
+    if (ft > bestFinishedTime) {
+      bestFinishedTime = ft
+      bestFinished = fm
+    }
+  }
+  return bestFinished || source[0]
 }
 
-function featuredMatchForTeam(teamMatches) {
-  var list = arrayFrom(teamMatches)
-  if (list.length === 0) return null
-  for (var i = 0; i < list.length; i++) {
-    if (list[i] && list[i].status === "live") return list[i]
-  }
+function teamOutcome(match, teamId) {
+  if (!match || match.status !== "finished") return ""
+  var id = String(teamId || "").toLowerCase()
+  var homeId = String(match.home && match.home.id || "").toLowerCase()
+  var awayId = String(match.away && match.away.id || "").toLowerCase()
+  var isHome = homeId === id
+  var isAway = awayId === id
+  if (!isHome && !isAway) return ""
+
+  var hs = parseInt(match.homeScore, 10) || 0
+  var as = parseInt(match.awayScore, 10) || 0
+  if (hs === as) return "draw"
+  if (isHome) return hs > as ? "win" : "loss"
+  return as > hs ? "win" : "loss"
+}
+
+function groupMatches(matches, referenceDate, dateKeyFn) {
+  var source = arrayFrom(matches)
+  if (source.length === 0) return []
+
+  var live = []
   var upcoming = []
-  for (var j = 0; j < list.length; j++) {
-    if (list[j] && list[j].status === "upcoming") upcoming.push(list[j])
+  var recent = []
+
+  for (var i = 0; i < source.length; i++) {
+    var m = source[i]
+    if (!m) continue
+    if (m.status === "live") live.push(m)
+    else if (m.status === "upcoming") upcoming.push(m)
+    else recent.push(m)
+  }
+
+  var groups = []
+  if (live.length > 0) {
+    groups.push({ key: "live", label: "Live Matches", matches: live })
   }
   if (upcoming.length > 0) {
-    upcoming.sort(function(a, b) { return Date.parse(a.time || "") - Date.parse(b.time || "") })
-    return upcoming[0]
+    groups.push({ key: "upcoming", label: "Upcoming Fixtures", matches: upcoming })
   }
-  return list[0]
-}
-
-function leagueLabel(id) {
-  var key = String(id || "")
-  for (var i = 0; i < supportedLeagues.length; i++)
-    if (supportedLeagues[i].value === key) return supportedLeagues[i].label
-  return key ? "League " + key : ""
-}
-
-function matchStatusText(match) {
-  if (!match) return ""
-  var reason = match.statusReason || ""
-  if (match.status === "live") {
-    if (match.liveTime) return "Live " + match.liveTime
-    return reason || "Live"
+  if (recent.length > 0) {
+    recent.reverse()
+    groups.push({ key: "recent", label: "Recent Results", matches: recent.slice(0, 10) })
   }
-  if (match.status === "finished") return reason || "FT"
-  if (match.status === "cancelled") return reason || "Cancelled"
-  return ""
+  return groups
 }
 
-function matchScoreText(match) {
-  if (!match) return ""
-  if (match.scoreText) return match.scoreText
-  return "—"
-}
-
-function formatMatchDate(timeString) {
-  var t = Date.parse(timeString || "")
-  if (isNaN(t)) return ""
+function formatMatchDate(timeStr) {
+  var t = Date.parse(timeStr || "")
+  if (isNaN(t)) return "TBD"
   var d = new Date(t)
   var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
   var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   return days[d.getDay()] + " " + d.getDate() + " " + months[d.getMonth()]
 }
 
-function groupMatches(matches, now, formatDay) {
-  var list = arrayFrom(matches)
-  if (list.length === 0) return []
-
-  var live = []
-  var upcoming = []
-  var finished = []
-
-  for (var i = 0; i < list.length; i++) {
-    var m = list[i]
-    if (!m) continue
-    if (m.status === "live") live.push(m)
-    else if (m.status === "upcoming") upcoming.push(m)
-    else finished.push(m)
-  }
-
-  upcoming.sort(function(a, b) { return Date.parse(a.time || "") - Date.parse(b.time || "") })
-  finished.sort(function(a, b) { return Date.parse(b.time || "") - Date.parse(a.time || "") })
-
-  var groups = []
-  if (live.length > 0) groups.push({ label: "Live Matches", matches: live })
-  if (upcoming.length > 0) groups.push({ label: "Upcoming Fixtures", matches: upcoming })
-  if (finished.length > 0) groups.push({ label: "Recent Results", matches: finished })
-  return groups
-}
-
-function cachePayload(pages, details) {
-  var matches = []
-  var standings = {}
-  var source = arrayFrom(pages)
-  for (var i = 0; i < source.length; i++) {
-    var page = source[i]
-    if (!page || !page.league) continue
-    var trimmedMatches = arrayFrom(page.matches).slice(0, 300)
-    matches = mergeTwoMatchLists(matches, trimmedMatches)
-    var rows = arrayFrom(page.standings)
-    if (rows.length > 0 && String(page.league.id) !== "") standings[String(page.league.id)] = rows.slice(0, 30)
-  }
-  return {
-    version: 3,
-    savedAt: new Date().toISOString(),
-    matches: matches.slice(0, 300),
-    standings: standings,
-    details: details && typeof details === "object" ? details : {}
-  }
-}
-
-function mergeTwoMatchLists(a, b) {
-  var seen = {}
-  var result = []
-  var combined = arrayFrom(a).concat(arrayFrom(b))
-  for (var i = 0; i < combined.length; i++) {
-    var m = combined[i]
-    if (!m || !m.id || seen[m.id]) continue
-    seen[m.id] = true
-    result.push(m)
-  }
-  return result
-}
-
-// Disk cache reader. Rejects anything older than two days or missing core
-// fields so a corrupt or ancient cache never renders as fake live data.
-function parseCache(raw) {
-  var parsed = null
-  try {
-    parsed = JSON.parse(String(raw || ""))
-  } catch (e) {
-    return null
-  }
-  if (!parsed || typeof parsed !== "object") return null
-  var savedAt = Date.parse(parsed.savedAt || "")
-  if (isNaN(savedAt)) return null
-  if (Date.now() - savedAt > 48 * 60 * 60 * 1000) return null
-
-  var matches = []
-  var source = arrayFrom(parsed.matches)
-  for (var i = 0; i < source.length && matches.length < 300; i++) {
-    var m = source[i]
-    if (!m || !m.id || !m.home || !m.away || !m.home.name || !m.away.name) continue
-    if (m.status !== "live" && m.status !== "upcoming" && m.status !== "finished" && m.status !== "cancelled") continue
-    matches.push(m)
-  }
-  if (matches.length === 0) return null
-
-  var standings = {}
-  var rawStandings = parsed.standings && typeof parsed.standings === "object" ? parsed.standings : {}
-  for (var key in rawStandings) {
-    var rows = arrayFrom(rawStandings[key])
-    var cleanRows = []
-    for (var j = 0; j < rows.length && cleanRows.length < 30; j++) {
-      var row = rows[j]
-      if (!row || !row.name) continue
-      cleanRows.push(row)
-    }
-    if (cleanRows.length > 0) standings[String(key)] = cleanRows
-  }
-
-  var details = {}
-  var rawDetails = parsed.details && typeof parsed.details === "object" ? parsed.details : {}
-  for (var dkey in rawDetails) {
-    var entry = rawDetails[dkey]
-    if (entry && typeof entry === "object" && (entry.stadium || entry.referee))
-      details[String(dkey)] = entry
-  }
-  return { savedAt: savedAt, matches: matches, standings: standings, details: details }
-}
-
-// Live matches across every followed league, soonest kickoff first.
-function liveMatches(matches, detailsMap) {
-  var result = []
-  var source = arrayFrom(matches)
-  var map = detailsMap || {}
-  for (var i = 0; i < source.length; i++) {
-    var m = source[i]
-    if (!m || m.status !== "live") continue
-    var d = map[String(m.id)]
-    if (d && (d.statusLong === "Full-Time" || d.reason === "FT" || d.finished === true)) continue
-    result.push(m)
-  }
-  result.sort(function(a, b) { return Date.parse(a.time || "") - Date.parse(b.time || "") })
-  return result
-}
-
-// One-line score summary for the Live tab rows.
-function matchLine(match) {
+function matchStatusText(match) {
   if (!match) return ""
-  var home = match.home.shortName || match.home.name
-  var away = match.away.shortName || match.away.name
-  var line = home + " " + (match.scoreText || "–") + " " + away
-  if (match.liveTime) line += " · " + match.liveTime
-  return line
+  if (match.status === "live") return match.liveTime || "LIVE"
+  if (match.status === "finished") return "FT"
+  if (match.status === "cancelled") return "Postponed"
+  return formatMatchDate(match.time)
 }
 
-// Formats tournament names concisely so long names never clip in fixture rows.
+function leagueLabel(id) {
+  var s = String(id || "")
+  if (s === "nba") return "NBA"
+  if (s === "f1") return "Formula 1"
+  if (s === "nfl") return "NFL"
+  if (s === "mlb") return "MLB"
+  if (s === "nhl") return "NHL"
+  for (var i = 0; i < supportedLeagues.length; i++) {
+    if (supportedLeagues[i].value === s) return supportedLeagues[i].label
+  }
+  return "League " + s
+}
+
+function sportMeta(sport) {
+  var s = String(sport || "football").toLowerCase()
+  for (var i = 0; i < supportedSports.length; i++) {
+    if (supportedSports[i].value === s) return supportedSports[i]
+  }
+  return supportedSports[0]
+}
+
 function shortTournamentName(name) {
   var s = String(name || "").trim()
   if (!s) return ""
@@ -708,6 +1110,30 @@ function shortTournamentName(name) {
   if (s.indexOf("Supercopa") !== -1) return "Supercopa"
   if (s.indexOf("Club Friendlies") !== -1) return "Friendly"
   return s
+}
+
+function liveMatches(matches, detailsMap) {
+  var result = []
+  var source = arrayFrom(matches)
+  var map = detailsMap || {}
+  for (var i = 0; i < source.length; i++) {
+    var m = source[i]
+    if (!m || m.status !== "live") continue
+    var d = map[String(m.id)]
+    if (d && (d.statusLong === "Full-Time" || d.reason === "FT" || d.finished === true)) continue
+    result.push(m)
+  }
+  result.sort(function(a, b) { return Date.parse(a.time || "") - Date.parse(b.time || "") })
+  return result
+}
+
+function matchLine(match) {
+  if (!match) return ""
+  var home = (match.home && (match.home.shortName || match.home.name)) || ""
+  var away = (match.away && (match.away.shortName || match.away.name)) || ""
+  var line = home + " " + (match.scoreText || "–") + " " + away
+  if (match.liveTime) line += " · " + match.liveTime
+  return line
 }
 
 function leagues() { return supportedLeagues }

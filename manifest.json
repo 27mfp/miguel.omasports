@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "id": "miguel.matchday",
   "name": "Matchday",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Miguel",
   "license": "MIT",
-  "description": "Live football scores, club fixtures, and league standings on your Omarchy bar.",
+  "description": "All-in-one live sports tracker (Football, NBA, F1, NFL, MLB, NHL) on your Omarchy bar.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
     "displayName": "Matchday",
-    "description": "Track live football scores, favorite club fixtures, and league standings.",
+    "description": "Track live scores, team fixtures, and league standings across Football, NBA, F1, NFL, MLB, and NHL.",
     "category": "Sports",
     "allowMultiple": false,
     "defaultSection": "center",

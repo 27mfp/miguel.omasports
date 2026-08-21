@@ -1,13 +1,13 @@
 <div align="center">
 
-# ⚽ Matchday
+# ⚽ Matchday · Multi-Sport Hub
 
-**The live football tracker and score center for [Omarchy](https://github.com/basecamp/omarchy).**
+**The all-in-one live sports tracker and score center for [Omarchy](https://github.com/basecamp/omarchy).**
 
-Track real-time scores, club fixtures, and league standings directly from your Linux desktop bar.
+Track real-time scores, team schedules, and standings across **Football**, **NBA**, **Formula 1**, **NFL**, **MLB**, and **NHL** directly from your Linux desktop bar.
 
 [![Omarchy Plugin](https://img.shields.io/badge/omarchy-plugin-blue.svg)](https://omarchy.org)
-[![Version](https://img.shields.io/badge/version-1.0.0-emerald.svg)](manifest.json)
+[![Version](https://img.shields.io/badge/version-1.1.0-emerald.svg)](manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-orange.svg)]()
 
@@ -17,28 +17,32 @@ Track real-time scores, club fixtures, and league standings directly from your L
 
 ## 🌟 Highlights
 
-- **⚡ Glancibility & Live Bar Badge**:
-  - Unobtrusive football icon on your status bar.
-  - Reactive pulsing notification dot whenever your favorite club or any followed match is playing live.
+- **⚡ Unified All-in-One Multi-Sport Hub**:
+  - Switch instantly between **⚽ Football**, **🏀 NBA**, **🏎 Formula 1**, **🏈 NFL**, **⚾ MLB**, and **🏒 NHL**.
+  - Dynamic status bar icon automatically updates to match your active sport (`⚽`, `🏀`, `🏎`, `🏈`, `⚾`, `🏒`).
+  - Persistent per-sport preferences — your favorite club and followed leagues are remembered independently for every sport.
 
-- **★ Multi-Competition Club Spotlight & Fixtures**:
-  - Highlights your favorite team with dedicated hero spotlight cards.
-  - Automatically fetches and displays matches across **all competitions** (League, UEFA Champions League, Europa League, Domestic Cups, and Friendlies).
-  - Filter schedule by **Favorite Club**, **All Followed Competitions**, or specific **League / Matchdays**.
+- **★ Team & Driver Hero Spotlight**:
+  - Highlights your favorite team or driver with dedicated match cards.
+  - Multi-competition tracking: For football, tracks UEFA Champions League, domestic league, and cups; for F1, tracks the upcoming Grand Prix weekend.
 
 - **● Live Broadcast Scorecard**:
-  - Live game minute indicators with animated pulsing badges (`● 45' HT`, `● 93'`).
-  - Broadcast scorecard layout showing venue, city, referee, attendance, and halftime scores.
-  - Instant transition from live to finished the moment full time is blown.
+  - Live game minute indicators with animated pulsing badges (`● 45' HT`, `● Q3 4:21`, `● Top 5th`, `● 3rd 12:10`, `● RACE DAY`).
+  - Broadcast scorecard layout showing stadium venue, city, referee, attendance, and period scores.
+  - Instant transition from live to finished the moment the game concludes.
 
 - **󰝘 League Tables & Standings**:
-  - Complete league tables with European qualification, promotion, and relegation zone indicators.
-  - Multi-league switcher to view standings across all your followed competitions.
+  - Complete tables with qualification, playoff seeds, promotion, and relegation zone indicators:
+    - ⚽ **Football**: Champions League, European spots, Relegation.
+    - 🏀 **NBA**: Eastern & Western Conference standings with Playoff (Top 6) and Play-in (7–10) seeds.
+    - 🏎 **Formula 1**: Drivers and Constructors World Championship standings.
+    - 🏈 **NFL**: AFC and NFC conference & division tables.
+    - ⚾ **MLB**: American League and National League standings.
+    - 🏒 **NHL**: Eastern and Western conference rankings.
 
-- **🎯 Smart League & Team Selection**:
-  - Follow up to 12 concurrent leagues with selected leagues pinned to the top of the search picker.
-  - Removable tag chips for fast one-click removal.
-  - Collapsible settings card to keep the panel focused on fixtures and scores.
+- **🎯 Smart Search & Autocomplete**:
+  - Pre-populated catalogues for all 30 NBA teams, 32 NFL teams, 30 MLB teams, 32 NHL teams, F1 drivers, and 100+ football competitions.
+  - Follow up to 12 concurrent football leagues with selected leagues pinned to the top of the search picker.
 
 - **⌨ Keyboard-First Navigation**:
   - Press `r` or `R` to refresh scores on demand.
@@ -47,7 +51,7 @@ Track real-time scores, club fixtures, and league standings directly from your L
 
 - **🚀 Ultra-Lightweight Native Performance**:
   - Built natively with QtQuick / QML for Quickshell.
-  - No background daemons or Electron overhead.
+  - Zero background daemons or Electron overhead.
   - Resilient network fetching with concurrent worker pool, automatic retries, and instant local disk cache.
 
 ---
@@ -61,8 +65,6 @@ omarchy plugin add https://github.com/27mfp/omarchy-matchday --enable
 ```
 
 ### Manual Local Install
-
-If you cloned or downloaded this repository locally:
 
 ```bash
 # 1. Validate the plugin manifest
@@ -83,8 +85,9 @@ omarchy plugin enable miguel.matchday --section center
 
 All settings can be configured inside the interactive popout panel or through your Omarchy settings:
 
-- **Followed Leagues**: Select up to 12 leagues concurrently (e.g., Premier League, La Liga, Primeira Liga, Serie A, Bundesliga, Champions League, etc.).
-- **Favorite Club**: Search and pin your favorite team to receive live score alerts and all-competition fixture timelines.
+- **Sport Selector**: Click any sport pill (`⚽`, `🏀`, `🏎`, `🏈`, `⚾`, `🏒`) in the header to switch active sport.
+- **Followed Leagues (Football)**: Select up to 12 leagues concurrently.
+- **Favorite Team / Driver**: Search and pin your favorite team/driver in each sport.
 - **Refresh Frequency**: Choose polling intervals from 5 to 60 minutes.
 - **Background Updates**: Optional toggle to keep fetching live scores in the background while the panel is closed.
 
@@ -92,19 +95,16 @@ Configuration is automatically saved to `~/.config/omarchy/sports-favorites.json
 
 ---
 
-## 🌍 Supported Leagues & Tournaments
+## 🌍 Supported Sports & Competitions
 
-Matchday supports top domestic and continental competitions worldwide:
-- 🏴󠁧󠁢󠁥󠁮󠁧󠁿 **Premier League & Championship**
-- 🇪🇸 **La Liga**
-- 🇵🇹 **Primeira Liga & Taça de Portugal**
-- 🇮🇹 **Serie A**
-- 🇩🇪 **Bundesliga**
-- 🇫🇷 **Ligue 1**
-- 🇪🇺 **UEFA Champions League, Europa League & Conference League**
-- 🇧🇷 **Brasileirão Série A**
-- 🇺🇸 **Major League Soccer (MLS)**
-- 🇳🇱 **Eredivisie**, 🇸🇦 **Saudi Pro League**, and more.
+| Sport | Icon | Leagues & Tournaments | Data Provider |
+|---|:---:|---|---|
+| **Football / Soccer** | ⚽ | Premier League, La Liga, Primeira Liga, Serie A, Bundesliga, Champions League, Europa League, MLS, Brasileirão, 100+ global leagues & cups | FotMob |
+| **Basketball** | 🏀 | National Basketball Association (NBA) — All 30 teams, Eastern & Western Conferences | ESPN |
+| **Formula 1** | 🏎 | FIA F1 World Championship — Full Grand Prix Calendar, Driver & Constructor Standings | Jolpica / Ergast |
+| **American Football** | 🏈 | National Football League (NFL) — All 32 teams, AFC & NFC | ESPN |
+| **Baseball** | ⚾ | Major League Baseball (MLB) — All 30 teams, AL & NL | ESPN |
+| **Ice Hockey** | 🏒 | National Hockey League (NHL) — All 32 teams, Eastern & Western Conferences | ESPN |
 
 ---
 
@@ -118,7 +118,7 @@ Matchday supports top domestic and continental competitions worldwide:
 | `←` / `→` | Switch between Fixtures, Live, and Standings tabs |
 | `↑` / `↓` | Navigate interactive controls |
 | `Enter` / `Space` | Activate selected dropdown or button |
-| `Click Match Card` | Open match details on FotMob in your browser |
+| `Click Match Card` | Open match details in your browser |
 | `Esc` | Close panel |
 
 ---

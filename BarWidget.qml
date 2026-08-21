@@ -19,6 +19,7 @@ BarWidget {
   readonly property bool favoriteLive: panelLoader.item ? panelLoader.item.favoriteTeamLive === true : false
   readonly property string favoriteSummary: panelLoader.item ? panelLoader.item.favoriteSummaryText : ""
   readonly property int liveCount: panelLoader.item ? (panelLoader.item.liveCount || 0) : 0
+  readonly property string activeSportIcon: panelLoader.item ? (panelLoader.item.activeSportIcon || "⚽") : "⚽"
 
   function injectPanel() {
     var target = panelLoader.item
@@ -74,7 +75,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "⚽"
+    text: root.activeSportIcon
     active: root.opened
 
     onPressed: function(buttonCode) {
