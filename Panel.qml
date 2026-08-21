@@ -810,18 +810,20 @@ Panel {
       var m = ms[i]
       if (!m) continue
       var sp = String(m.sport || root.activeSport || "football").toLowerCase()
-      if (m.home && m.home.id && m.home.logo && m.home.logo.indexOf("http") === 0) {
-        var k1 = sp + "-" + (m.home.abbr || m.home.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
-        if (!seen[k1]) {
+      if (m.home && m.home.id) {
+        var u1 = m.home.logo || (sp === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + m.home.id + ".png") : "")
+        var k1 = sp + "-" + String(m.home.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+        if (!seen[k1] && u1.indexOf("http") === 0) {
           seen[k1] = true
-          items.push({ url: m.home.logo, key: k1 })
+          items.push({ url: u1, key: k1 })
         }
       }
-      if (m.away && m.away.id && m.away.logo && m.away.logo.indexOf("http") === 0) {
-        var k2 = sp + "-" + (m.away.abbr || m.away.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
-        if (!seen[k2]) {
+      if (m.away && m.away.id) {
+        var u2 = m.away.logo || (sp === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + m.away.id + ".png") : "")
+        var k2 = sp + "-" + String(m.away.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+        if (!seen[k2] && u2.indexOf("http") === 0) {
           seen[k2] = true
-          items.push({ url: m.away.logo, key: k2 })
+          items.push({ url: u2, key: k2 })
         }
       }
     }
@@ -830,12 +832,13 @@ Panel {
     var st = Model.arrayFrom(standingsRows)
     for (var j = 0; j < st.length; j++) {
       var row = st[j]
-      if (row && row.id && row.logo && row.logo.indexOf("http") === 0) {
+      if (row && row.id) {
         var sp2 = String(root.activeSport || "football").toLowerCase()
-        var k3 = sp2 + "-" + (row.abbr || row.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
-        if (!seen[k3]) {
+        var u3 = row.logo || (sp2 === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + row.id + ".png") : "")
+        var k3 = sp2 + "-" + String(row.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+        if (!seen[k3] && u3.indexOf("http") === 0) {
           seen[k3] = true
-          items.push({ url: row.logo, key: k3 })
+          items.push({ url: u3, key: k3 })
         }
       }
     }
@@ -845,7 +848,7 @@ Panel {
     var cmd = ["curl", "-sL", "--parallel", "--create-dirs"]
     var count = 0
     var cacheDir = Quickshell.env("HOME") + "/.cache/omarchy-matchday/logos/"
-    for (var c = 0; c < items.length && count < 36; c++) {
+    for (var c = 0; c < items.length && count < 64; c++) {
       var it = items[c]
       if (it.url && it.url.indexOf("http") === 0) {
         cmd.push("-o", cacheDir + it.key + ".png", it.url)

@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 
-// High-performance team badge with async image caching & monogram fallback
+// High-performance team badge with local disk cache & monogram fallback
 Item {
   id: root
 
@@ -52,61 +52,20 @@ Item {
     "25": "la", "26": "sj", "27": "cbj", "28": "min", "29": "wpg", "30": "ari", "37": "sea", "54": "vgk", "129754": "uta"
   })
 
-  // Computed CDN logo URL if source is empty
-  readonly property string resolvedRemoteSource: {
-    if (source && (source.indexOf("http://") === 0 || source.indexOf("https://") === 0) && source.indexOf("/.png") === -1) {
-      return source
-    }
-    var id = String(teamId || "").trim()
+  // Computed safe cache key
+  readonly property string cacheKey: {
     var sp = String(sport || "football").toLowerCase()
-    var a = String(abbr || "").toLowerCase().trim()
-
-    // ⚽ Football (FotMob)
-    if (sp === "football" && id !== "") {
-      return "https://images.fotmob.com/image_resources/logo/teamlogo/" + id + ".png"
-    }
-
-    // 🏎 Formula 1 (Formula 1 CDN)
-    if (sp === "f1") {
-      var fid = id.toLowerCase()
-      if (fid.indexOf("mercedes") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/mercedes-logo.png"
-      if (fid.indexOf("ferrari") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/ferrari-logo.png"
-      if (fid.indexOf("mclaren") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/mclaren-logo.png"
-      if (fid.indexOf("red_bull") !== -1 || fid.indexOf("red bull") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/red-bull-racing-logo.png"
-      if (fid.indexOf("alpine") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/alpine-logo.png"
-      if (fid.indexOf("williams") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/williams-logo.png"
-      if (fid.indexOf("aston_martin") !== -1 || fid.indexOf("aston martin") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/aston-martin-logo.png"
-      if (fid.indexOf("haas") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/haas-f1-team-logo.png"
-      if (fid.indexOf("rb") !== -1 || fid.indexOf("racing") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/rb-logo.png"
-      if (fid.indexOf("sauber") !== -1 || fid.indexOf("audi") !== -1) return "https://media.formula1.com/d_team_car_fallback_image.png/content/dam/fom-website/teams/2024/kick-sauber-logo.png"
-    }
-
-    // 🏈 NFL (ESPN CDN)
-    if (sp === "nfl") {
-      var nflCode = a || nflAbbrs[id] || ""
-      if (nflCode) return "https://a.espncdn.com/i/teamlogos/nfl/500/" + nflCode + ".png"
-    }
-
-    // 🏀 NBA (ESPN CDN)
-    if (sp === "nba") {
-      var nbaCode = a || nbaAbbrs[id] || ""
-      if (nbaCode) return "https://a.espncdn.com/i/teamlogos/nba/500/" + nbaCode + ".png"
-    }
-
-    // ⚾ MLB (ESPN CDN)
-    if (sp === "mlb") {
-      var mlbCode = a || mlbAbbrs[id] || ""
-      if (mlbCode) return "https://a.espncdn.com/i/teamlogos/mlb/500/" + mlbCode + ".png"
-    }
-
-    // 🏒 NHL (ESPN CDN)
-    if (sp === "nhl") {
-      var nhlCode = a || nhlAbbrs[id] || ""
-      if (nhlCode) return "https://a.espncdn.com/i/teamlogos/nhl/500/" + nhlCode + ".png"
-    }
-
-    return ""
+    var id = String(teamId || "").trim().toLowerCase()
+    var a = String(abbr || "").trim().toLowerCase()
+    if (sp === "nba" && nbaAbbrs[id]) a = nbaAbbrs[id]
+    if (sp === "nfl" && nflAbbrs[id]) a = nflAbbrs[id]
+    if (sp === "mlb" && mlbAbbrs[id]) a = mlbAbbrs[id]
+    if (sp === "nhl" && nhlAbbrs[id]) a = nhlAbbrs[id]
+    var base = (sp === "football" && id !== "") ? id : (a || id || String(teamName || "").replace(/\s+/g, "_").toLowerCase())
+    return sp + "-" + base.replace(/[^a-z0-9_-]/g, "")
   }
+
+  readonly property string localCachePath: "file:///home/miguel/.cache/omarchy-matchday/logos/" + root.cacheKey + ".png"
 
   readonly property string monogramText: {
     if (abbr && String(abbr).trim()) {
@@ -141,11 +100,11 @@ Item {
     }
   }
 
-  // Asynchronous Image
+  // Instant Local Disk Cached Image (0ms latency, zero network flickering)
   Image {
     id: logoImg
     anchors.fill: parent
-    source: root.resolvedRemoteSource
+    source: root.localCachePath
     fillMode: Image.PreserveAspectFit
     asynchronous: true
     cache: true
