@@ -53,7 +53,7 @@ Item {
   })
 
   // Computed CDN logo URL if source is empty
-  readonly property string resolvedSource: {
+  readonly property string resolvedRemoteSource: {
     if (source && (source.indexOf("http://") === 0 || source.indexOf("https://") === 0) && source.indexOf("/.png") === -1) {
       return source
     }
@@ -145,12 +145,12 @@ Item {
   Image {
     id: logoImg
     anchors.fill: parent
-    source: root.resolvedSource
+    source: root.resolvedRemoteSource
     fillMode: Image.PreserveAspectFit
     asynchronous: true
     cache: true
     smooth: true
     opacity: status === Image.Ready ? 1.0 : 0.0
-    Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
   }
 }

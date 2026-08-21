@@ -647,6 +647,54 @@ function parseF1Calendar(raw) {
     var country = (r.Circuit && r.Circuit.Location && r.Circuit.Location.country) || ""
     var flag = f1CountryFlag(country, raceName)
 
+    var sessions = []
+    if (r.FirstPractice) {
+      sessions.push({
+        name: "Practice 1",
+        shortName: "FP1",
+        time: r.FirstPractice.date + "T" + (r.FirstPractice.time || "10:00:00Z")
+      })
+    }
+    if (r.SprintQualifying || r.SprintShootout) {
+      var sq = r.SprintQualifying || r.SprintShootout
+      sessions.push({
+        name: "Sprint Qualifying",
+        shortName: "SQ",
+        time: sq.date + "T" + (sq.time || "14:00:00Z")
+      })
+    } else if (r.SecondPractice) {
+      sessions.push({
+        name: "Practice 2",
+        shortName: "FP2",
+        time: r.SecondPractice.date + "T" + (r.SecondPractice.time || "14:00:00Z")
+      })
+    }
+    if (r.Sprint) {
+      sessions.push({
+        name: "Sprint Race",
+        shortName: "Sprint",
+        time: r.Sprint.date + "T" + (r.Sprint.time || "10:00:00Z")
+      })
+    } else if (r.ThirdPractice) {
+      sessions.push({
+        name: "Practice 3",
+        shortName: "FP3",
+        time: r.ThirdPractice.date + "T" + (r.ThirdPractice.time || "10:00:00Z")
+      })
+    }
+    if (r.Qualifying) {
+      sessions.push({
+        name: "Qualifying",
+        shortName: "Quali",
+        time: r.Qualifying.date + "T" + (r.Qualifying.time || "14:00:00Z")
+      })
+    }
+    sessions.push({
+      name: "Grand Prix (Race)",
+      shortName: "Race",
+      time: raceIso
+    })
+
     matches.push({
       id: "f1-2026-" + r.round,
       sport: "f1",
@@ -658,6 +706,7 @@ function parseF1Calendar(raw) {
       locality: locality,
       country: country,
       countryFlag: flag,
+      sessions: sessions,
       home: {
         id: "f1-gp-" + r.round,
         name: raceName,

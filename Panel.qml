@@ -2661,6 +2661,7 @@ Panel {
     readonly property string dateBadge: Model.formatMatchDate(modelData.time)
     readonly property bool isScoreRevealed: root.isMatchRevealed(modelData.id)
     readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
+    property bool expanded: false
 
     width: parent.width
     implicitHeight: matchCard.implicitHeight
@@ -2668,7 +2669,7 @@ Panel {
     Rectangle {
       id: matchCard
       width: parent.width
-      implicitHeight: matchDelegate.isF1 ? (f1RowLayout.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
+      implicitHeight: matchDelegate.isF1 ? (f1ContainerCol.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
       radius: Math.min(6, Style.cornerRadius)
       color: matchMouse.containsMouse
         ? Style.hoverFillFor(root.fgColor, Color.accent)
@@ -2692,93 +2693,199 @@ Panel {
         color: root.urgentColor
       }
 
-      // F1 Grand Prix Row Layout
-      Row {
-        id: f1RowLayout
+      // F1 Grand Prix Container Layout (with sessions dropdown)
+      Column {
+        id: f1ContainerCol
         visible: matchDelegate.isF1
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: Style.space(12)
         anchors.rightMargin: Style.space(12)
-        spacing: Style.space(10)
-
-        Column {
-          width: Style.space(84)
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: 1
-
-          Text {
-            text: matchDelegate.dateBadge
-            color: Qt.darker(root.fgColor, 1.35)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-
-          Text {
-            text: modelData.round || "GP"
-            color: Color.accent
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
+        spacing: Style.space(8)
 
         Row {
-          width: parent.width - Style.space(190)
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(8)
-
-          Text {
-            text: modelData.countryFlag || "🏁"
-            font.pixelSize: Style.font.heading
-            anchors.verticalCenter: parent.verticalCenter
-          }
+          id: f1RowLayout
+          width: parent.width
+          spacing: Style.space(10)
 
           Column {
-            width: parent.width - Style.space(28)
+            width: Style.space(84)
             anchors.verticalCenter: parent.verticalCenter
             spacing: 1
 
             Text {
-              width: parent.width
-              text: modelData.raceName || modelData.home.name
-              color: root.fgColor
+              text: matchDelegate.dateBadge
+              color: Qt.darker(root.fgColor, 1.35)
               font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
+              font.pixelSize: Style.font.caption
               font.bold: true
-              elide: Text.ElideRight
             }
 
             Text {
-              width: parent.width
-              text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
-              color: Qt.darker(root.fgColor, 1.55)
+              text: modelData.round || "GP"
+              color: Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
+              font.bold: true
+            }
+          }
+
+          Row {
+            width: parent.width - Style.space(210)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(8)
+
+            Text {
+              text: modelData.countryFlag || "🏁"
+              font.pixelSize: Style.font.heading
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Column {
+              width: parent.width - Style.space(28)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: 1
+
+              Text {
+                width: parent.width
+                text: modelData.raceName || modelData.home.name
+                color: root.fgColor
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              Text {
+                width: parent.width
+                text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
+                color: Qt.darker(root.fgColor, 1.55)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+              }
+            }
+          }
+
+          Row {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(6)
+
+            Rectangle {
+              implicitWidth: f1StatusText.implicitWidth + Style.space(10)
+              implicitHeight: f1StatusText.implicitHeight + Style.space(4)
+              radius: Math.min(4, Style.cornerRadius)
+              color: matchDelegate.isLive
+                ? root.urgentColor
+                : (matchDelegate.isFinished ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08) : Util.alpha(Color.accent, 0.15))
+
+              Text {
+                id: f1StatusText
+                anchors.centerIn: parent
+                text: matchDelegate.isFinished ? "Official" : (matchDelegate.isLive ? "RACE DAY" : root.kickoffTime(modelData))
+                color: matchDelegate.isLive ? "#ffffff" : (matchDelegate.isFinished ? Qt.darker(root.fgColor, 1.3) : Color.accent)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+            }
+
+            Text {
+              visible: matchDelegate.isF1 && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
+              text: matchDelegate.expanded ? "󰅃" : "󰅀"
+              color: Qt.darker(root.fgColor, 1.5)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
             }
           }
         }
 
-        Rectangle {
-          anchors.verticalCenter: parent.verticalCenter
-          implicitWidth: f1StatusText.implicitWidth + Style.space(12)
-          implicitHeight: f1StatusText.implicitHeight + Style.space(4)
-          radius: Math.min(4, Style.cornerRadius)
-          color: matchDelegate.isLive
-            ? root.urgentColor
-            : (matchDelegate.isFinished ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08) : Util.alpha(Color.accent, 0.15))
+        // Expandable Grand Prix Weekend Sessions Box
+        Column {
+          id: f1SessionsDropdown
+          visible: matchDelegate.isF1 && matchDelegate.expanded && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
+          width: parent.width
+          spacing: Style.space(4)
+          topPadding: Style.space(4)
+          bottomPadding: Style.space(4)
 
-          Text {
-            id: f1StatusText
-            anchors.centerIn: parent
-            text: matchDelegate.isFinished ? "Official" : (matchDelegate.isLive ? "RACE DAY" : root.kickoffTime(modelData))
-            color: matchDelegate.isLive ? "#ffffff" : (matchDelegate.isFinished ? Qt.darker(root.fgColor, 1.3) : Color.accent)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
+          Rectangle {
+            width: parent.width
+            height: 1
+            color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+          }
+
+          Repeater {
+            model: modelData.sessions
+
+            delegate: Rectangle {
+              required property var modelData
+              required property int index
+
+              width: f1SessionsDropdown.width
+              implicitHeight: Style.space(22)
+              radius: 3
+              color: index % 2 === 1 ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.025) : "transparent"
+
+              Row {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(6)
+                anchors.rightMargin: Style.space(6)
+                spacing: Style.space(6)
+
+                Text {
+                  width: Style.space(140)
+                  text: (modelData.shortName === "Race" ? "🏁 " : (modelData.shortName === "Quali" ? "⏱ " : (modelData.shortName === "SQ" ? "⚡ " : "🏎 "))) + modelData.name
+                  color: modelData.shortName === "Race" ? Color.accent : root.fgColor
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  font.bold: modelData.shortName === "Race" || modelData.shortName === "Quali"
+                  elide: Text.ElideRight
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                  width: parent.width - Style.space(240)
+                  text: Qt.formatDateTime(new Date(Date.parse(modelData.time)), "ddd d MMM · HH:mm")
+                  color: Qt.darker(root.fgColor, 1.4)
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                  width: Style.space(84)
+                  text: {
+                    var ms = Date.parse(modelData.time)
+                    var now = root.nowMs
+                    if (isNaN(ms)) return ""
+                    if (now > ms + 2.5 * 3600 * 1000) return "Finished"
+                    if (now >= ms) return "LIVE"
+                    var diff = ms - now
+                    var hrs = Math.floor(diff / 3600000)
+                    var days = Math.floor(hrs / 24)
+                    if (days > 0) return "in " + days + "d " + (hrs % 24) + "h"
+                    var mins = Math.floor((diff % 3600000) / 60000)
+                    return "in " + hrs + "h " + mins + "m"
+                  }
+                  color: {
+                    var ms2 = Date.parse(modelData.time)
+                    if (root.nowMs >= ms2 && root.nowMs <= ms2 + 2.5 * 3600 * 1000) return root.urgentColor
+                    return Qt.darker(root.fgColor, 1.5)
+                  }
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  horizontalAlignment: Text.AlignRight
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+            }
           }
         }
       }
@@ -2950,7 +3057,9 @@ Panel {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: {
-        if (matchDelegate.scoreHidden) {
+        if (matchDelegate.isF1) {
+          matchDelegate.expanded = !matchDelegate.expanded
+        } else if (matchDelegate.scoreHidden) {
           root.revealMatch(modelData.id)
         } else {
           root.openMatch(modelData)
