@@ -2,9 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// A lightweight, instant-access Omarchy status bar widget.
-// The popout panel handles network retrieval on demand, keeping bar startup
-// instant and independent of network reachability.
+// A lightweight, instant-access Omarchy status bar widget with live match ticker.
 BarWidget {
   id: root
   moduleName: "miguel.matchday"
@@ -15,11 +13,21 @@ BarWidget {
     ? panelLoader.item.popoutSwitchClosing === true
     : false
 
-  // Glanceable state for the bar badge and tooltip
+  // Glanceable state for the bar badge and ticker
   readonly property bool favoriteLive: panelLoader.item ? panelLoader.item.favoriteTeamLive === true : false
   readonly property string favoriteSummary: panelLoader.item ? panelLoader.item.favoriteSummaryText : ""
   readonly property int liveCount: panelLoader.item ? (panelLoader.item.liveCount || 0) : 0
   readonly property string activeSportIcon: panelLoader.item ? (panelLoader.item.activeSportIcon || "⚽") : "⚽"
+
+  // Settings
+  readonly property bool showBarTicker: setting("showBarTicker", true) === true
+
+  readonly property string barDisplayLabel: {
+    if (showBarTicker && favoriteLive && favoriteSummary !== "") {
+      return activeSportIcon + " " + favoriteSummary
+    }
+    return activeSportIcon
+  }
 
   function injectPanel() {
     var target = panelLoader.item
@@ -75,7 +83,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.activeSportIcon
+    text: root.barDisplayLabel
     active: root.opened
 
     onPressed: function(buttonCode) {

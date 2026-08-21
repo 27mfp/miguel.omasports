@@ -318,8 +318,23 @@ function defaultState() {
       teamName: "",
       standingsGroup: "Eastern Conference"
     },
+    antiSpoiler: false,
     refreshMinutes: 15
   }
+}
+
+function formatCountdown(timeIso, nowMs) {
+  var ms = Date.parse(timeIso || "")
+  if (isNaN(ms)) return ""
+  var cur = nowMs || Date.now()
+  var diff = ms - cur
+  if (diff <= 0) return "Starting soon"
+  var mins = Math.floor(diff / 60000)
+  var hours = Math.floor(mins / 60)
+  var days = Math.floor(hours / 24)
+  if (days > 0) return days + "d " + (hours % 24) + "h"
+  if (hours > 0) return hours + "h " + (mins % 60) + "m"
+  return mins + "m"
 }
 
 function arrayFrom(value) {
@@ -378,13 +393,15 @@ function parseState(raw) {
     nfl: parsed.nfl && typeof parsed.nfl === "object" ? parsed.nfl : defaults.nfl,
     mlb: parsed.mlb && typeof parsed.mlb === "object" ? parsed.mlb : defaults.mlb,
     nhl: parsed.nhl && typeof parsed.nhl === "object" ? parsed.nhl : defaults.nhl,
+    antiSpoiler: parsed.antiSpoiler === true,
     refreshMinutes: Math.max(5, Math.min(60, parseInt(parsed.refreshMinutes, 10) || 15))
   }
 }
 
-function statePayload(sport, fbLeagues, fbTeamId, fbTeamName, refreshMinutes, fbStandingsId, sportSettings) {
+function statePayload(sport, fbLeagues, fbTeamId, fbTeamName, refreshMinutes, fbStandingsId, sportSettings, antiSpoiler) {
   var state = defaultState()
   state.sport = String(sport || "football")
+  state.antiSpoiler = antiSpoiler === true
   state.refreshMinutes = Math.max(5, Math.min(60, parseInt(refreshMinutes, 10) || 15))
   state.football = {
     leagueIds: normalizeLeagueIds(fbLeagues),
@@ -462,6 +479,16 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
       liveTime = String(stType.shortDetail || st.displayClock || "LIVE")
     }
 
+    var homeLines = []
+    var awayLines = []
+    for (var cl = 0; cl < competitors.length; cl++) {
+      if (competitors[cl].homeAway === "home" && competitors[cl].linescores) {
+        homeLines = arrayFrom(competitors[cl].linescores).map(function(l) { return l.value })
+      } else if (competitors[cl].linescores) {
+        awayLines = arrayFrom(competitors[cl].linescores).map(function(l) { return l.value })
+      }
+    }
+
     var leagueTitle = (json.leagues && json.leagues[0] && json.leagues[0].name) || defaultLeagueName
 
     matches.push({
@@ -476,6 +503,7 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
       homeScore: homeScore,
       awayScore: awayScore,
       scoreText: scoreText,
+      linescores: { home: homeLines, away: awayLines },
       statusReason: String(stType.shortDetail || ""),
       liveTime: liveTime,
       time: String(e.date || ""),
@@ -727,8 +755,8 @@ function parseMatch(raw, league) {
     leagueId: String(league.id || ""),
     leagueName: String(league.name || ""),
     round: String(raw && raw.round || ""),
-    home: { id: String(home.id || ""), name: String(home.name || ""), shortName: String(home.shortName || home.name || "") },
-    away: { id: String(away.id || ""), name: String(away.name || ""), shortName: String(away.shortName || away.name || "") },
+    home: { id: String(home.id || ""), name: String(home.name || ""), shortName: String(home.shortName || home.name || ""), logo: "https://images.fotmob.com/image_resources/logo/teamlogo/" + (home.id || "") + ".png" },
+    away: { id: String(away.id || ""), name: String(away.name || ""), shortName: String(away.shortName || away.name || ""), logo: "https://images.fotmob.com/image_resources/logo/teamlogo/" + (away.id || "") + ".png" },
     status: state,
     homeScore: score.home,
     awayScore: score.away,
