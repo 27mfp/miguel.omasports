@@ -1284,10 +1284,6 @@ Panel {
     }
   }
 
-  function logoCacheDir() {
-    return Quickshell.env("HOME") + "/.cache/omarchy-omasports/logos"
-  }
-
   // One-time directory listing so downloadMissingLogos can skip crests that
   // are already on disk — without this every round re-downloaded up to 64
   // unchanged PNGs, which is how scrapers get IP-banned
@@ -1376,7 +1372,7 @@ Panel {
     var cmd = ["curl", "-sL", "--parallel", "--parallel-max", "8", "--create-dirs", "--max-time", "30"]
     var count = 0
     var pending = []
-    var cacheDir = logoCacheDir() + "/"
+    var cacheDir = logoCacheDir()
     for (var c = 0; c < items.length && count < 64; c++) {
       var it = items[c]
       // Skip crests already cached on disk (or fetched earlier this session)
