@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚽ Matchday · Multi-Sport Hub
+# ⚽ OmaSports · Multi-Sport Hub
 
 **The all-in-one live sports tracker and score center for [Omarchy](https://github.com/basecamp/omarchy).**
 
@@ -43,7 +43,7 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
   - One-click / hover reveal for individual matches, or toggle globally via the header button `󰈈` / `󰈉` or the `s` key.
 
 - **🛡️ Team Crests & Monogram Fallbacks**:
-  - Fast local disk caching (`~/.cache/omarchy-matchday/logos/`) with a single shared cache-key scheme, so every downloaded logo is guaranteed to render.
+  - Fast local disk caching (`~/.cache/omarchy-omasports/logos/`) with a single shared cache-key scheme, so every downloaded logo is guaranteed to render.
   - Remote fallback on first run (before the disk cache is warm) and beautiful circular monogram fallbacks (`SL`, `FC`, `LAL`, `BOS`) with zero visual holes.
 
 - **★ Team & Driver Spotlight**:
@@ -71,11 +71,11 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
   - `r` or `R`: Refresh match data.
   - `s` or `S`: Toggle Anti-Spoiler mode.
   - `←` / `→`: Switch tabs (`★ Fixtures`, `● Live`, `󰝘 Standings`).
-  - Full CLI control via `omarchy-shell miguel.matchday`:
-    - `omarchy-shell miguel.matchday toggle`
-    - `omarchy-shell miguel.matchday sport f1`
-    - `omarchy-shell miguel.matchday route live`
-    - `omarchy-shell miguel.matchday toggleSpoiler`
+  - Full CLI control via `omarchy-shell miguel.omasports`:
+    - `omarchy-shell miguel.omasports toggle`
+    - `omarchy-shell miguel.omasports sport f1`
+    - `omarchy-shell miguel.omasports route live`
+    - `omarchy-shell miguel.omasports toggleSpoiler`
 
 ---
 
@@ -84,7 +84,7 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
 ### From Git (Recommended)
 
 ```bash
-omarchy plugin add https://github.com/27mfp/omarchy-matchday --enable
+omarchy plugin add https://github.com/27mfp/miguel.omasports --enable
 ```
 
 ### Manual Local Install
@@ -94,12 +94,12 @@ omarchy plugin add https://github.com/27mfp/omarchy-matchday --enable
 omarchy plugin validate .
 
 # 2. Copy files to your Omarchy plugins directory
-mkdir -p "$HOME/.config/omarchy/plugins/miguel.matchday"
-cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.matchday/"
+mkdir -p "$HOME/.config/omarchy/plugins/miguel.omasports"
+cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
 
 # 3. Rescan and enable
 omarchy-shell shell rescanPlugins
-omarchy plugin enable miguel.matchday --section center
+omarchy plugin enable miguel.omasports --section center
 ```
 
 ---
@@ -137,7 +137,28 @@ The data engine (`SportsModel.js`) is pure JavaScript with no QML dependencies, 
 node tests/sportsmodel.test.mjs
 ```
 
-This covers state persistence/migration, the shared crest cache-key scheme, ESPN/FotMob/Jolpica parsers, zone cutoffs per sport, match filtering/grouping, and catalog integrity (including the ESPN-verified NHL/MLB team ids).
+This covers state persistence/migration, the shared crest cache-key scheme, ESPN/FotMob/Jolpica parsers, zone cutoffs per sport, match filtering/grouping, mock mode, and catalog integrity (including the ESPN-verified NHL/MLB team ids).
+
+### Offline regression suite (no network)
+
+Real provider payloads are frozen in `tests/fixtures/` together with **golden snapshots** of what the parsers currently produce, so any parser drift (renamed fields, changed sorting, lost zones) fails fast without touching the network:
+
+```bash
+node tests/capture-fixtures.mjs   # refresh frozen payloads + goldens (needs network, run occasionally)
+node tests/offline.mjs            # replay parsers vs fixtures + goldens (offline)
+```
+
+Run `offline.mjs` before every commit that touches `SportsModel.js`; re-run the capture script only when you want to accept new provider data.
+
+### Mock mode (`OMASPORTS_MOCK=1`)
+
+A deterministic built-in simulation for UI development — no network at all:
+
+```bash
+OMASPORTS_MOCK=1 quickshell -c <config>   # or set OMASPORTS_MOCK=1 however you launch the panel
+```
+
+Every sport gets a scripted timeline anchored to panel launch: a live match already in progress, a kickoff 12 minutes in (exercises pre-match notifications), a recent result, and future fixtures. The football match scores a scripted goal mid-session to exercise goal notifications, clocks tick through HT → 2nd half → FT, and F1 shows a race-day weekend with sessions. Standings render too.
 
 There is also a **live end-to-end harness** that fetches real payloads from FotMob, ESPN, and Jolpica using the exact same `curl` invocations the plugin uses at runtime, then runs the actual parsers against them:
 

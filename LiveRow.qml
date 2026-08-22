@@ -18,6 +18,10 @@ Item {
   property var openMatch: null // function(match)
   property double nowMs: Date.now()      // ticking clock from Panel for interpolation
   property double fetchedAtMs: -1        // when the provider data was fetched
+  // False while the Live tab is hidden — infinite animations must not drive
+  // scene-graph updates for content the user cannot see
+  property bool listVisible: true
+  property bool rowFocused: false
 
   // Provider minute ticked forward between polls (capped stoppage buffer)
   readonly property string syncedLiveTime:
@@ -29,21 +33,31 @@ Item {
   width: parent.width
   implicitHeight: liveCard.implicitHeight
 
+  function mutedColor(c, a) {
+    return Qt.rgba(c.r, c.g, c.b, a)
+  }
+
   Rectangle {
     id: liveCard
     width: parent.width
     implicitHeight: liveCol.implicitHeight + Style.space(22)
     radius: Math.min(8, Style.cornerRadius)
+    Accessible.role: Accessible.ListItem
+    Accessible.name: {
+      var h = (root.modelData.home && (root.modelData.home.name || root.modelData.home.shortName)) || ""
+      var a = (root.modelData.away && (root.modelData.away.name || root.modelData.away.shortName)) || ""
+      return h + " versus " + a + ", live, " + (root.modelData.scoreText || "") + ", " + root.syncedLiveTime
+    }
     color: liveMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, root.urgentColor)
       : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.05)
-    border.width: 1
-    border.color: liveMouse.containsMouse
-      ? root.urgentColor
-      : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.3)
-
     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+    border.width: root.rowFocused ? 2 : 1
+    border.color: liveMouse.containsMouse
+      ? root.urgentColor
+      : (root.rowFocused ? root.urgentColor : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.3))
 
     Rectangle {
       anchors.left: parent.left
@@ -55,7 +69,7 @@ Item {
       color: root.urgentColor
 
       SequentialAnimation on opacity {
-        running: true
+        running: root.listVisible
         loops: Animation.Infinite
         NumberAnimation { to: 0.4; duration: 600; easing.type: Easing.InOutQuad }
         NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
@@ -102,7 +116,7 @@ Item {
             visible: root.modelData.round !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: "· " + root.modelData.round
-            color: Qt.darker(root.fgColor, 1.5)
+            color: root.mutedColor(root.fgColor, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
@@ -130,7 +144,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
 
               SequentialAnimation on opacity {
-                running: true
+                running: root.listVisible
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.2; duration: 500 }
                 NumberAnimation { to: 1.0; duration: 500 }
@@ -284,7 +298,7 @@ Item {
 
         Text {
           text: "HT " + (root.details ? root.details.halftimeScore : "")
-          color: Qt.darker(root.fgColor, 1.45)
+          color: root.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
@@ -301,7 +315,7 @@ Item {
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           text: root.matchSubline(root.modelData) || "Live match in progress"
-          color: Qt.darker(root.fgColor, 1.45)
+          color: root.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight

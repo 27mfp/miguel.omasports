@@ -7,8 +7,8 @@ import "SportsModel.js" as Model
 
 Panel {
   id: root
-  moduleName: "miguel.matchday"
-  ipcTarget: "miguel.matchday"
+  moduleName: "miguel.omasports"
+  ipcTarget: "miguel.omasports"
   manageIpc: false
 
   property var anchorItem: null
@@ -27,6 +27,11 @@ Panel {
 
   // Optional background polling
   readonly property bool backgroundUpdates: setting("backgroundUpdates", false) === true
+
+  // Mock mode: OMASPORTS_MOCK=1 runs the whole panel on a deterministic built-in
+  // simulation (no network) — live matches evolve, a goal is scored mid-session,
+  // and a kickoff happens 12 minutes in. For development and UI testing.
+  readonly property bool mockMode: Quickshell.env("OMASPORTS_MOCK") === "1"
 
   // ---- Active Sport & Saved State ---------------------------------------
   property string activeSport: "football"
@@ -64,6 +69,10 @@ Panel {
   // Per-match enrichment for football
   property var matchDetails: ({})
   property var detailQueue: []
+
+  // Crest disk-cache bookkeeping: keys already on disk are never re-downloaded
+  property var knownLogoKeys: ({})
+  property var pendingLogoKeys: []
 
   readonly property bool hasData: allMatches.length > 0
   readonly property var baseTeamOptions: Model.teamOptionsForSport(activeSport, allMatches)
@@ -132,21 +141,87 @@ Panel {
     return opts
   }
 
-  readonly property var activeFixturesList: {
-    if (activeSport === "f1") return allMatches
-    if (fixtureFilterId === "team" && selectedTeamIds.length > 0) {
-      return teamMatches
+  // Derived lists are plain properties refreshed through refreshDerivedLists()
+  // instead of auto-re-evaluating bindings: provider refreshes build fresh
+  // arrays even when nothing visible changed, and a new array identity makes
+  // every Repeater destroy and recreate all of its delegates
+  property var activeFixturesList: []
+  property var matchGroups: []
+  property var liveList: []
+  property var teamMatches: []
+  property double nextKickoffMs: -1
+  property var nextKickoffMatch: null
+
+  function sameRows(a, b) {
+    if (a === b) return true
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+    for (var i = 0; i < a.length; i++) {
+      var x = a[i] || {}
+      var y = b[i] || {}
+      if ((x.pos || "") !== (y.pos || "") || String(x.id) !== String(y.id)) return false
+      if ((x.pts || 0) !== (y.pts || 0) || (x.gd || 0) !== (y.gd || 0)) return false
+      if ((x.wins || 0) !== (y.wins || 0) || (x.losses || 0) !== (y.losses || 0)) return false
+      if ((x.zone || "") !== (y.zone || "")) return false
     }
-    if (fixtureFilterId.indexOf("fav_") === 0) {
-      return Model.matchesForTeam(allMatches, fixtureFilterId.slice(4), activeSport)
-    }
-    if (fixtureFilterId === "all") {
-      return allMatches
-    }
-    return Model.matchesForLeague(allMatches, fixtureFilterId)
+    return true
   }
 
-  readonly property var matchGroups: Model.groupMatches(activeFixturesList, new Date(), function(d) { return Qt.formatDate(d, "ddd d MMM") })
+  function refreshDerivedLists() {
+    // Fixtures under the current filter
+    var fx
+    if (activeSport === "f1") fx = allMatches
+    else if (fixtureFilterId === "team" && selectedTeamIds.length > 0) fx = teamMatches
+    else if (fixtureFilterId.indexOf("fav_") === 0) fx = Model.matchesForTeam(allMatches, fixtureFilterId.slice(4), activeSport)
+    else if (fixtureFilterId === "all") fx = allMatches
+    else fx = Model.matchesForLeague(allMatches, fixtureFilterId)
+    if (!Model.sameMatches(activeFixturesList, fx)) activeFixturesList = fx
+
+    var groups = Model.groupMatches(fx, new Date(), function(d) { return Qt.formatDate(d, "ddd d MMM") })
+    if (!Model.sameGroups(matchGroups, groups)) matchGroups = groups
+
+    var live = Model.liveMatches(allMatches, matchDetails)
+    if (!Model.sameMatches(liveList, live)) liveList = live
+
+    // Followed-team schedule (multi-competition)
+    var tm
+    if (activeSport === "f1") tm = allMatches
+    else if (teamMatchesRaw && teamMatchesRaw.length > 0) tm = teamMatchesRaw
+    else if (selectedTeamIds.length > 0) tm = Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
+    else if (selectedTeamId !== "") tm = Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
+    else tm = []
+    if (!Model.sameMatches(teamMatches, tm)) teamMatches = tm
+
+    // Standings table for the active selection
+    var rows = computeStandingsRows()
+    if (!sameRows(standingsRows, rows)) standingsRows = rows
+
+    // Nearest upcoming kickoff, resolved once per data change so the per-second
+    // clock never rescans the whole fixture list
+    var bestT = Infinity
+    var bestM = null
+    for (var i = 0; i < allMatches.length; i++) {
+      var m = allMatches[i]
+      if (!m || m.status !== "upcoming") continue
+      var t = Date.parse(m.time || "")
+      if (isNaN(t) || t >= bestT) continue
+      bestT = t
+      bestM = m
+    }
+    if (bestT !== root.nextKickoffMs) root.nextKickoffMs = bestT
+    if (bestM !== root.nextKickoffMatch) root.nextKickoffMatch = bestM
+  }
+
+  // Recompute derived state whenever any input changes. Qt.callLater coalesces
+  // bursts (e.g. 16 detail responses landing back-to-back) into one pass.
+  onAllMatchesChanged: Qt.callLater(refreshDerivedLists)
+  onTeamMatchesRawChanged: Qt.callLater(refreshDerivedLists)
+  onSelectedTeamIdsChanged: Qt.callLater(refreshDerivedLists)
+  onFixtureFilterIdChanged: Qt.callLater(refreshDerivedLists)
+  onActiveSportChanged: Qt.callLater(refreshDerivedLists)
+  onMatchDetailsChanged: Qt.callLater(refreshDerivedLists)
+  onMultiSportStandingsChanged: Qt.callLater(refreshDerivedLists)
+  onLastPagesChanged: Qt.callLater(refreshDerivedLists)
+  onStandingsLeagueIdChanged: Qt.callLater(refreshDerivedLists)
 
   readonly property string activeFixtureHeader: {
     if (activeSport === "f1") return "FIA FORMULA 1 WORLD CHAMPIONSHIP · CALENDAR"
@@ -175,30 +250,23 @@ Panel {
     { value: "live", label: "Live", icon: "●" },
     { value: "table", label: "Standings", icon: "󰝘" }
   ]
-  readonly property int liveCount: Model.liveMatches(allMatches, matchDetails).length
+  readonly property int liveCount: liveList.length
 
-  // Live 1-Second Adaptive Clock
+  // Live 1-Second Adaptive Clock (60s while the panel is closed — enough to
+  // keep the bar ticker honest without waking the shell every second)
   property double nowMs: Date.now()
   Timer {
-    interval: root.opened ? 1000 : 30000
+    interval: root.opened ? 1000 : 60000
     running: true
     repeat: true
     onTriggered: { root.nowMs = Date.now() }
   }
 
   readonly property string nextKickoffText: {
-    var best = null
-    var bestTime = Infinity
-    var now = root.nowMs
-    for (var i = 0; i < allMatches.length; i++) {
-      var m = allMatches[i]
-      if (!m || m.status !== "upcoming") continue
-      var t = Date.parse(m.time || "")
-      if (isNaN(t) || t <= now || t >= bestTime) continue
-      bestTime = t
-      best = m
-    }
-    if (!best) return ""
+    // Nearest kickoff resolved once per data change (see refreshDerivedLists);
+    // this binding only re-formats the countdown as the clock ticks
+    var best = root.nextKickoffMatch
+    if (!best || !(root.nextKickoffMs > root.nowMs)) return ""
     var countdown = Model.formatCountdown(best.time, root.nowMs)
     return Model.matchLine(best) + (countdown ? " (in " + countdown + ")" : "")
   }
@@ -227,7 +295,9 @@ Panel {
     return opts
   }
 
-  readonly property var standingsRows: {
+  property var standingsRows: []
+
+  function computeStandingsRows() {
     var id = String(standingsLeagueId || "")
     if (activeSport === "football") {
       for (var i = 0; i < lastPages.length; i++) {
@@ -319,14 +389,7 @@ Panel {
     return selectedList.concat(unselectedList)
   }
 
-  // Multi-competition team fixtures
-  readonly property var teamMatches: {
-    if (activeSport === "f1") return allMatches
-    if (teamMatchesRaw && teamMatchesRaw.length > 0) return teamMatchesRaw
-    if (selectedTeamIds.length > 0) return Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
-    if (selectedTeamId !== "") return Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
-    return []
-  }
+  // teamMatches is maintained by refreshDerivedLists() (stable identity)
   readonly property var featuredMatch: Model.featuredMatchForTeam(teamMatches.length > 0 ? teamMatches : allMatches)
   readonly property string selectedTeamName: selectedTeamIds.length > 0 ? root.teamNameFor(selectedTeamIds[0]) : selectedTeamLabel()
   readonly property string selectedLeagueNames: selectedLeagueNameList()
@@ -387,7 +450,7 @@ Panel {
     lastPages = []
     matchDetails = {}
     ensureStandingsSelection()
-    refresh()
+    forceRefresh()
   }
 
   function restoreSportSelections() {
@@ -421,8 +484,12 @@ Panel {
   }
 
   function toggleSpoiler() {
-    console.log("matchday: toggleSpoiler called, stateLoaded=" + stateLoaded)
+    console.log("omasports: toggleSpoiler called, stateLoaded=" + stateLoaded)
     antiSpoiler = !antiSpoiler
+    if (antiSpoiler) {
+      // Re-masking must not leave per-match reveals from the previous session
+      revealedMatchIds = {}
+    }
     savedState.antiSpoiler = antiSpoiler
     persistState()
   }
@@ -435,8 +502,39 @@ Panel {
   }
 
   // ---- Navigation ---------------------------------------------------------
+  // Focus sections are derived from what is actually visible: a collapsed
+  // setup editor or a non-football sport must not own keyboard stops. Rows
+  // (fixtures/live cards) trail the chrome sections and open with Enter.
+  readonly property var focusSections: {
+    var s = ["tabs", "refresh"]
+    if (root.activeSport === "football" && root.setupExpanded) s.push("leagues")
+    if (root.setupExpanded) s.push("teams")
+    if (root.selectedTeamIds.length > 0) s.push("clear")
+    if (root.setupExpanded) s.push("interval")
+    if (root.standingsOptions.length > 1) s.push("standings")
+    return s
+  }
+
+  readonly property int rowSectionCount: root.tabIndex === 0
+    ? flatFixtureRows.length
+    : (root.tabIndex === 1 ? liveList.length : 0)
+
+  // Fixtures flattened in visual order so row focus indices map to matches
+  readonly property var flatFixtureRows: {
+    var out = []
+    for (var g = 0; g < matchGroups.length; g++) {
+      var ms = matchGroups[g].matches || []
+      for (var i = 0; i < ms.length; i++) out.push(ms[i])
+    }
+    return out
+  }
+
+  function sectionIndex(name) {
+    return root.focusSections.indexOf(name)
+  }
+
   function focusableControlCount() {
-    return selectedTeamId === "" ? 6 : 7
+    return root.focusSections.length + root.rowSectionCount
   }
 
   function moveFocus(delta) {
@@ -446,7 +544,7 @@ Panel {
   }
 
   function moveWithin(dx) {
-    if (focusSection === 0 && !anyPopupOpen()) {
+    if (focusSection === sectionIndex("tabs") && !anyPopupOpen()) {
       var next = (tabIndex + dx + tabOptions.length) % tabOptions.length
       tabIndex = next
       return
@@ -460,14 +558,24 @@ Panel {
   }
 
   function activateFocus() {
-    if (focusSection === 0) root.tabIndex = (root.tabIndex + 1) % root.tabOptions.length
-    else if (focusSection === 1 && leaguePicker) leaguePicker.toggle()
-    else if (focusSection === 2 && teamPicker) teamPicker.toggle()
-    else if (focusSection === 3) root.refresh()
-    else if (focusSection === 4 && selectedTeamId !== "") root.clearSelectedTeam()
-    else if (focusSection === 4) intervalPicker.toggle()
-    else if (focusSection === 5) intervalPicker.toggle()
-    else if (focusSection === 6 && root.standingsOptions.length > 1 && standingsPicker) standingsPicker.toggle()
+    var base = root.focusSections.length
+    if (focusSection >= base) {
+      // Row section: Enter opens the focused fixture/live card
+      var r = focusSection - base
+      var m = null
+      if (root.tabIndex === 0) m = flatFixtureRows[r] || null
+      else if (root.tabIndex === 1) m = liveList[r] || null
+      if (m) root.openMatch(m)
+      return
+    }
+    var name = root.focusSections[focusSection]
+    if (name === "tabs") root.tabIndex = (root.tabIndex + 1) % root.tabOptions.length
+    else if (name === "refresh") root.refresh()
+    else if (name === "leagues" && leaguePicker) leaguePicker.toggle()
+    else if (name === "teams" && teamPicker) teamPicker.toggle()
+    else if (name === "clear") root.clearSelectedTeam()
+    else if (name === "interval") intervalPicker.toggle()
+    else if (name === "standings" && standingsPicker) standingsPicker.toggle()
   }
 
   // ---- Lifecycle -----------------------------------------------------------
@@ -544,8 +652,23 @@ Panel {
     return ""
   }
 
+  function stateFilePath() {
+    return Quickshell.env("HOME") + "/.config/omarchy/sports-favorites.json"
+  }
+
   function applyState(raw) {
-    var nextState = Model.parseState(raw)
+    var str = String(raw || "")
+    // A non-empty file that fails to parse is corruption (crash mid-write,
+    // disk full, manual edit) — preserve it before any persist can overwrite
+    // the user's leagues and teams with defaults
+    if (str.trim() !== "") {
+      try { JSON.parse(str) } catch (e) {
+        console.warn("omasports: state file corrupt — backing up before continuing with defaults")
+        stateBackupProc.command = ["cp", stateFilePath(), stateFilePath() + ".corrupt"]
+        stateBackupProc.running = true
+      }
+    }
+    var nextState = Model.parseState(str)
     var ownWrite = ignoredStateSignature !== ""
       && JSON.stringify(nextState) === ignoredStateSignature
     if (ownWrite) ignoredStateSignature = ""
@@ -555,7 +678,7 @@ Panel {
     enableNotifications = savedState.notifications !== false
     restoreSportSelections()
     stateLoaded = true
-    console.log("matchday: state applied, sport=" + activeSport + " fbTeams=" + savedState.football.teamIds.length)
+    console.log("omasports: state applied, sport=" + activeSport + " fbTeams=" + savedState.football.teamIds.length)
 
     if (leaguePicker) leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
@@ -568,42 +691,17 @@ Panel {
 
   function persistState() {
     if (!stateLoaded) return
-    var curSport = activeSport
     var tabName = tabIndex === 2 ? "standings" : (tabIndex === 1 ? "live" : "fixtures")
-    var sportSettings = {}
-    var sportsList = ["nba", "f1", "nfl", "mlb", "nhl"]
-    for (var s = 0; s < sportsList.length; s++) {
-      var spk = sportsList[s]
-      var prevSp = savedState[spk] || {}
-      if (curSport === spk) {
-        sportSettings[spk] = {
-          teamIds: selectedTeamIds,
-          teamId: selectedTeamId,
-          teamName: selectedTeamName,
-          standingsGroup: standingsLeagueId,
-          tab: tabName
-        }
-      } else {
-        sportSettings[spk] = prevSp
-      }
-    }
-
-    var fb = savedState.football || {}
-    var fbTeamIds = curSport === "football" ? selectedTeamIds : (fb.teamIds || (fb.teamId ? [fb.teamId] : []))
-    savedState = Model.statePayload(
-      curSport,
-      fb.leagueIds || selectedLeagueIds,
-      fbTeamIds,
-      curSport === "football" ? selectedTeamName : fb.teamName,
-      savedState.refreshMinutes,
-      curSport === "football" ? standingsLeagueId : fb.standingsLeagueId,
-      sportSettings,
-      antiSpoiler,
-      enableNotifications
-    )
-    // statePayload rebuilds football without a tab; restore it so the written
-    // shape round-trips exactly through parseState (signature check in applyState)
-    savedState.football.tab = curSport === "football" ? tabName : String(fb.tab || "fixtures")
+    savedState = Model.buildPersistedState(activeSport, savedState, {
+      tabName: tabName,
+      selectedLeagueIds: selectedLeagueIds,
+      selectedTeamIds: selectedTeamIds,
+      selectedTeamId: selectedTeamId,
+      selectedTeamName: selectedTeamName,
+      standingsLeagueId: standingsLeagueId,
+      antiSpoiler: antiSpoiler,
+      enableNotifications: enableNotifications
+    })
     ignoredStateSignature = JSON.stringify(savedState)
     stateFile.setText(JSON.stringify(savedState, null, 2) + "\n")
   }
@@ -613,26 +711,28 @@ Panel {
     savedState.notifications = enableNotifications
     persistState()
     if (enableNotifications) {
-      sendDesktopNotification("Omarchy Matchday", "Goal and kickoff notifications enabled!", "", "normal")
+      sendDesktopNotification("OmaSports", "Goal and kickoff notifications enabled!", "", "normal")
     }
   }
 
   function sendDesktopNotification(title, body, iconPath, urgency) {
     if (!root.enableNotifications) return
-    var cmd = ["notify-send", "-a", "Omarchy Matchday"]
+    var cmd = ["notify-send", "-a", "OmaSports"]
     if (iconPath && String(iconPath).trim()) {
       var p = String(iconPath)
       if (p.indexOf("file://") === 0) p = p.slice(7)
       cmd.push("-i", p)
     }
     if (urgency) cmd.push("-u", urgency)
-    cmd.push(title, body)
+    // "--" ends option parsing: provider-derived strings must never be
+    // mistaken for flags even when they start with a dash
+    cmd.push("--", title, body)
     notifierProc.command = cmd
     notifierProc.running = true
   }
 
   function logoCacheDir() {
-    return Quickshell.env("HOME") + "/.cache/omarchy-matchday/logos/"
+    return Quickshell.env("HOME") + "/.cache/omarchy-omasports/logos/"
   }
 
   function crestIconPath(sport, team) {
@@ -677,14 +777,20 @@ Panel {
 
           if (hDiff > 0) {
             var gTitle1 = m.sport === "football" ? ("⚽ GOAL! " + m.home.name) : (Model.sportMeta(m.sport).icon + " " + m.home.name + " (+" + hDiff + ")")
-            var gBody1 = m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : "")
-            sendDesktopNotification(gTitle1, gBody1, crestIconPath(m.sport || root.activeSport, m.home), "critical")
+            // Anti-spoiler users opted out of seeing scores — announce the
+            // goal without the scoreline
+            var gBody1 = root.antiSpoiler
+              ? (m.home.name + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+              : (m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+            sendDesktopNotification(gTitle1, gBody1, crestIconPath(m.sport || root.activeSport, m.home), "normal")
           }
 
           if (aDiff > 0) {
             var gTitle2 = m.sport === "football" ? ("⚽ GOAL! " + m.away.name) : (Model.sportMeta(m.sport).icon + " " + m.away.name + " (+" + aDiff + ")")
-            var gBody2 = m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : "")
-            sendDesktopNotification(gTitle2, gBody2, crestIconPath(m.sport || root.activeSport, m.away), "critical")
+            var gBody2 = root.antiSpoiler
+              ? (m.away.name + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+              : (m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+            sendDesktopNotification(gTitle2, gBody2, crestIconPath(m.sport || root.activeSport, m.away), "normal")
           }
         }
 
@@ -707,11 +813,23 @@ Panel {
         homeScore: m.homeScore || 0,
         awayScore: m.awayScore || 0,
         status: m.status || "upcoming",
-        notifiedUpcoming: prev ? (prev.notifiedUpcoming || false) : false
+        notifiedUpcoming: prev ? (prev.notifiedUpcoming || false) : false,
+        seenAt: now
       }
     }
 
-    lastSeenMatches = nextSeen
+    // Merge instead of replace: a provider hiccup that omits a match for one
+    // poll must not erase its history, or the kickoff/goal transition is lost
+    // forever when the match reappears. Entries not seen for 6h are pruned.
+    var merged = {}
+    var ttl = 6 * 3600 * 1000
+    for (var oldId in lastSeenMatches) {
+      if (nextSeen[oldId]) continue
+      var oldEntry = lastSeenMatches[oldId]
+      if (now - (oldEntry.seenAt || 0) < ttl) merged[oldId] = oldEntry
+    }
+    for (var newId in nextSeen) merged[newId] = nextSeen[newId]
+    lastSeenMatches = merged
   }
 
   function setSelectedLeagues(values) {
@@ -774,6 +892,10 @@ Panel {
   function setStandingsLeague(value) {
     standingsLeagueId = String(value || "")
     persistState()
+    // First time a cached F1 table is requested, go get it
+    if (activeSport === "f1") {
+      f1EnsureStandings(standingsLeagueId === "Constructors" ? "Constructors" : "Drivers")
+    }
   }
 
   function ensureStandingsSelection() {
@@ -800,6 +922,19 @@ Panel {
       stateFile.reload()
       return
     }
+    // A round is already in flight — restarting workers mid-flight would
+    // double-fetch and risk stale responses overwriting fresh data
+    if (root.loading) return
+    forceRefresh()
+  }
+
+  // Unconditional round start: sport switches and state reloads must cancel
+  // whatever generation is in flight even if refresh() would normally defer
+  function forceRefresh() {
+    if (!stateLoaded) {
+      stateFile.reload()
+      return
+    }
     espnRetryCount = 0
     f1RetryCount = 0
     startRound()
@@ -810,6 +945,12 @@ Panel {
     loading = true
     errorMessage = ""
     failedLeagues = []
+    stopNetworkWorkers()
+
+    if (root.mockMode) {
+      finishMockRound()
+      return
+    }
 
     if (activeSport === "football") {
       startFootballRound()
@@ -824,6 +965,36 @@ Panel {
     } else if (activeSport === "f1") {
       startF1Round()
     }
+  }
+
+  // Kill every in-flight request so a stale generation can never land after
+  // a new round starts (switching sports, IPC refresh spam, state reloads).
+  // handled=true suppresses late StdioCollector/exit callbacks; the serial
+  // gates inside the resolve functions are the second line of defense.
+  function stopNetworkWorkers() {
+    var procs = [workerScoreboard, workerStandings, workerF1Calendar, workerF1Drivers,
+                 workerF1Constructors, workerTeam,
+                 detailProcA, detailProcB, detailProcC,
+                 workerA, workerB, workerC, workerD]
+    for (var i = 0; i < procs.length; i++) {
+      var w = procs[i]
+      w.handled = true
+      if (w.running) w.running = false
+    }
+  }
+
+  // ---- Mock Round (OMASPORTS_MOCK=1) -----------------------------------------
+  function finishMockRound() {
+    var mock = Model.mockRound(activeSport, Date.now())
+    allMatches = mock.matches
+    if (mock.standings && Object.keys(mock.standings).length > 0) multiSportStandings = mock.standings
+    teamOptions = Model.teamOptionsForSport(activeSport, allMatches)
+    lastUpdated = new Date()
+    loadedFromCache = false
+    ensureStandingsSelection()
+    checkScoreNotifications()
+    loading = false
+    scheduleNextPoll()
   }
 
   // ---- Football Round (FotMob) ---------------------------------------------
@@ -902,7 +1073,10 @@ Panel {
     if (String(raw || "").trim()) {
       try { page = Model.parseLeaguePage(raw, id) } catch (e) { page = null }
     }
-    if (page) {
+    // A page that parses but yields no matches AND no standings is almost
+    // always a bot-wall or schema drift — treat it like a failure so the
+    // retry path runs instead of silently showing an empty league
+    if (page && (page.matches.length > 0 || page.standings.length > 0)) {
       roundResults[id] = page
       outstanding--
     } else {
@@ -958,6 +1132,7 @@ Panel {
     var dates = "dates=" + Model.espnDateRange(1, 3)
 
     workerScoreboard.handled = false
+    workerScoreboard.gotData = false
     workerScoreboard.serial = root.requestSerial
     workerScoreboard.sportCode = sportCode
     workerScoreboard.defaultName = defaultName
@@ -965,6 +1140,7 @@ Panel {
     workerScoreboard.running = true
 
     workerStandings.handled = false
+    workerStandings.gotData = false
     workerStandings.serial = root.requestSerial
     workerStandings.sportCode = sportCode
     workerStandings.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings"]
@@ -978,6 +1154,7 @@ Panel {
         allMatches = matches
         lastUpdated = new Date()
         loadedFromCache = false
+        workerScoreboard.gotData = true
       }
     }
     checkEspnDone()
@@ -988,63 +1165,163 @@ Panel {
       var st = Model.parseEspnStandings(raw, sportCode)
       if (st && Object.keys(st).length > 0) {
         multiSportStandings = st
+        workerStandings.gotData = true
       }
     }
     checkEspnDone()
   }
 
   function checkEspnDone() {
-    if (!workerScoreboard.running && !workerStandings.running) {
-      if (allMatches.length === 0 && Object.keys(multiSportStandings).length === 0 && espnRetryCount < 2) {
-        espnRetryCount++
-        espnRetrySerial = requestSerial
-        espnRetryDelay.restart()
-        return
-      }
-      loading = false
-      ensureStandingsSelection()
-      downloadMissingLogos()
-      checkScoreNotifications()
-      if (allMatches.length === 0 && Object.keys(multiSportStandings).length === 0) {
-        errorMessage = "Unable to load " + activeSportMeta.label + " data. Check connection."
-      }
-      scheduleNextPoll()
+    if (workerScoreboard.running || workerStandings.running) return
+    // Either endpoint missing data is retryable on its own; a partial outage
+    // (scores ok, standings dead or vice versa) must not pass silently
+    var sbOk = workerScoreboard.gotData
+    var stOk = workerStandings.gotData
+    if ((!sbOk || !stOk) && espnRetryCount < 2) {
+      espnRetryCount++
+      espnRetrySerial = requestSerial
+      espnRetryDelay.restart()
+      return
     }
+    loading = false
+    ensureStandingsSelection()
+    downloadMissingLogos()
+    checkScoreNotifications()
+    if (!sbOk && !stOk) {
+      errorMessage = "Unable to load " + activeSportMeta.label + " data. Check connection."
+    } else if (!stOk) {
+      errorMessage = "Standings could not be loaded."
+    } else if (!sbOk) {
+      errorMessage = "Scores could not be loaded."
+    }
+    scheduleNextPoll()
   }
 
   // ---- Formula 1 Round (Jolpica / Ergast) ----------------------------------
   function startF1Round() {
     workerF1Calendar.handled = false
+    workerF1Calendar.gotData = false
     workerF1Calendar.serial = root.requestSerial
     workerF1Calendar.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current.json"]
     workerF1Calendar.running = true
 
-    workerF1Drivers.handled = false
-    workerF1Drivers.serial = root.requestSerial
-    workerF1Drivers.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/driverStandings.json"]
-    workerF1Drivers.running = true
+    // Jolpica documents strict rate limits — each standings table is fetched
+    // once per session (they only change at race cadence) instead of on every
+    // poll alongside the calendar
+    f1EnsureStandings("Drivers")
+    f1EnsureStandings("Constructors")
+  }
 
-    workerF1Constructors.handled = false
-    workerF1Constructors.serial = root.requestSerial
-    workerF1Constructors.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/constructorStandings.json"]
-    workerF1Constructors.running = true
+  function f1EnsureStandings(group) {
+    var w = group === "Constructors" ? workerF1Constructors : workerF1Drivers
+    if ((multiSportStandings[group] || []).length > 0) {
+      w.handled = true
+      w.gotData = true
+      return
+    }
+    if (w.running) return
+    w.handled = false
+    w.gotData = false
+    w.serial = root.requestSerial
+    var path = group === "Constructors" ? "constructorStandings" : "driverStandings"
+    w.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/" + path + ".json"]
+    w.running = true
+  }
+
+  function resolveF1Calendar(raw) {
+    var matches = Model.parseF1Calendar(String(raw || ""))
+    if (matches && matches.length > 0) {
+      allMatches = matches
+      lastUpdated = new Date()
+      workerF1Calendar.gotData = true
+    }
+    root.checkF1Done()
+  }
+
+  function resolveF1Drivers(raw) {
+    var drivers = Model.parseF1DriverStandings(String(raw || ""))
+    if (drivers && drivers.length > 0) {
+      var cur = {}
+      for (var k in multiSportStandings) cur[k] = multiSportStandings[k]
+      cur["Drivers"] = drivers
+      multiSportStandings = cur
+      workerF1Drivers.gotData = true
+    }
+    root.checkF1Done()
+  }
+
+  function resolveF1Constructors(raw) {
+    var con = Model.parseF1ConstructorStandings(String(raw || ""))
+    if (con && con.length > 0) {
+      var cur2 = {}
+      for (var k2 in multiSportStandings) cur2[k2] = multiSportStandings[k2]
+      cur2["Constructors"] = con
+      multiSportStandings = cur2
+      workerF1Constructors.gotData = true
+    }
+    root.checkF1Done()
   }
 
   function checkF1Done() {
-    if (!workerF1Calendar.running && !workerF1Drivers.running && !workerF1Constructors.running) {
-      if (allMatches.length === 0 && f1RetryCount < 2) {
-        f1RetryCount++
-        f1RetrySerial = requestSerial
-        f1RetryDelay.restart()
-        return
-      }
-      loading = false
-      ensureStandingsSelection()
-      downloadMissingLogos()
-      checkScoreNotifications()
-      scheduleNextPoll()
-      if (allMatches.length === 0) {
-        errorMessage = "Unable to load F1 race calendar. Check connection."
+    if (workerF1Calendar.running || workerF1Drivers.running || workerF1Constructors.running) return
+    // The calendar is the critical payload; standings tables degrade gracefully
+    var calOk = workerF1Calendar.gotData
+    if (!calOk && f1RetryCount < 2) {
+      f1RetryCount++
+      f1RetrySerial = requestSerial
+      f1RetryDelay.restart()
+      return
+    }
+    loading = false
+    ensureStandingsSelection()
+    downloadMissingLogos()
+    checkScoreNotifications()
+    scheduleNextPoll()
+    if (!calOk) {
+      errorMessage = "Unable to load F1 race calendar. Check connection."
+    } else if (!workerF1Drivers.gotData && !workerF1Constructors.gotData) {
+      errorMessage = "F1 standings could not be loaded."
+    }
+  }
+
+  function logoCacheDir() {
+    return Quickshell.env("HOME") + "/.cache/omarchy-omasports/logos"
+  }
+
+  // One-time directory listing so downloadMissingLogos can skip crests that
+  // are already on disk — without this every round re-downloaded up to 64
+  // unchanged PNGs, which is how scrapers get IP-banned
+  function scanLogoCache() {
+    logoScanProc.command = ["ls", "-1", logoCacheDir()]
+    logoScanProc.running = true
+  }
+
+  // Crests outlive seasons; teams stop being relevant long before their PNG
+  // does. Evict anything untouched for 90 days at startup.
+  function evictStaleLogos() {
+    logoEvictProc.command = ["find", logoCacheDir(), "-name", "*.png", "-mtime", "+90", "-delete"]
+    logoEvictProc.running = true
+  }
+
+  Process {
+    id: logoEvictProc
+    onExited: function(exitCode) { root.scanLogoCache() }
+  }
+
+  Process {
+    id: logoScanProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var map = {}
+        var lines = String(text || "").split("\n")
+        for (var i = 0; i < lines.length; i++) {
+          var name = lines[i].trim()
+          if (name.length > 4 && name.indexOf(".png") === name.length - 4) {
+            map[name.slice(0, -4)] = true
+          }
+        }
+        root.knownLogoKeys = map
       }
     }
   }
@@ -1096,17 +1373,21 @@ Panel {
 
     if (items.length === 0) return
 
-    var cmd = ["curl", "-sL", "--parallel", "--create-dirs"]
+    var cmd = ["curl", "-sL", "--parallel", "--parallel-max", "8", "--create-dirs", "--max-time", "30"]
     var count = 0
-    var cacheDir = Quickshell.env("HOME") + "/.cache/omarchy-matchday/logos/"
+    var pending = []
+    var cacheDir = logoCacheDir() + "/"
     for (var c = 0; c < items.length && count < 64; c++) {
       var it = items[c]
-      if (it.url && it.url.indexOf("http") === 0) {
-        cmd.push("-o", cacheDir + it.key + ".png", it.url)
-        count++
-      }
+      // Skip crests already cached on disk (or fetched earlier this session)
+      if (!it.url || it.url.indexOf("http") !== 0) continue
+      if (root.knownLogoKeys[it.key]) continue
+      cmd.push("-o", cacheDir + it.key + ".png", it.url)
+      pending.push(it.key)
+      count++
     }
     if (count > 0) {
+      root.pendingLogoKeys = pending
       logoCacheProc.command = cmd
       logoCacheProc.running = true
     }
@@ -1132,35 +1413,45 @@ Panel {
 
   function nextDetail() {
     if (!root.opened && !root.backgroundUpdates) return
-    if (detailQueue.length === 0 || detailProc.running) return
+    var procs = [detailProcA, detailProcB, detailProcC]
+    for (var p = 0; p < procs.length; p++) {
+      var proc = procs[p]
+      if (proc.running || detailQueue.length === 0) continue
 
-    var id = String(detailQueue[0])
-    var url = ""
-    for (var i = 0; i < allMatches.length; i++) {
-      if (String(allMatches[i].id) === id) {
-        url = String(allMatches[i].pageUrl || "")
-        break
+      var id = String(detailQueue[0])
+      var url = ""
+      for (var i = 0; i < allMatches.length; i++) {
+        if (String(allMatches[i].id) === id) {
+          url = String(allMatches[i].pageUrl || "")
+          break
+        }
       }
-    }
-    if (url === "") {
-      detailQueue.shift()
-      Qt.callLater(nextDetail)
-      return
-    }
-    if (url.indexOf("http") !== 0) url = "https://www.fotmob.com" + url
+      if (url === "") {
+        detailQueue.shift()
+        continue
+      }
+      if (url.indexOf("http") !== 0) url = "https://www.fotmob.com" + url
 
-    detailProc.serial = requestSerial
-    detailProc.handled = false
-    detailProc.command = [
-      "curl", "-LfsS", "--compressed", "--max-time", "8",
-      "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      url
-    ]
-    detailProc.running = true
+      detailQueue.shift()
+      proc.detailId = id
+      proc.serial = requestSerial
+      proc.handled = false
+      proc.command = [
+        "curl", "-LfsS", "--compressed", "--max-time", "8",
+        "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        url
+      ]
+      proc.running = true
+    }
   }
 
-  function consumeDetail(raw) {
-    var id = detailQueue.length > 0 ? String(detailQueue.shift()) : ""
+  function consumeDetail(proc, raw) {
+    // A result from an older round is worthless — drop it and stop the queue
+    if (proc.serial !== root.requestSerial) {
+      detailQueue = []
+      return
+    }
+    var id = String(proc.detailId || "")
     if (id !== "" && String(raw || "").trim()) {
       try {
         var parsed = Model.parseDetails(raw)
@@ -1181,7 +1472,7 @@ Panel {
             if (updated) allMatches = Model.arrayFrom(allMatches)
           }
         }
-      } catch (e) {}
+      } catch (e) { console.warn("omasports: detail parse failed for", id, e) }
     }
     Qt.callLater(nextDetail)
   }
@@ -1203,7 +1494,7 @@ Panel {
   }
 
   function tableHeaderColor() {
-    return Qt.darker(root.fgColor, 1.5)
+    return root.mutedColor(root.fgColor, 0.45)
   }
 
   function matchSubline(match) {
@@ -1228,23 +1519,46 @@ Panel {
     matchOpener.running = true
   }
 
+  // Alpha-derived muted foreground: Qt.darker() inverts text hierarchy on
+  // light themes (darkening an already-dark fg makes secondary text heavier)
+  function mutedColor(c, a) {
+    return Qt.rgba(c.r, c.g, c.b, a)
+  }
+
+  // Data older than two refresh cycles should look stale at a glance
+  readonly property bool dataStale: {
+    if (!root.hasData || root.loading) return false
+    return (root.nowMs - root.lastUpdated.getTime()) > 2 * root.slowRefreshMs
+  }
+
+  function relativeAge() {
+    var mins = Math.floor(Math.max(0, root.nowMs - root.lastUpdated.getTime()) / 60000)
+    if (mins < 1) return "just now"
+    if (mins < 60) return mins + " min ago"
+    var h = Math.floor(mins / 60)
+    return h + "h" + (mins % 60 > 0 ? (mins % 60) + "m" : "") + " ago"
+  }
+
   function statusLine() {
     if (loading && !hasData) return "󰥔 Loading " + activeSportMeta.label + "…"
     if (loading) return "󰥔 Updating scores…"
     if (errorMessage !== "") return errorMessage
     if (!hasData) return "Select options above to track " + activeSportMeta.label + "."
-    if (fastPolling) return "● LIVE · auto-updating · 󰥔 " + Qt.formatDateTime(lastUpdated, "HH:mm")
-    return "󰥔 Updated " + Qt.formatDateTime(lastUpdated, "HH:mm")
+    var age = relativeAge()
+    if (fastPolling) return "● LIVE · auto-updating · updated " + age
+    if (loadedFromCache) return "Cached · updated " + age
+    return "Updated " + age
   }
 
   Component.onCompleted: {
-    console.log("matchday: panel instantiated")
+    console.log("omasports: panel instantiated")
+    evictStaleLogos()
     stateFile.reload()
   }
 
   FileView {
     id: stateFile
-    path: Quickshell.env("HOME") + "/.config/omarchy/sports-favorites.json"
+    path: root.stateFilePath()
     watchChanges: true
     atomicWrites: true
     printErrors: false
@@ -1258,13 +1572,27 @@ Panel {
   }
 
   Process { id: matchOpener }
-  Process { id: logoCacheProc }
+  Process { id: stateBackupProc }
+  Process {
+    id: logoCacheProc
+    // Only a fully successful batch marks keys as known; partial failures
+    // retry on the next round
+    onExited: function(exitCode) {
+      if (exitCode !== 0 || root.pendingLogoKeys.length === 0) return
+      var map = {}
+      for (var k in root.knownLogoKeys) map[k] = root.knownLogoKeys[k]
+      for (var i = 0; i < root.pendingLogoKeys.length; i++) map[root.pendingLogoKeys[i]] = true
+      root.knownLogoKeys = map
+      root.pendingLogoKeys = []
+    }
+  }
   Process { id: notifierProc }
 
   // ---- Multi-sport Workers -------------------------------------------------
   Process {
     id: workerScoreboard
     property bool handled: false
+    property bool gotData: false
     property string sportCode: ""
     property string defaultName: ""
     property int serial: 0
@@ -1272,6 +1600,7 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (workerScoreboard.serial !== root.requestSerial) return
         workerScoreboard.handled = true
         root.resolveEspnScoreboard(String(text || ""), workerScoreboard.sportCode, workerScoreboard.defaultName)
       }
@@ -1287,12 +1616,14 @@ Panel {
   Process {
     id: workerStandings
     property bool handled: false
+    property bool gotData: false
     property string sportCode: ""
     property int serial: 0
 
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (workerStandings.serial !== root.requestSerial) return
         workerStandings.handled = true
         root.resolveEspnStandings(String(text || ""), workerStandings.sportCode)
       }
@@ -1308,24 +1639,21 @@ Panel {
   Process {
     id: workerF1Calendar
     property bool handled: false
+    property bool gotData: false
     property int serial: 0
 
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (workerF1Calendar.serial !== root.requestSerial || workerF1Calendar.handled) return
         workerF1Calendar.handled = true
-        var matches = Model.parseF1Calendar(String(text || ""))
-        if (matches && matches.length > 0) {
-          allMatches = matches
-          lastUpdated = new Date()
-        }
-        root.checkF1Done()
+        root.resolveF1Calendar(String(text || ""))
       }
     }
     onExited: function(exitCode) {
-      if (!workerF1Calendar.handled) {
+      if (!workerF1Calendar.handled && workerF1Calendar.serial === root.requestSerial) {
         workerF1Calendar.handled = true
-        root.checkF1Done()
+        root.resolveF1Calendar("")
       }
     }
   }
@@ -1333,26 +1661,21 @@ Panel {
   Process {
     id: workerF1Drivers
     property bool handled: false
+    property bool gotData: false
     property int serial: 0
 
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (workerF1Drivers.serial !== root.requestSerial || workerF1Drivers.handled) return
         workerF1Drivers.handled = true
-        var drivers = Model.parseF1DriverStandings(String(text || ""))
-        if (drivers && drivers.length > 0) {
-          var cur = {}
-          for (var k in multiSportStandings) cur[k] = multiSportStandings[k]
-          cur["Drivers"] = drivers
-          multiSportStandings = cur
-        }
-        root.checkF1Done()
+        root.resolveF1Drivers(String(text || ""))
       }
     }
     onExited: function(exitCode) {
-      if (!workerF1Drivers.handled) {
+      if (!workerF1Drivers.handled && workerF1Drivers.serial === root.requestSerial) {
         workerF1Drivers.handled = true
-        root.checkF1Done()
+        root.resolveF1Drivers("")
       }
     }
   }
@@ -1360,26 +1683,21 @@ Panel {
   Process {
     id: workerF1Constructors
     property bool handled: false
+    property bool gotData: false
     property int serial: 0
 
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (workerF1Constructors.serial !== root.requestSerial || workerF1Constructors.handled) return
         workerF1Constructors.handled = true
-        var con = Model.parseF1ConstructorStandings(String(text || ""))
-        if (con && con.length > 0) {
-          var cur2 = {}
-          for (var k2 in multiSportStandings) cur2[k2] = multiSportStandings[k2]
-          cur2["Constructors"] = con
-          multiSportStandings = cur2
-        }
-        root.checkF1Done()
+        root.resolveF1Constructors(String(text || ""))
       }
     }
     onExited: function(exitCode) {
-      if (!workerF1Constructors.handled) {
+      if (!workerF1Constructors.handled && workerF1Constructors.serial === root.requestSerial) {
         workerF1Constructors.handled = true
-        root.checkF1Done()
+        root.resolveF1Constructors("")
       }
     }
   }
@@ -1394,25 +1712,28 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (workerTeam.serial !== root.requestSerial || workerTeam.handled) return
         workerTeam.handled = true
-        if (String(text || "").trim()) {
-          try {
-            var parsed = Model.parseTeamPage(text, selectedTeamId)
-            if (parsed && parsed.length > 0) {
-              teamMatchesRaw = parsed
-              var merged = Model.arrayFrom(allMatches)
-              var seen = {}
-              for (var i = 0; i < merged.length; i++) seen[merged[i].id] = true
-              for (var j = 0; j < parsed.length; j++) {
-                if (!seen[parsed[j].id]) {
-                  seen[parsed[j].id] = true
-                  merged.push(parsed[j])
-                }
+        if (!String(text || "").trim() || root.activeSport !== "football") return
+        try {
+          // Parse with the team captured at dispatch time — selectedTeamId may
+          // have changed while the request was in flight
+          var parsed = Model.parseTeamPage(text, workerTeam.teamId)
+          if (parsed && parsed.length > 0) {
+            teamMatchesRaw = parsed
+            var merged = Model.arrayFrom(allMatches)
+            var seen = {}
+            for (var i = 0; i < merged.length; i++) seen[merged[i].id] = true
+            for (var j = 0; j < parsed.length; j++) {
+              if (!seen[parsed[j].id]) {
+                seen[parsed[j].id] = true
+                merged.push(parsed[j])
               }
-              allMatches = merged
             }
-          } catch (e) {}
-        }
+            allMatches = merged
+            lastUpdated = new Date()
+          }
+        } catch (e) { console.warn("omasports: team page parse failed:", e) }
       }
     }
     onExited: function(exitCode) {
@@ -1513,22 +1834,70 @@ Panel {
     }
   }
 
+  // Detail enrichment runs on three parallel workers draining one shared queue
+  // (~2 min worst-case serial chain before → ~40s now)
   Process {
-    id: detailProc
+    id: detailProcA
     property int serial: 0
     property bool handled: false
+    property string detailId: ""
 
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        detailProc.handled = true
-        root.consumeDetail(String(text || ""))
+        if (detailProcA.serial !== root.requestSerial || detailProcA.handled) return
+        detailProcA.handled = true
+        root.consumeDetail(detailProcA, String(text || ""))
       }
     }
     onExited: function(exitCode) {
-      if (!detailProc.handled) {
-        detailProc.handled = true
-        root.consumeDetail("")
+      if (!detailProcA.handled && detailProcA.serial === root.requestSerial) {
+        detailProcA.handled = true
+        root.consumeDetail(detailProcA, "")
+      }
+    }
+  }
+
+  Process {
+    id: detailProcB
+    property int serial: 0
+    property bool handled: false
+    property string detailId: ""
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (detailProcB.serial !== root.requestSerial || detailProcB.handled) return
+        detailProcB.handled = true
+        root.consumeDetail(detailProcB, String(text || ""))
+      }
+    }
+    onExited: function(exitCode) {
+      if (!detailProcB.handled && detailProcB.serial === root.requestSerial) {
+        detailProcB.handled = true
+        root.consumeDetail(detailProcB, "")
+      }
+    }
+  }
+
+  Process {
+    id: detailProcC
+    property int serial: 0
+    property bool handled: false
+    property string detailId: ""
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (detailProcC.serial !== root.requestSerial || detailProcC.handled) return
+        detailProcC.handled = true
+        root.consumeDetail(detailProcC, String(text || ""))
+      }
+    }
+    onExited: function(exitCode) {
+      if (!detailProcC.handled && detailProcC.serial === root.requestSerial) {
+        detailProcC.handled = true
+        root.consumeDetail(detailProcC, "")
       }
     }
   }
@@ -1677,7 +2046,9 @@ Panel {
                   Text {
                     width: parent.width
                     text: root.statusLine()
-                    color: root.errorMessage !== "" ? root.urgentColor : Qt.darker(root.fgColor, 1.45)
+                    color: root.errorMessage !== "" || root.dataStale
+                      ? root.urgentColor
+                      : root.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     elide: Text.ElideRight
@@ -1719,7 +2090,7 @@ Panel {
                   iconText: "󰑐"
                   iconSpinning: root.loading
                   focusable: true
-                  hasCursor: root.focusSection === 3
+                  hasCursor: root.focusSection === root.sectionIndex("refresh")
                   foreground: root.fgColor
                   onClicked: root.refresh()
                 }
@@ -1734,7 +2105,7 @@ Panel {
                     showLabel: false
                     value: root.refreshIntervalLabel()
                     options: root.refreshIntervalOptions
-                    hasCursor: root.focusSection === (root.selectedTeamIds.length === 0 ? 4 : 5)
+                    hasCursor: root.focusSection === root.sectionIndex("interval")
                     foreground: root.fgColor
                     background: Color.popups.background
                     onChanged: function(value) { root.setRefreshMinutes(value) }
@@ -1803,7 +2174,7 @@ Panel {
 
                       Text {
                         text: modelData.label
-                        color: root.activeSport === modelData.value ? Color.accent : Qt.darker(root.fgColor, 1.25)
+                        color: root.activeSport === modelData.value ? Color.accent : root.mutedColor(root.fgColor, 0.75)
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                         font.bold: root.activeSport === modelData.value
@@ -1844,7 +2215,7 @@ Panel {
                     text: modelData.label
                     iconText: modelData.icon
                     selected: root.tabIndex === index
-                    hasCursor: root.focusSection === 0 && root.tabIndex === index && !root.anyPopupOpen()
+                    hasCursor: root.focusSection === root.sectionIndex("tabs") && root.tabIndex === index && !root.anyPopupOpen()
                     foreground: root.fgColor
                     accent: Color.accent
                     onClicked: {
@@ -1883,7 +2254,7 @@ Panel {
                     anchors.verticalCenter: parent.verticalCenter
 
                     SequentialAnimation on opacity {
-                      running: root.liveCount > 0
+                      running: root.opened && root.liveCount > 0 && root.tabIndex !== 1
                       loops: Animation.Infinite
                       NumberAnimation { to: 0.25; duration: 500 }
                       NumberAnimation { to: 1.0; duration: 500 }
@@ -1996,7 +2367,7 @@ Panel {
                         Text {
                           visible: root.activeSport === "football" && root.selectedTeamIds.length > 0
                           text: "·"
-                          color: Qt.darker(root.fgColor, 1.5)
+                          color: root.mutedColor(root.fgColor, 0.45)
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
                         }
@@ -2045,7 +2416,7 @@ Panel {
                         noSelectionText: "Select up to 12 followed leagues"
                         popupRowHeight: Style.space(48)
                         popupMinHeight: Style.space(180)
-                        hasCursor: root.focusSection === 1
+                        hasCursor: root.focusSection === root.sectionIndex("leagues")
                         foreground: root.fgColor
                         background: Color.popups.background
                         onChanged: function(values) { root.setSelectedLeagues(values) }
@@ -2090,11 +2461,29 @@ Panel {
                             }
 
                             Text {
+                              id: leagueChipX
                               text: "✕"
-                              color: chipMouse.containsMouse ? root.urgentColor : Qt.darker(root.fgColor, 1.5)
+                              color: chipMouse.containsMouse ? root.urgentColor : root.mutedColor(root.fgColor, 0.45)
                               font.family: Style.font.family
                               font.pixelSize: Style.font.caption
                               font.bold: true
+
+                              // Only the glyph deletes — an accidental tap on
+                              // the label must not unfollow a league
+                              MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                  var arr = Model.arrayFrom(root.selectedLeagueIds)
+                                  var idx = arr.indexOf(String(modelData))
+                                  if (idx !== -1) {
+                                    arr.splice(idx, 1)
+                                    root.setSelectedLeagues(arr)
+                                  }
+                                }
+                              }
                             }
                           }
 
@@ -2102,15 +2491,6 @@ Panel {
                             id: chipMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                              var arr = Model.arrayFrom(root.selectedLeagueIds)
-                              var idx = arr.indexOf(String(modelData))
-                              if (idx !== -1) {
-                                arr.splice(idx, 1)
-                                root.setSelectedLeagues(arr)
-                              }
-                            }
                           }
                         }
                       }
@@ -2137,7 +2517,7 @@ Panel {
                           emptyText: "No results match search"
                           popupRowHeight: Style.space(48)
                           popupMinHeight: Style.space(200)
-                          hasCursor: root.focusSection === 2
+                          hasCursor: root.focusSection === root.sectionIndex("teams")
                           foreground: root.fgColor
                           background: Color.popups.background
                           onChanged: function(value) { root.toggleSelectedTeam(value) }
@@ -2151,7 +2531,7 @@ Panel {
                         iconText: "󰅖"
                         bordered: true
                         focusable: true
-                        hasCursor: root.focusSection === 4 && root.selectedTeamIds.length > 0
+                        hasCursor: root.focusSection === root.sectionIndex("clear")
                         foreground: root.fgColor
                         anchors.bottom: teamScope.bottom
                         onClicked: root.clearSelectedTeam()
@@ -2197,10 +2577,18 @@ Panel {
 
                             Text {
                               text: "✕"
-                              color: favChipMouse.containsMouse ? root.urgentColor : Qt.darker(root.fgColor, 1.5)
+                              color: favChipMouse.containsMouse ? root.urgentColor : root.mutedColor(root.fgColor, 0.45)
                               font.family: Style.font.family
                               font.pixelSize: Style.font.caption
                               font.bold: true
+
+                              MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.removeSelectedTeam(modelData)
+                              }
                             }
                           }
 
@@ -2208,8 +2596,6 @@ Panel {
                             id: favChipMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.removeSelectedTeam(modelData)
                           }
                         }
                       }
@@ -2250,7 +2636,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
                   text: root.activeFixtureHeader
-                  color: Qt.darker(root.fgColor, 1.4)
+                  color: root.mutedColor(root.fgColor, 0.55)
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -2282,11 +2668,78 @@ Panel {
               Text {
                 width: parent.width
                 visible: root.activeFixturesList.length === 0 && !root.loading && root.hasData
-                text: "No matches found for this selection — press R to reload."
-                color: Qt.darker(root.fgColor, 1.35)
+                text: "No matches in the next days for this selection. Use the refresh button above or press R."
+                color: root.mutedColor(root.fgColor, 0.65)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 wrapMode: Text.WordWrap
+              }
+
+              // Inline error card: the only recovery affordance used to be
+              // discovering the tiny refresh icon in the header
+              Rectangle {
+                width: parent.width
+                implicitHeight: errorCol.implicitHeight + Style.space(16)
+                visible: root.errorMessage !== "" && !root.loading
+                radius: Math.min(6, Style.cornerRadius)
+                color: Util.alpha(root.urgentColor, 0.08)
+                border.width: 1
+                border.color: Util.alpha(root.urgentColor, 0.4)
+
+                Column {
+                  id: errorCol
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.margins: Style.space(8)
+                  spacing: Style.space(8)
+
+                  Text {
+                    width: parent.width
+                    text: root.errorMessage
+                    color: root.fgColor
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+
+                  Row {
+                    spacing: Style.space(6)
+
+                    Button {
+                      text: "Retry"
+                      iconText: "󰑐"
+                      bordered: true
+                      foreground: root.fgColor
+                      onClicked: root.forceRefresh()
+                    }
+                  }
+                }
+              }
+
+              // First-load skeletons: an empty column on a slow network reads
+              // as broken — placeholder cards say "working" instead
+              Column {
+                width: parent.width
+                spacing: Style.space(8)
+                visible: root.loading && !root.hasData
+
+                Repeater {
+                  model: 4
+                  delegate: Rectangle {
+                    width: parent.width
+                    implicitHeight: Style.space(40)
+                    radius: Math.min(6, Style.cornerRadius)
+                    color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.05)
+
+                    SequentialAnimation on opacity {
+                      running: root.loading && !root.hasData
+                      loops: Animation.Infinite
+                      NumberAnimation { to: 0.45; duration: 700; easing.type: Easing.InOutSine }
+                      NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }
+                    }
+                  }
+                }
               }
 
               Column {
@@ -2297,7 +2750,18 @@ Panel {
                   model: root.matchGroups
 
                   delegate: Column {
+                    id: groupDelegate
                     required property var modelData
+                    required property int index
+                    // Offset of this group's first row in flatFixtureRows, so
+                    // keyboard focus indices map onto the visible cards
+                    readonly property int rowOffset: {
+                      var s = 0
+                      for (var g = 0; g < index; g++) {
+                        s += (root.matchGroups[g].matches || []).length
+                      }
+                      return s
+                    }
                     width: parent.width
                     spacing: Style.space(6)
 
@@ -2310,7 +2774,7 @@ Panel {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label.toUpperCase()
-                        color: modelData.label === "Live Matches" ? root.urgentColor : Qt.darker(root.fgColor, 1.45)
+                        color: modelData.label === "Live Matches" ? root.urgentColor : root.mutedColor(root.fgColor, 0.55)
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                         font.bold: true
@@ -2343,6 +2807,8 @@ Panel {
                           nowMs: root.nowMs
                           revealMatch: root.revealMatch
                           openMatch: root.openMatch
+                          listVisible: root.opened && root.tabIndex === 0
+                          rowFocused: root.focusSection - root.focusSections.length === groupDelegate.rowOffset + index
                         }
                       }
                     }
@@ -2396,7 +2862,7 @@ Panel {
                     text: root.hasData
                       ? "No live events in progress right now for " + root.activeSportMeta.label + "."
                       : "Load " + root.activeSportMeta.label + " schedule to see live scores."
-                    color: Qt.darker(root.fgColor, 1.35)
+                    color: root.mutedColor(root.fgColor, 0.65)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     horizontalAlignment: Text.AlignHCenter
@@ -2449,7 +2915,7 @@ Panel {
                 spacing: Style.space(10)
 
                 Repeater {
-                  model: Model.liveMatches(root.allMatches, root.matchDetails)
+                  model: root.liveList
                   delegate: LiveRow {
                     activeSport: root.activeSport
                     activeSportIcon: root.activeSportIcon
@@ -2460,6 +2926,8 @@ Panel {
                     openMatch: root.openMatch
                     nowMs: root.nowMs
                     fetchedAtMs: root.lastUpdated.getTime()
+                    listVisible: root.opened && root.tabIndex === 1
+                    rowFocused: root.focusSection - root.focusSections.length === index
                   }
                 }
               }
@@ -2483,7 +2951,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
                   text: root.activeSportMeta.label.toUpperCase() + " STANDINGS"
-                  color: Qt.darker(root.fgColor, 1.4)
+                  color: root.mutedColor(root.fgColor, 0.55)
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -2505,7 +2973,7 @@ Panel {
                     showLabel: false
                     value: root.standingsLeagueId
                     options: root.standingsOptions
-                    hasCursor: root.focusSection === 6
+                    hasCursor: root.focusSection === root.sectionIndex("standings")
                     foreground: root.fgColor
                     background: Color.popups.background
                     onChanged: function(value) { root.setStandingsLeague(value) }
@@ -2515,9 +2983,11 @@ Panel {
 
               Text {
                 width: parent.width
-                visible: root.standingsRows.length === 0
-                text: "Refresh (R) to load standings."
-                color: Qt.darker(root.fgColor, 1.35)
+                visible: root.standingsRows.length === 0 && !root.loading
+                text: root.hasData
+                  ? "No standings available for this selection."
+                  : "No standings yet — use the refresh button above or press R."
+                color: root.mutedColor(root.fgColor, 0.65)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 wrapMode: Text.WordWrap
@@ -2652,7 +3122,7 @@ Panel {
                   }
                   Text {
                     text: root.activeSport === "f1" ? "Podium / P1" : "Playoffs / Europe"
-                    color: Qt.darker(root.fgColor, 1.4)
+                    color: root.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     anchors.verticalCenter: parent.verticalCenter
@@ -2669,7 +3139,28 @@ Panel {
                   }
                   Text {
                     text: "Favorite"
-                    color: Qt.darker(root.fgColor, 1.4)
+                    color: root.mutedColor(root.fgColor, 0.55)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+
+                // Relegation/danger zones were previously encoded by red fill
+                // alone — document the third zone so the encoding is readable
+                Row {
+                  visible: root.activeSport === "football"
+                  spacing: Style.space(5)
+                  Rectangle {
+                    width: Style.space(8)
+                    height: Style.space(8)
+                    radius: 2
+                    color: root.urgentColor
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                  Text {
+                    text: "Relegation"
+                    color: root.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     anchors.verticalCenter: parent.verticalCenter

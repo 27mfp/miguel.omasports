@@ -21,6 +21,10 @@ Item {
 
   width: parent.width
   implicitHeight: Style.space(26)
+
+  function mutedColor(c, a) {
+    return Qt.rgba(c.r, c.g, c.b, a)
+  }
   height: implicitHeight
 
   Rectangle {
@@ -65,7 +69,7 @@ Item {
           text: root.modelData.pos
           color: root.modelData.zone === "europe"
             ? Color.accent
-            : (root.modelData.zone === "relegation" ? root.urgentColor : Qt.darker(root.rowFg, 1.4))
+            : (root.modelData.zone === "relegation" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -99,15 +103,15 @@ Item {
       }
     }
 
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: Qt.darker(root.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: Qt.darker(root.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: Qt.darker(root.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: Qt.darker(root.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.gd || "-")
-      color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : Qt.darker(root.rowFg, 1.4))
+      color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -156,7 +160,7 @@ Item {
           text: root.modelData.pos
           color: root.modelData.zone === "europe"
             ? Color.accent
-            : (root.modelData.zone === "relegation" ? root.urgentColor : Qt.darker(root.rowFg, 1.4))
+            : (root.modelData.zone === "relegation" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -191,13 +195,13 @@ Item {
       }
     }
 
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: Qt.darker(root.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: Qt.darker(root.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
       width: Style.space(36)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.played > 0 ? (root.modelData.wins / root.modelData.played).toFixed(3).replace(/^0/, "") : ".000"
-      color: Qt.darker(root.rowFg, 1.35)
+      color: root.mutedColor(root.rowFg, 0.65)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -206,7 +210,7 @@ Item {
       width: Style.space(34)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.gd || "-")
-      color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : Qt.darker(root.rowFg, 1.4))
+      color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -250,7 +254,7 @@ Item {
         Text {
           anchors.centerIn: parent
           text: root.modelData.pos
-          color: root.modelData.zone === "europe" ? Color.accent : Qt.darker(root.rowFg, 1.4)
+          color: root.modelData.zone === "europe" ? Color.accent : root.mutedColor(root.rowFg, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -287,7 +291,7 @@ Item {
       width: parent.width - Style.space(290)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || root.modelData.teamName || ""
-      color: Qt.darker(root.rowFg, 1.4)
+      color: root.mutedColor(root.rowFg, 0.55)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
@@ -297,7 +301,7 @@ Item {
       width: Style.space(36)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
-      color: Qt.darker(root.rowFg, 1.35)
+      color: root.mutedColor(root.rowFg, 0.65)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -341,7 +345,7 @@ Item {
         Text {
           anchors.centerIn: parent
           text: root.modelData.pos
-          color: root.modelData.zone === "europe" ? Color.accent : Qt.darker(root.rowFg, 1.4)
+          color: root.modelData.zone === "europe" ? Color.accent : root.mutedColor(root.rowFg, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -378,7 +382,7 @@ Item {
       width: parent.width - Style.space(300)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || ""
-      color: Qt.darker(root.rowFg, 1.4)
+      color: root.mutedColor(root.rowFg, 0.55)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
@@ -388,7 +392,7 @@ Item {
       width: Style.space(36)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
-      color: Qt.darker(root.rowFg, 1.35)
+      color: root.mutedColor(root.rowFg, 0.65)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight

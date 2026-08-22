@@ -30,7 +30,7 @@ Item {
   // downloader and this component always agree on the same file name.
   readonly property string cacheKey: Model.crestCacheKey(sport, teamId, abbr)
   readonly property string localCachePath: cacheKey !== ""
-    ? "file://" + Quickshell.env("HOME") + "/.cache/omarchy-matchday/logos/" + cacheKey + ".png"
+    ? "file://" + Quickshell.env("HOME") + "/.cache/omarchy-omasports/logos/" + cacheKey + ".png"
     : ""
 
   readonly property string monogramText: {
@@ -61,7 +61,7 @@ Item {
       text: root.monogramText
       color: root.foreground
       font.family: Style.font.family
-      font.pixelSize: Math.max(7, Math.round(root.crestSize * (root.monogramText.length > 2 ? 0.34 : 0.42)))
+      font.pixelSize: Math.max(9, Math.round(root.crestSize * (root.monogramText.length > 2 ? 0.34 : 0.42)))
       font.bold: true
     }
   }
@@ -75,6 +75,9 @@ Item {
     asynchronous: true
     cache: true
     smooth: true
+    // Decode at display resolution — provider PNGs are up to 500px wide and
+    // rendering them at ~20px otherwise wastes ~20x memory per crest
+    sourceSize: Qt.size(root.crestSize * 2, root.crestSize * 2)
     visible: status === Image.Ready
     opacity: status === Image.Ready ? 1.0 : 0.0
     Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
@@ -89,6 +92,7 @@ Item {
     asynchronous: true
     cache: true
     smooth: true
+    sourceSize: Qt.size(root.crestSize * 2, root.crestSize * 2)
     visible: localImg.status !== Image.Ready && status === Image.Ready
     opacity: visible ? 1.0 : 0.0
     Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }

@@ -27,6 +27,10 @@ Item {
   width: parent.width
   implicitHeight: spotlightSurface.implicitHeight
 
+  function mutedColor(c, a) {
+    return Qt.rgba(c.r, c.g, c.b, a)
+  }
+
   readonly property var match: featuredMatch || fallbackMatch
   readonly property bool isLive: match && match.status === "live"
   readonly property bool isUpcoming: match && match.status === "upcoming"
@@ -92,7 +96,7 @@ Item {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             text: (root.match ? root.match.leagueName : "") + (root.match && root.match.round ? " · " + root.match.round : "")
-            color: Qt.darker(root.fgColor, 1.35)
+            color: root.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -187,7 +191,7 @@ Item {
               Text {
                 width: parent.width
                 text: root.match ? ((root.match.circuitName || "") + (root.match.locality ? " · " + root.match.locality : "") + (root.match.country ? ", " + root.match.country : "")) : ""
-                color: Qt.darker(root.fgColor, 1.45)
+                color: root.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
@@ -280,7 +284,7 @@ Item {
             Text {
               width: parent.width
               text: root.match && root.match.home.record ? root.match.home.record : (String(root.match && root.match.home.id) === String(root.selectedTeamId) ? "HOME · FAVORITE" : "HOME")
-              color: Qt.darker(root.fgColor, 1.55)
+              color: root.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               horizontalAlignment: Text.AlignRight
@@ -367,7 +371,7 @@ Item {
             Text {
               width: parent.width
               text: root.match && root.match.away.record ? root.match.away.record : (String(root.match && root.match.away.id) === String(root.selectedTeamId) ? "AWAY · FAVORITE" : "AWAY")
-              color: Qt.darker(root.fgColor, 1.55)
+              color: root.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               horizontalAlignment: Text.AlignLeft
@@ -389,7 +393,7 @@ Item {
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           text: root.matchSubline(root.match) || (root.match && root.match.leagueName ? root.match.leagueName + " Event" : "Matchday Details")
-          color: Qt.darker(root.fgColor, 1.45)
+          color: root.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight

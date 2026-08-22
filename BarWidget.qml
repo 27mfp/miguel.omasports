@@ -5,7 +5,7 @@ import qs.Ui
 // A lightweight, instant-access Omarchy status bar widget with live match ticker.
 BarWidget {
   id: root
-  moduleName: "miguel.matchday"
+  moduleName: "miguel.omasports"
 
   // Shape contract for shell.summon/hide/toggle routing
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false

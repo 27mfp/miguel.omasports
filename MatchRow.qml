@@ -19,6 +19,8 @@ Item {
   property double nowMs: 0
   property var revealMatch: null // function(matchId)
   property var openMatch: null // function(match)
+  property bool listVisible: true
+  property bool rowFocused: false
 
   readonly property bool isF1: root.activeSport === "f1"
   readonly property bool isLive: modelData.status === "live"
@@ -29,23 +31,44 @@ Item {
   readonly property string dateBadge: Model.formatMatchDate(modelData.time)
   readonly property bool isScoreRevealed: root.revealedMatchIds[String(modelData.id)] === true
   readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
+  readonly property string scoreLabel: root.scoreHidden
+    ? "••••"
+    : (root.isUpcoming
+       ? Model.formatKickoff(modelData.time)
+       : (modelData.scoreText || "–"))
   property bool expanded: false
 
   width: parent.width
   implicitHeight: matchCard.implicitHeight
+
+  function mutedColor(c, a) {
+    return Qt.rgba(c.r, c.g, c.b, a)
+  }
 
   Rectangle {
     id: matchCard
     width: parent.width
     implicitHeight: root.isF1 ? (f1ContainerCol.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
     radius: Math.min(6, Style.cornerRadius)
+    Accessible.role: Accessible.ListItem
+    Accessible.name: {
+      var h = (modelData.home && (modelData.home.name || modelData.home.shortName)) || ""
+      var a = (modelData.away && (modelData.away.name || modelData.away.shortName)) || ""
+      var s = h + " versus " + a
+      if (root.scoreHidden) return s + ", result hidden"
+      if (root.isLive) return s + ", live, " + root.scoreLabel
+      if (root.isUpcoming) return s + ", upcoming"
+      return s + ", finished" + (root.scoreLabel ? ", " + root.scoreLabel : "")
+    }
     color: matchMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
       : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.02)
-    border.width: 1
+    border.width: root.rowFocused ? 2 : 1
     border.color: matchMouse.containsMouse
       ? Color.accent
-      : (root.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06))
+      : (root.rowFocused
+         ? root.urgentColor
+         : (root.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06)))
 
     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
@@ -84,7 +107,7 @@ Item {
 
           Text {
             text: root.dateBadge
-            color: Qt.darker(root.fgColor, 1.35)
+            color: root.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -128,7 +151,7 @@ Item {
             Text {
               width: parent.width
               text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
-              color: Qt.darker(root.fgColor, 1.55)
+              color: root.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               elide: Text.ElideRight
@@ -152,7 +175,7 @@ Item {
               id: f1StatusText
               anchors.centerIn: parent
               text: root.isFinished ? "Official" : (root.isLive ? "RACE DAY" : Model.formatKickoff(modelData.time))
-              color: root.isLive ? "#ffffff" : (root.isFinished ? Qt.darker(root.fgColor, 1.3) : Color.accent)
+              color: root.isLive ? "#ffffff" : (root.isFinished ? root.mutedColor(root.fgColor, 0.65) : Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -162,7 +185,7 @@ Item {
           Text {
             visible: root.isF1 && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
             text: root.expanded ? "󰅃" : "󰅀"
-            color: Qt.darker(root.fgColor, 1.5)
+            color: root.mutedColor(root.fgColor, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             anchors.verticalCenter: parent.verticalCenter
@@ -219,7 +242,7 @@ Item {
               Text {
                 width: parent.width - Style.space(240)
                 text: Qt.formatDateTime(new Date(Date.parse(modelData.time)), "ddd d MMM · HH:mm")
-                color: Qt.darker(root.fgColor, 1.4)
+                color: root.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 elide: Text.ElideRight
@@ -244,7 +267,7 @@ Item {
                 color: {
                   var ms2 = Date.parse(modelData.time)
                   if (root.nowMs >= ms2 && root.nowMs <= ms2 + 2.5 * 3600 * 1000) return root.urgentColor
-                  return Qt.darker(root.fgColor, 1.5)
+                  return root.mutedColor(root.fgColor, 0.45)
                 }
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -276,7 +299,7 @@ Item {
 
         Text {
           text: root.dateBadge
-          color: Qt.darker(root.fgColor, 1.35)
+          color: root.mutedColor(root.fgColor, 0.65)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -284,7 +307,7 @@ Item {
 
         Text {
           text: Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : "")
-          color: Qt.darker(root.fgColor, 1.6)
+          color: root.mutedColor(root.fgColor, 0.40)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight
@@ -328,7 +351,7 @@ Item {
             color: root.favIsHome ? Color.accent : root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
-            font.bold: root.favIsHome || (modelData.homeScore > modelData.awayScore)
+            font.bold: root.favIsHome || (!root.scoreHidden && modelData.homeScore > modelData.awayScore)
             horizontalAlignment: Text.AlignRight
             elide: Text.ElideRight
           }
@@ -354,7 +377,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
 
               SequentialAnimation on opacity {
-                running: root.isLive
+                running: root.listVisible && root.isLive
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.25; duration: 500 }
                 NumberAnimation { to: 1.0; duration: 500 }
@@ -364,14 +387,10 @@ Item {
             Text {
               id: scoreText
               anchors.verticalCenter: parent.verticalCenter
-              text: root.scoreHidden
-                ? "••••"
-                : (root.isUpcoming
-                   ? Model.formatKickoff(modelData.time)
-                   : (modelData.scoreText || "–"))
+              text: root.scoreLabel
               color: root.isLive
                 ? root.urgentColor
-                : (root.isUpcoming ? Qt.darker(root.fgColor, 1.2) : root.fgColor)
+                : (root.isUpcoming ? root.mutedColor(root.fgColor, 0.75) : root.fgColor)
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               font.bold: true
@@ -410,7 +429,7 @@ Item {
             color: root.favIsAway ? Color.accent : root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
-            font.bold: root.favIsAway || (modelData.awayScore > modelData.homeScore)
+            font.bold: root.favIsAway || (!root.scoreHidden && modelData.awayScore > modelData.homeScore)
             horizontalAlignment: Text.AlignLeft
             elide: Text.ElideRight
           }

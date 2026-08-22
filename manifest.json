@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "miguel.matchday",
-  "name": "Matchday",
+  "id": "miguel.omasports",
+  "name": "OmaSports",
   "version": "1.4.0",
   "author": "Miguel",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Matchday",
+    "displayName": "OmaSports",
     "description": "Track live scores, team fixtures, and league standings across Football, NBA, F1, NFL, MLB, and NHL.",
     "category": "Sports",
     "allowMultiple": false,

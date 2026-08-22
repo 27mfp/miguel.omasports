@@ -16,7 +16,9 @@ const exported = [
   "parseStandings", "zoneFromLegend", "mergePages", "teamOptionsForSport",
   "matchesForTeam", "matchesForLeague", "featuredMatchForTeam", "teamOutcome",
   "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel",
-  "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime"
+  "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime",
+  "sameMatches", "sameGroups", "buildPersistedState", "parseLeaguePage",
+  "mockRound"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -124,32 +126,55 @@ test("statePayload round-trips through parseState", () => {
   assert.equal(st.nba.tab, "fixtures")
 })
 test("persistState shape round-trips exactly (applyState signature check)", () => {
-  // Replicates Panel.qml persistState(): the written JSON must re-parse to an
-  // identical object, otherwise ignoredStateSignature never matches and every
-  // own write would trigger a spurious network round.
+  // Exercises the REAL writer (Model.buildPersistedState, used by Panel.qml):
+  // the written JSON must re-parse to an identical object, otherwise
+  // ignoredStateSignature never matches and every own write would trigger a
+  // spurious network round.
   const base = Model.parseState(JSON.stringify({
     sport: "nba",
     football: { leagueIds: ["61", "47"], teamIds: ["9772"], teamId: "9772", teamName: "Benfica", standingsLeagueId: "61", tab: "live" },
     nba: { teamIds: ["13"], teamId: "13", teamName: "Los Angeles Lakers", standingsGroup: "Western Conference", tab: "fixtures" },
     refreshMinutes: 15, notifications: true
   }))
-  const tabName = "standings"
-  const sportSettings = {}
-  for (const spk of ["nba", "f1", "nfl", "mlb", "nhl"]) {
-    sportSettings[spk] = spk === "nba"
-      ? { teamIds: ["13"], teamId: "13", teamName: "Los Angeles Lakers", standingsGroup: "Western Conference", tab: tabName }
-      : base[spk]
+  const ui = {
+    tabName: "standings",
+    selectedLeagueIds: ["61"],
+    selectedTeamIds: ["13"],
+    selectedTeamId: "13",
+    selectedTeamName: "Los Angeles Lakers",
+    standingsLeagueId: "Western Conference",
+    antiSpoiler: false,
+    enableNotifications: true
   }
-  const fb = base.football
-  const saved = Model.statePayload("nba", fb.leagueIds, fb.teamIds, fb.teamName, 15, fb.standingsLeagueId, sportSettings, false, true)
-  saved.football.tab = String(fb.tab || "fixtures")
+  const saved = Model.buildPersistedState("nba", base, ui)
   const written = JSON.stringify(saved, null, 2) + "\n"
   const reparsed = Model.parseState(written)
   assert.equal(JSON.stringify(reparsed), JSON.stringify(saved))
+  assert.equal(reparsed.nba.tab, "standings")
+  assert.equal(reparsed.football.tab, "live")
   // and the same holds when football is the active sport
-  const saved2 = Model.statePayload("football", ["61"], ["9772"], "Benfica", 15, "61", sportSettings, true, true)
-  saved2.football.tab = "live"
+  const saved2 = Model.buildPersistedState("football", base, { ...ui,
+    selectedTeamIds: ["9772"], selectedTeamId: "9772", selectedTeamName: "Benfica",
+    standingsLeagueId: "61", tabName: "live" })
   assert.equal(JSON.stringify(Model.parseState(JSON.stringify(saved2))), JSON.stringify(saved2))
+  assert.equal(saved2.football.tab, "live")
+})
+
+test("parseLeaguePage returns null for bot-wall / consent HTML", () => {
+  // Cloudflare challenges and rate-limit pages have no __NEXT_DATA__ payload —
+  // these must be treated as fetch failures (retryable), not empty leagues
+  assert.equal(Model.parseLeaguePage("<html><body>Just a moment...</body></html>", "47"), null)
+  assert.equal(Model.parseLeaguePage("", "47"), null)
+})
+test("sameMatches / sameGroups detect real changes only", () => {
+  const a = [{ id: "1", status: "live", homeScore: 1, awayScore: 0, liveTime: "34" }]
+  assert.ok(Model.sameMatches(a, a))
+  assert.ok(Model.sameMatches(a, [{ id: "1", status: "live", homeScore: 1, awayScore: 0, liveTime: "34" }]))
+  assert.ok(!Model.sameMatches(a, [{ id: "1", status: "live", homeScore: 2, awayScore: 0, liveTime: "34" }]))
+  assert.ok(!Model.sameMatches(a, [{ id: "2", status: "live", homeScore: 1, awayScore: 0, liveTime: "34" }]))
+  const g = [{ key: "live", label: "Live Matches", matches: a }]
+  assert.ok(Model.sameGroups(g, [{ key: "live", label: "Live Matches", matches: [...a] }]))
+  assert.ok(!Model.sameGroups(g, [{ key: "live", label: "Live Matches", matches: [] }]))
 })
 
 // ---------------------------------------------------------------- ESPN parsers
@@ -409,6 +434,40 @@ test("interpolateLiveTime ticks the clock forward with a stoppage cap", () => {
   assert.equal(Model.interpolateLiveTime(nba, now, now - 30 * 60000), "8:44")
   // non-live matches pass through untouched
   assert.equal(Model.interpolateLiveTime({ status: "finished", sport: "football" }, now, now - 60000), "")
+})
+
+// ---------------------------------------------------------------- mock mode
+test("mockRound football simulates a full lifecycle", () => {
+  const t0 = Date.now()
+  const MIN = 60000
+  const { matches } = Model.mockRound("football", t0)
+  const byId = Object.fromEntries(matches.map(m => [m.id, m]))
+  // one match live at launch, one kicking off in ~12 min, one finished, one tomorrow
+  assert.equal(byId["mock-fb-1"].status, "live")
+  assert.match(byId["mock-fb-1"].liveTime, /^\u200e\d{1,2}\u2019\u200e$/)
+  assert.equal(byId["mock-fb-2"].status, "upcoming")
+  assert.ok(Date.parse(byId["mock-fb-2"].time) - t0 > 10 * MIN && Date.parse(byId["mock-fb-2"].time) - t0 < 15 * MIN,
+    "upcoming kickoff should sit inside the 15-min pre-match notification window")
+  assert.equal(byId["mock-fb-3"].status, "finished")
+  assert.equal(byId["mock-fb-4"].status, "upcoming")
+  // evolution: 40 min later the live match has progressed and match #2 is LIVE with a scripted goal
+  const later = Model.mockRound("football", t0 + 40 * MIN)
+  const laterById = Object.fromEntries(later.matches.map(m => [m.id, m]))
+  assert.ok(["live", "finished"].includes(laterById["mock-fb-1"].status), "first match should progress")
+  assert.equal(laterById["mock-fb-2"].status, "live")
+  assert.ok(laterById["mock-fb-2"].homeScore + laterById["mock-fb-2"].awayScore > 0, "scripted goal should have landed")
+})
+test("mockRound covers every sport with sane shapes", () => {
+  for (const sport of ["football", "nba", "f1", "nfl", "mlb", "nhl"]) {
+    const { matches, standings } = Model.mockRound(sport)
+    assert.ok(matches.length > 0, sport + " has no matches")
+    assert.ok(matches.some(m => m.status === "live"), sport + " should always have something live")
+    assert.ok(Object.keys(standings).length > 0, sport + " should have standings")
+    for (const m of matches) {
+      assert.ok(m.id && m.home.name && m.away.name && m.time, sport + " match malformed")
+      assert.equal(m.sport, sport)
+    }
+  }
 })
 
 // ---------------------------------------------------------------- catalogs
