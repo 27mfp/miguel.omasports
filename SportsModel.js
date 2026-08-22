@@ -159,22 +159,152 @@ var nbaTeams = [
   { value: "27", label: "Washington Wizards", description: "Eastern · Southeast" }
 ]
 
-// Pre-populated F1 Drivers & Teams
+// Pre-populated Football Clubs Catalogue (Instant search for major clubs)
+var popularFootballClubs = [
+  // Portugal - Primeira Liga
+  { value: "9772", label: "Benfica", description: "Primeira Liga · Portugal" },
+  { value: "9768", label: "Sporting CP", description: "Primeira Liga · Portugal" },
+  { value: "9773", label: "FC Porto", description: "Primeira Liga · Portugal" },
+  { value: "9771", label: "SC Braga", description: "Primeira Liga · Portugal" },
+  { value: "9775", label: "Vitória SC", description: "Primeira Liga · Portugal" },
+  { value: "9767", label: "Famalicão", description: "Primeira Liga · Portugal" },
+  { value: "9774", label: "Boavista", description: "Primeira Liga · Portugal" },
+  { value: "9770", label: "Gil Vicente", description: "Primeira Liga · Portugal" },
+  { value: "9769", label: "Estoril Praia", description: "Primeira Liga · Portugal" },
+  { value: "9776", label: "Rio Ave", description: "Primeira Liga · Portugal" },
+  { value: "9781", label: "Moreirense", description: "Primeira Liga · Portugal" },
+  { value: "9780", label: "Arouca", description: "Primeira Liga · Portugal" },
+  { value: "9778", label: "Santa Clara", description: "Primeira Liga · Portugal" },
+  { value: "9779", label: "Farense", description: "Primeira Liga · Portugal" },
+  { value: "9782", label: "Nacional", description: "Primeira Liga · Portugal" },
+  { value: "9783", label: "AVS Futebol SAD", description: "Primeira Liga · Portugal" },
+  { value: "9784", label: "Casa Pia", description: "Primeira Liga · Portugal" },
+  { value: "9785", label: "Estrela da Amadora", description: "Primeira Liga · Portugal" },
+
+  // England - Premier League
+  { value: "9825", label: "Arsenal", description: "Premier League · England" },
+  { value: "9827", label: "Chelsea", description: "Premier League · England" },
+  { value: "8650", label: "Liverpool", description: "Premier League · England" },
+  { value: "8456", label: "Manchester City", description: "Premier League · England" },
+  { value: "10260", label: "Manchester United", description: "Premier League · England" },
+  { value: "8586", label: "Tottenham Hotspur", description: "Premier League · England" },
+  { value: "10252", label: "Aston Villa", description: "Premier League · England" },
+  { value: "10261", label: "Newcastle United", description: "Premier League · England" },
+  { value: "10204", label: "Brighton", description: "Premier League · England" },
+  { value: "8654", label: "West Ham United", description: "Premier League · England" },
+  { value: "8668", label: "Everton", description: "Premier League · England" },
+  { value: "9879", label: "Fulham", description: "Premier League · England" },
+  { value: "8659", label: "Wolverhampton Wanderers", description: "Premier League · England" },
+  { value: "8191", label: "Brentford", description: "Premier League · England" },
+  { value: "9826", label: "Crystal Palace", description: "Premier League · England" },
+  { value: "10203", label: "Nottingham Forest", description: "Premier League · England" },
+  { value: "8678", label: "Bournemouth", description: "Premier League · England" },
+  { value: "8658", label: "Leicester City", description: "Premier League · England" },
+  { value: "8466", label: "Southampton", description: "Premier League · England" },
+  { value: "9817", label: "Ipswich Town", description: "Premier League · England" },
+
+  // Spain - La Liga
+  { value: "8633", label: "Real Madrid", description: "La Liga · Spain" },
+  { value: "8634", label: "FC Barcelona", description: "La Liga · Spain" },
+  { value: "9906", label: "Atlético Madrid", description: "La Liga · Spain" },
+  { value: "8315", label: "Athletic Club", description: "La Liga · Spain" },
+  { value: "8560", label: "Real Sociedad", description: "La Liga · Spain" },
+  { value: "10205", label: "Villarreal", description: "La Liga · Spain" },
+  { value: "8603", label: "Real Betis", description: "La Liga · Spain" },
+  { value: "8302", label: "Sevilla", description: "La Liga · Spain" },
+  { value: "9910", label: "Girona", description: "La Liga · Spain" },
+  { value: "10267", label: "Valencia", description: "La Liga · Spain" },
+  { value: "8371", label: "Osasuna", description: "La Liga · Spain" },
+  { value: "8581", label: "Celta Vigo", description: "La Liga · Spain" },
+  { value: "8638", label: "Rayo Vallecano", description: "La Liga · Spain" },
+  { value: "8558", label: "Espanyol", description: "La Liga · Spain" },
+  { value: "9864", label: "Mallorca", description: "La Liga · Spain" },
+  { value: "8582", label: "Alavés", description: "La Liga · Spain" },
+  { value: "8370", label: "Las Palmas", description: "La Liga · Spain" },
+  { value: "8696", label: "Getafe", description: "La Liga · Spain" },
+  { value: "9907", label: "Leganés", description: "La Liga · Spain" },
+  { value: "8388", label: "Real Valladolid", description: "La Liga · Spain" },
+
+  // Italy - Serie A
+  { value: "8636", label: "Inter Milan", description: "Serie A · Italy" },
+  { value: "8564", label: "AC Milan", description: "Serie A · Italy" },
+  { value: "9885", label: "Juventus", description: "Serie A · Italy" },
+  { value: "9875", label: "Napoli", description: "Serie A · Italy" },
+  { value: "8686", label: "AS Roma", description: "Serie A · Italy" },
+  { value: "8543", label: "Lazio", description: "Serie A · Italy" },
+  { value: "8524", label: "Atalanta", description: "Serie A · Italy" },
+  { value: "8535", label: "Fiorentina", description: "Serie A · Italy" },
+  { value: "9857", label: "Bologna", description: "Serie A · Italy" },
+  { value: "9804", label: "Torino", description: "Serie A · Italy" },
+
+  // Germany - Bundesliga
+  { value: "9823", label: "Bayern München", description: "Bundesliga · Germany" },
+  { value: "9789", label: "Borussia Dortmund", description: "Bundesliga · Germany" },
+  { value: "8178", label: "Bayer Leverkusen", description: "Bundesliga · Germany" },
+  { value: "178475", label: "RB Leipzig", description: "Bundesliga · Germany" },
+  { value: "9810", label: "Eintracht Frankfurt", description: "Bundesliga · Germany" },
+  { value: "10269", label: "VfB Stuttgart", description: "Bundesliga · Germany" },
+  { value: "9788", label: "Borussia Mönchengladbach", description: "Bundesliga · Germany" },
+
+  // France - Ligue 1
+  { value: "9847", label: "Paris Saint-Germain", description: "Ligue 1 · France" },
+  { value: "8592", label: "Marseille", description: "Ligue 1 · France" },
+  { value: "9748", label: "Lyon", description: "Ligue 1 · France" },
+  { value: "9829", label: "Monaco", description: "Ligue 1 · France" },
+  { value: "8639", label: "Lille", description: "Ligue 1 · France" },
+  { value: "9851", label: "Rennes", description: "Ligue 1 · France" },
+
+  // Rest of World
+  { value: "8593", label: "Ajax", description: "Eredivisie · Netherlands" },
+  { value: "8640", label: "PSV Eindhoven", description: "Eredivisie · Netherlands" },
+  { value: "10235", label: "Feyenoord", description: "Eredivisie · Netherlands" },
+  { value: "9925", label: "Celtic", description: "Premiership · Scotland" },
+  { value: "8548", label: "Rangers", description: "Premiership · Scotland" },
+  { value: "5981", label: "Flamengo", description: "Brasileirão · Brazil" },
+  { value: "9745", label: "Palmeiras", description: "Brasileirão · Brazil" },
+  { value: "10274", label: "Corinthians", description: "Brasileirão · Brazil" },
+  { value: "10077", label: "Boca Juniors", description: "Liga Profesional · Argentina" },
+  { value: "10076", label: "River Plate", description: "Liga Profesional · Argentina" },
+  { value: "8094", label: "Al-Hilal", description: "Saudi Pro League · Saudi Arabia" },
+  { value: "7798", label: "Al-Nassr", description: "Saudi Pro League · Saudi Arabia" },
+  { value: "1060144", label: "Inter Miami CF", description: "MLS · USA" }
+]
+
+// Pre-populated F1 Constructors & Drivers
 var f1Drivers = [
-  { value: "antonelli", label: "Andrea Kimi Antonelli", description: "Mercedes" },
-  { value: "hamilton", label: "Lewis Hamilton", description: "Ferrari" },
-  { value: "russell", label: "George Russell", description: "Mercedes" },
-  { value: "leclerc", label: "Charles Leclerc", description: "Ferrari" },
+  // Constructors
+  { value: "red_bull", label: "Red Bull Racing", description: "Constructor · Oracle Red Bull Racing" },
+  { value: "ferrari", label: "Ferrari", description: "Constructor · Scuderia Ferrari HP" },
+  { value: "mclaren", label: "McLaren", description: "Constructor · McLaren F1 Team" },
+  { value: "mercedes", label: "Mercedes", description: "Constructor · Mercedes-AMG PETRONAS F1 Team" },
+  { value: "aston_martin", label: "Aston Martin", description: "Constructor · Aston Martin Aramco F1 Team" },
+  { value: "alpine", label: "Alpine", description: "Constructor · BWT Alpine F1 Team" },
+  { value: "williams", label: "Williams", description: "Constructor · Williams Racing" },
+  { value: "sauber", label: "Kick Sauber", description: "Constructor · Stake F1 Team Kick Sauber" },
+  { value: "rb", label: "RB Formula One Team", description: "Constructor · Visa Cash App RB" },
+  { value: "haas", label: "Haas F1 Team", description: "Constructor · MoneyGram Haas F1 Team" },
+
+  // Drivers
+  { value: "verstappen", label: "Max Verstappen", description: "Red Bull Racing" },
+  { value: "hamilton", label: "Lewis Hamilton", description: "Scuderia Ferrari" },
+  { value: "leclerc", label: "Charles Leclerc", description: "Scuderia Ferrari" },
   { value: "norris", label: "Lando Norris", description: "McLaren" },
   { value: "piastri", label: "Oscar Piastri", description: "McLaren" },
-  { value: "verstappen", label: "Max Verstappen", description: "Red Bull Racing" },
+  { value: "russell", label: "George Russell", description: "Mercedes" },
+  { value: "antonelli", label: "Andrea Kimi Antonelli", description: "Mercedes" },
   { value: "alonso", label: "Fernando Alonso", description: "Aston Martin" },
   { value: "stroll", label: "Lance Stroll", description: "Aston Martin" },
   { value: "gasly", label: "Pierre Gasly", description: "Alpine" },
+  { value: "doohan", label: "Jack Doohan", description: "Alpine" },
   { value: "albon", label: "Alexander Albon", description: "Williams" },
   { value: "sainz", label: "Carlos Sainz", description: "Williams" },
   { value: "hulkenberg", label: "Nico Hülkenberg", description: "Sauber / Audi" },
-  { value: "tsunoda", label: "Yuki Tsunoda", description: "RB F1 Team" }
+  { value: "bortoleto", label: "Gabriel Bortoleto", description: "Sauber / Audi" },
+  { value: "tsunoda", label: "Yuki Tsunoda", description: "RB F1 Team" },
+  { value: "hadjar", label: "Isack Hadjar", description: "RB F1 Team" },
+  { value: "lawson", label: "Liam Lawson", description: "Red Bull Racing" },
+  { value: "ocon", label: "Esteban Ocon", description: "Haas F1 Team" },
+  { value: "bearman", label: "Oliver Bearman", description: "Haas F1 Team" }
 ]
 
 // Pre-populated NFL Teams
@@ -1084,25 +1214,32 @@ function teamOptionsForSport(sport, matches) {
   if (s === "nhl") return nhlTeams
 
   var byId = {}
+  for (var p = 0; p < popularFootballClubs.length; p++) {
+    var club = popularFootballClubs[p]
+    byId[String(club.value)] = club
+  }
+
   var source = arrayFrom(matches)
   for (var i = 0; i < source.length; i++) {
     var match = source[i]
     if (!match) continue
     if (match.home && match.home.id && match.home.name) {
-      if (!byId[match.home.id]) {
-        byId[match.home.id] = {
-          value: match.home.id,
+      var hId = String(match.home.id)
+      if (!byId[hId]) {
+        byId[hId] = {
+          value: hId,
           label: match.home.name,
-          description: match.leagueName || ""
+          description: match.leagueName || "Football"
         }
       }
     }
     if (match.away && match.away.id && match.away.name) {
-      if (!byId[match.away.id]) {
-        byId[match.away.id] = {
-          value: match.away.id,
+      var aId = String(match.away.id)
+      if (!byId[aId]) {
+        byId[aId] = {
+          value: aId,
           label: match.away.name,
-          description: match.leagueName || ""
+          description: match.leagueName || "Football"
         }
       }
     }

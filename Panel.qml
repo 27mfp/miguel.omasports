@@ -1540,8 +1540,10 @@ Panel {
               Row {
                 id: headerLeft
                 anchors.left: parent.left
+                anchors.right: headerControls.left
+                anchors.rightMargin: Style.space(8)
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(10)
+                spacing: Style.space(8)
 
                 Text {
                   anchors.verticalCenter: parent.verticalCenter
@@ -1551,21 +1553,26 @@ Panel {
 
                 Column {
                   anchors.verticalCenter: parent.verticalCenter
+                  width: Math.max(0, headerLeft.width - Style.space(36))
                   spacing: Style.space(2)
 
                   Text {
+                    width: parent.width
                     text: root.activeSportMeta.label
                     color: root.fgColor
                     font.family: Style.font.family
                     font.pixelSize: Style.font.heading
                     font.bold: true
+                    elide: Text.ElideRight
                   }
 
                   Text {
+                    width: parent.width
                     text: root.statusLine()
                     color: root.errorMessage !== "" ? root.urgentColor : Qt.darker(root.fgColor, 1.45)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
                   }
                 }
               }
@@ -1574,7 +1581,7 @@ Panel {
                 id: headerControls
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(8)
+                spacing: Style.space(6)
 
                 // Notifications Toggle Button
                 Button {
