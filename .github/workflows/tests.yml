@@ -33,4 +33,12 @@ jobs:
           sudo apt-get install -y qt6-declarative-dev qml6-module-qtquick
 
       - name: QML syntax check
-        run: qmllint6 *.qml || qmllint *.qml || /usr/lib/qt6/bin/qmllint *.qml
+        run: |
+          LINT=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qmllint)
+          out=$("$LINT" ./*.qml 2>&1) || true
+          if printf '%s\n' "$out" | grep -qE '^Error'; then
+            printf '%s\n' "$out"
+            echo "::error::qmllint reported syntax errors"
+            exit 1
+          fi
+          echo "QML syntax OK (environmental qs.* warnings suppressed)"
