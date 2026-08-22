@@ -35,6 +35,9 @@ Panel {
 
   property var savedState: Model.defaultState()
   property bool stateLoaded: false
+  // Snapshot of the last state we wrote ourselves, so our own FileView writes
+  // can be distinguished from external edits (which trigger a fresh round)
+  property string ignoredStateSignature: ""
   property var selectedLeagueIds: ["61"]
   property var selectedTeamIds: []
   property string selectedTeamId: ""
@@ -276,6 +279,13 @@ Panel {
   property var roundResults: ({})
   property var retryCounts: ({})
   property var pendingRetryIds: []
+  property int espnRetryCount: 0
+  property int espnRetrySerial: 0
+  property string espnSportPath: ""
+  property string espnSportCode: ""
+  property string espnDefaultName: ""
+  property int f1RetryCount: 0
+  property int f1RetrySerial: 0
 
   // ---- Focus navigation ---------------------------------------------------
   property int focusSection: 0
@@ -357,8 +367,16 @@ Panel {
   ]
 
   function switchSport(sportValue) {
-    if (activeSport === sportValue) return
-    activeSport = String(sportValue)
+    var next = String(sportValue || "").toLowerCase()
+    var valid = false
+    var sportsList = Model.sports()
+    for (var i = 0; i < sportsList.length; i++) {
+      if (sportsList[i].value === next) { valid = true; break }
+    }
+    // Ignore unknown values (e.g. bad IPC input) — they would otherwise leave
+    // the round dispatcher with no worker and the spinner stuck forever
+    if (!valid || activeSport === next) return
+    activeSport = next
     savedState.sport = activeSport
     restoreSportSelections()
     fixtureFilterId = activeSport === "f1" ? "all" : (selectedTeamIds.length > 0 ? "team" : "all")
@@ -403,6 +421,7 @@ Panel {
   }
 
   function toggleSpoiler() {
+    console.log("matchday: toggleSpoiler called, stateLoaded=" + stateLoaded)
     antiSpoiler = !antiSpoiler
     savedState.antiSpoiler = antiSpoiler
     persistState()
@@ -413,10 +432,6 @@ Panel {
     for (var k in revealedMatchIds) next[k] = revealedMatchIds[k]
     next[String(matchId)] = true
     revealedMatchIds = next
-  }
-
-  function isMatchRevealed(matchId) {
-    return !antiSpoiler || revealedMatchIds[String(matchId)] === true
   }
 
   // ---- Navigation ---------------------------------------------------------
@@ -536,15 +551,21 @@ Panel {
     enableNotifications = savedState.notifications !== false
     restoreSportSelections()
     stateLoaded = true
+    console.log("matchday: state applied, sport=" + activeSport + " fbTeams=" + savedState.football.teamIds.length)
 
     if (leaguePicker) leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
-    if (!ownWrite) root.startRound()
+    if (!ownWrite) {
+      espnRetryCount = 0
+      f1RetryCount = 0
+      root.startRound()
+    }
   }
 
   function persistState() {
     if (!stateLoaded) return
     var curSport = activeSport
+    var tabName = tabIndex === 2 ? "standings" : (tabIndex === 1 ? "live" : "fixtures")
     var sportSettings = {}
     var sportsList = ["nba", "f1", "nfl", "mlb", "nhl"]
     for (var s = 0; s < sportsList.length; s++) {
@@ -555,7 +576,8 @@ Panel {
           teamIds: selectedTeamIds,
           teamId: selectedTeamId,
           teamName: selectedTeamName,
-          standingsGroup: standingsLeagueId
+          standingsGroup: standingsLeagueId,
+          tab: tabName
         }
       } else {
         sportSettings[spk] = prevSp
@@ -575,6 +597,9 @@ Panel {
       antiSpoiler,
       enableNotifications
     )
+    // statePayload rebuilds football without a tab; restore it so the written
+    // shape round-trips exactly through parseState (signature check in applyState)
+    savedState.football.tab = curSport === "football" ? tabName : String(fb.tab || "fixtures")
     ignoredStateSignature = JSON.stringify(savedState)
     stateFile.setText(JSON.stringify(savedState, null, 2) + "\n")
   }
@@ -584,7 +609,7 @@ Panel {
     savedState.notifications = enableNotifications
     persistState()
     if (enableNotifications) {
-      sendDesktopNotification("Omarchy Matchday", "Notificações de golos e inícios de jogo ativadas!", "", "normal")
+      sendDesktopNotification("Omarchy Matchday", "Goal and kickoff notifications enabled!", "", "normal")
     }
   }
 
@@ -600,6 +625,15 @@ Panel {
     cmd.push(title, body)
     notifierProc.command = cmd
     notifierProc.running = true
+  }
+
+  function logoCacheDir() {
+    return Quickshell.env("HOME") + "/.cache/omarchy-matchday/logos/"
+  }
+
+  function crestIconPath(sport, team) {
+    var key = Model.crestCacheKey(sport, team && team.id ? team.id : "", team && team.abbr ? team.abbr : "")
+    return key !== "" ? logoCacheDir() + key + ".png" : ""
   }
 
   function checkScoreNotifications() {
@@ -619,9 +653,8 @@ Panel {
 
       var hId = String(m.home && m.home.id || "").toLowerCase()
       var aId = String(m.away && m.away.id || "").toLowerCase()
-      var hName = String(m.home && m.home.name || "").toLowerCase()
-      var aName = String(m.away && m.away.name || "").toLowerCase()
-      var isFav = (favSet[hId] || favSet[aId] || favSet[hName] || favSet[aName] || root.activeSport === "f1" || favIds.length === 0)
+      // Only followed teams notify (all events still notify on F1 weekends)
+      var isFav = favSet[hId] || favSet[aId] || root.activeSport === "f1"
 
       var prev = lastSeenMatches[m.id]
 
@@ -629,9 +662,8 @@ Panel {
         // 1. Kickoff / Started Live
         if (m.status === "live" && prev.status === "upcoming") {
           var startTitle = m.sport === "f1" ? ("🏁 F1: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("● LIVE: " + m.home.name + " vs " + m.away.name)
-          var startBody = m.sport === "f1" ? ("A sessão começou em " + (m.locality || m.country || "direto") + "!") : ("O jogo começou! " + (m.leagueName ? "· " + m.leagueName : ""))
-          var startLogo = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + (m.home && m.home.id ? m.home.id : "logo") + ".png"
-          sendDesktopNotification(startTitle, startBody, startLogo, "normal")
+          var startBody = m.sport === "f1" ? ("The session is underway in " + (m.locality || m.country || "live") + "!") : ("The match has kicked off! " + (m.leagueName ? "· " + m.leagueName : ""))
+          sendDesktopNotification(startTitle, startBody, crestIconPath(m.sport || root.activeSport, m.home), "normal")
         }
 
         // 2. Goal / Score change
@@ -640,17 +672,15 @@ Panel {
           var aDiff = (m.awayScore || 0) - (prev.awayScore || 0)
 
           if (hDiff > 0) {
-            var gTitle1 = m.sport === "football" ? ("⚽ GOLO! " + m.home.name) : ("🏀 " + m.home.name + " (+" + hDiff + ")")
+            var gTitle1 = m.sport === "football" ? ("⚽ GOAL! " + m.home.name) : (Model.sportMeta(m.sport).icon + " " + m.home.name + " (+" + hDiff + ")")
             var gBody1 = m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : "")
-            var gLogo1 = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + m.home.id + ".png"
-            sendDesktopNotification(gTitle1, gBody1, gLogo1, "critical")
+            sendDesktopNotification(gTitle1, gBody1, crestIconPath(m.sport || root.activeSport, m.home), "critical")
           }
 
           if (aDiff > 0) {
-            var gTitle2 = m.sport === "football" ? ("⚽ GOLO! " + m.away.name) : ("🏀 " + m.away.name + " (+" + aDiff + ")")
+            var gTitle2 = m.sport === "football" ? ("⚽ GOAL! " + m.away.name) : (Model.sportMeta(m.sport).icon + " " + m.away.name + " (+" + aDiff + ")")
             var gBody2 = m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : "")
-            var gLogo2 = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + m.away.id + ".png"
-            sendDesktopNotification(gTitle2, gBody2, gLogo2, "critical")
+            sendDesktopNotification(gTitle2, gBody2, crestIconPath(m.sport || root.activeSport, m.away), "critical")
           }
         }
 
@@ -660,10 +690,9 @@ Panel {
           if (!isNaN(msTime)) {
             var diffMins = Math.floor((msTime - now) / 60000)
             if (diffMins > 0 && diffMins <= 15) {
-              var uTitle = m.sport === "f1" ? ("🏎️ F1 a começar: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("⏰ A começar em " + diffMins + "m: " + m.home.name + " vs " + m.away.name)
-              var uBody = (m.leagueName ? m.leagueName + " · " : "") + "Início previsto às " + Qt.formatDateTime(new Date(msTime), "HH:mm")
-              var uLogo = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + (m.home && m.home.id ? m.home.id : "") + ".png"
-              sendDesktopNotification(uTitle, uBody, uLogo, "normal")
+              var uTitle = m.sport === "f1" ? ("🏎️ F1 starting soon: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("⏰ Starting in " + diffMins + "m: " + m.home.name + " vs " + m.away.name)
+              var uBody = (m.leagueName ? m.leagueName + " · " : "") + "Scheduled start at " + Qt.formatDateTime(new Date(msTime), "HH:mm")
+              sendDesktopNotification(uTitle, uBody, crestIconPath(m.sport || root.activeSport, m.home), "normal")
               prev.notifiedUpcoming = true
             }
           }
@@ -767,6 +796,8 @@ Panel {
       stateFile.reload()
       return
     }
+    espnRetryCount = 0
+    f1RetryCount = 0
     startRound()
   }
 
@@ -913,18 +944,25 @@ Panel {
   }
 
   // ---- ESPN Scoreboard & Standings (NBA, NFL, MLB, NHL) ---------------------
-  function startEspnRound(espnSportPath, sportCode, defaultName) {
+  function startEspnRound(espnPath, sportCode, defaultName) {
+    espnSportPath = String(espnPath)
+    espnSportCode = String(sportCode)
+    espnDefaultName = String(defaultName)
+    // Multi-day window so Fixtures shows recent results and upcoming games,
+    // not just today's slate
+    var dates = "dates=" + Model.espnDateRange(1, 3)
+
     workerScoreboard.handled = false
     workerScoreboard.serial = root.requestSerial
     workerScoreboard.sportCode = sportCode
     workerScoreboard.defaultName = defaultName
-    workerScoreboard.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/site/v2/sports/" + espnSportPath + "/scoreboard"]
+    workerScoreboard.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard?" + dates]
     workerScoreboard.running = true
 
     workerStandings.handled = false
     workerStandings.serial = root.requestSerial
     workerStandings.sportCode = sportCode
-    workerStandings.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/v2/sports/" + espnSportPath + "/standings"]
+    workerStandings.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings"]
     workerStandings.running = true
   }
 
@@ -952,6 +990,12 @@ Panel {
 
   function checkEspnDone() {
     if (!workerScoreboard.running && !workerStandings.running) {
+      if (allMatches.length === 0 && Object.keys(multiSportStandings).length === 0 && espnRetryCount < 2) {
+        espnRetryCount++
+        espnRetrySerial = requestSerial
+        espnRetryDelay.restart()
+        return
+      }
       loading = false
       ensureStandingsSelection()
       downloadMissingLogos()
@@ -982,6 +1026,12 @@ Panel {
 
   function checkF1Done() {
     if (!workerF1Calendar.running && !workerF1Drivers.running && !workerF1Constructors.running) {
+      if (allMatches.length === 0 && f1RetryCount < 2) {
+        f1RetryCount++
+        f1RetrySerial = requestSerial
+        f1RetryDelay.restart()
+        return
+      }
       loading = false
       ensureStandingsSelection()
       downloadMissingLogos()
@@ -997,7 +1047,8 @@ Panel {
     var items = []
     var seen = {}
 
-    // Collect all matches home/away
+    // Collect all matches home/away (keys must match Model.crestCacheKey so
+    // TeamCrest.qml finds the files the downloader saves)
     var ms = Model.arrayFrom(allMatches)
     for (var i = 0; i < ms.length; i++) {
       var m = ms[i]
@@ -1005,16 +1056,16 @@ Panel {
       var sp = String(m.sport || root.activeSport || "football").toLowerCase()
       if (m.home && m.home.id) {
         var u1 = m.home.logo || (sp === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + m.home.id + ".png") : "")
-        var k1 = sp + "-" + String(m.home.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
-        if (!seen[k1] && u1.indexOf("http") === 0) {
+        var k1 = Model.crestCacheKey(sp, m.home.id, m.home.abbr || "")
+        if (k1 !== "" && !seen[k1] && u1.indexOf("http") === 0) {
           seen[k1] = true
           items.push({ url: u1, key: k1 })
         }
       }
       if (m.away && m.away.id) {
         var u2 = m.away.logo || (sp === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + m.away.id + ".png") : "")
-        var k2 = sp + "-" + String(m.away.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
-        if (!seen[k2] && u2.indexOf("http") === 0) {
+        var k2 = Model.crestCacheKey(sp, m.away.id, m.away.abbr || "")
+        if (k2 !== "" && !seen[k2] && u2.indexOf("http") === 0) {
           seen[k2] = true
           items.push({ url: u2, key: k2 })
         }
@@ -1028,8 +1079,8 @@ Panel {
       if (row && row.id) {
         var sp2 = String(root.activeSport || "football").toLowerCase()
         var u3 = row.logo || (sp2 === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + row.id + ".png") : "")
-        var k3 = sp2 + "-" + String(row.id).toLowerCase().replace(/[^a-z0-9_-]/g, "")
-        if (!seen[k3] && u3.indexOf("http") === 0) {
+        var k3 = Model.crestCacheKey(sp2, row.id, row.abbr || "")
+        if (k3 !== "" && !seen[k3] && u3.indexOf("http") === 0) {
           seen[k3] = true
           items.push({ url: u3, key: k3 })
         }
@@ -1179,6 +1230,7 @@ Panel {
   }
 
   Component.onCompleted: {
+    console.log("matchday: panel instantiated")
     stateFile.reload()
   }
 
@@ -1431,6 +1483,25 @@ Panel {
       roundQueue = roundQueue.concat(pendingRetryIds)
       pendingRetryIds = []
       root.pumpFootball()
+    }
+  }
+
+  // Retry dead rounds for ESPN sports (same contract as the football retry)
+  Timer {
+    id: espnRetryDelay
+    interval: 2500
+    onTriggered: {
+      if (root.loading && root.activeSport === root.espnSportCode && root.requestSerial === root.espnRetrySerial)
+        root.startEspnRound(root.espnSportPath, root.espnSportCode, root.espnDefaultName)
+    }
+  }
+
+  Timer {
+    id: f1RetryDelay
+    interval: 2500
+    onTriggered: {
+      if (root.loading && root.activeSport === "f1" && root.requestSerial === root.f1RetrySerial)
+        root.startF1Round()
     }
   }
 
@@ -2100,408 +2171,24 @@ Panel {
               }
 
               // ---- Spotlight Featured Card ----------------------------------
-              Item {
-                id: spotlightCard
-                width: parent.width
-                implicitHeight: spotlightSurface.implicitHeight
+              MatchSpotlight {
                 visible: (root.selectedTeamIds.length > 0 && root.featuredMatch !== null) || (root.activeSport === "f1" && root.allMatches.length > 0)
-
-                readonly property var match: root.featuredMatch || (root.activeSport === "f1" && root.allMatches.length > 0 ? root.allMatches[0] : null)
-                readonly property bool isF1: root.activeSport === "f1"
-                readonly property bool isLive: match && match.status === "live"
-                readonly property bool isUpcoming: match && match.status === "upcoming"
-                readonly property bool isFinished: match && match.status === "finished"
-                readonly property string outcome: match ? Model.teamOutcome(match, root.selectedTeamId) : ""
-                readonly property bool scoreHidden: root.antiSpoiler && isFinished && !root.isMatchRevealed(match ? match.id : "")
-
-                Rectangle {
-                  id: spotlightSurface
-                  width: parent.width
-                  implicitHeight: spotlightCol.implicitHeight + Style.space(24)
-                  radius: Style.cornerRadius
-                  color: spotlightMouse.containsMouse
-                    ? Style.hoverFillFor(root.fgColor, Color.accent)
-                    : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.035)
-                  border.width: 1
-                  border.color: spotlightMouse.containsMouse
-                    ? Color.accent
-                    : (spotlightCard.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.12))
-
-                  Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                  Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
-                  Column {
-                    id: spotlightCol
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: Style.space(14)
-                    spacing: Style.space(12)
-
-                    // Top Row
-                    Item {
-                      id: spotlightTopRow
-                      width: parent.width
-                      implicitHeight: Math.max(spotlightTags.implicitHeight, spotlightStatusPill.implicitHeight)
-
-                      Row {
-                        id: spotlightTags
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: Style.space(8)
-
-                        Rectangle {
-                          implicitWidth: spotlightTagLabel.implicitWidth + Style.space(8)
-                          implicitHeight: spotlightTagLabel.implicitHeight + Style.space(4)
-                          radius: Math.min(3, Style.cornerRadius)
-                          color: Util.alpha(Color.accent, 0.18)
-                          anchors.verticalCenter: parent.verticalCenter
-
-                          Text {
-                            id: spotlightTagLabel
-                            anchors.centerIn: parent
-                            text: spotlightCard.isF1 ? "GRAND PRIX" : "SPOTLIGHT"
-                            color: Color.accent
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.caption
-                            font.bold: true
-                            font.letterSpacing: 0.8
-                          }
-                        }
-
-                        Text {
-                          anchors.verticalCenter: parent.verticalCenter
-                          text: (spotlightCard.match ? spotlightCard.match.leagueName : "") + (spotlightCard.match && spotlightCard.match.round ? " · " + spotlightCard.match.round : "")
-                          color: Qt.darker(root.fgColor, 1.35)
-                          font.family: Style.font.family
-                          font.pixelSize: Style.font.caption
-                          font.bold: true
-                        }
-                      }
-
-                      Rectangle {
-                        id: spotlightStatusPill
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitWidth: statusPillRow.implicitWidth + Style.space(10)
-                        implicitHeight: statusPillRow.implicitHeight + Style.space(4)
-                        radius: Math.min(4, Style.cornerRadius)
-                        color: spotlightCard.isLive
-                          ? root.urgentColor
-                          : (spotlightCard.outcome === "win" && !spotlightCard.scoreHidden
-                             ? Color.accent
-                             : (spotlightCard.outcome === "loss" && !spotlightCard.scoreHidden ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.10)))
-
-                        Row {
-                          id: statusPillRow
-                          anchors.centerIn: parent
-                          spacing: Style.space(4)
-
-                          Rectangle {
-                            visible: spotlightCard.isLive
-                            width: Style.space(5)
-                            height: width
-                            radius: width / 2
-                            color: "#ffffff"
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            SequentialAnimation on opacity {
-                              running: spotlightCard.isLive
-                              loops: Animation.Infinite
-                              NumberAnimation { to: 0.2; duration: 500 }
-                              NumberAnimation { to: 1.0; duration: 500 }
-                            }
-                          }
-
-                          Text {
-                            text: spotlightCard.isLive
-                              ? ("LIVE " + (spotlightCard.match ? spotlightCard.match.liveTime : ""))
-                              : (spotlightCard.match && spotlightCard.match.status === "finished"
-                                 ? (spotlightCard.scoreHidden ? "FT · REVEAL 󰈈" : ("FT" + (spotlightCard.outcome ? " · " + spotlightCard.outcome.toUpperCase() : "")))
-                                 : (spotlightCard.match ? Qt.formatDateTime(new Date(Date.parse(spotlightCard.match.time || "")), "ddd d MMM · HH:mm") : ""))
-                            color: (spotlightCard.isLive || (!spotlightCard.scoreHidden && (spotlightCard.outcome === "win" || spotlightCard.outcome === "loss"))) ? "#ffffff" : root.fgColor
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.caption
-                            font.bold: true
-                          }
-                        }
-                      }
-                    }
-
-                    // F1 Specific Spotlight Layout
-                    Item {
-                      width: parent.width
-                      implicitHeight: f1HeroCol.implicitHeight
-                      visible: spotlightCard.isF1
-
-                      Column {
-                        id: f1HeroCol
-                        width: parent.width
-                        spacing: Style.space(4)
-
-                        Row {
-                          width: parent.width
-                          spacing: Style.space(10)
-
-                          Text {
-                            text: (spotlightCard.match && spotlightCard.match.countryFlag) ? spotlightCard.match.countryFlag : "🏎"
-                            font.pixelSize: Style.font.display
-                            anchors.verticalCenter: parent.verticalCenter
-                          }
-
-                          Column {
-                            width: parent.width - Style.space(46)
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Style.space(2)
-
-                            Text {
-                              width: parent.width
-                              text: spotlightCard.match ? (spotlightCard.match.raceName || spotlightCard.match.home.name) : "Grand Prix"
-                              color: root.fgColor
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.title
-                              font.bold: true
-                              elide: Text.ElideRight
-                            }
-
-                            Text {
-                              width: parent.width
-                              text: spotlightCard.match ? ((spotlightCard.match.circuitName || "") + (spotlightCard.match.locality ? " · " + spotlightCard.match.locality : "") + (spotlightCard.match.country ? ", " + spotlightCard.match.country : "")) : ""
-                              color: Qt.darker(root.fgColor, 1.45)
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.bodySmall
-                              elide: Text.ElideRight
-                            }
-                          }
-                        }
-
-                        // Driver standing badge if driver followed
-                        Rectangle {
-                          visible: root.favoriteDriverStanding !== null
-                          implicitWidth: driverPillRow.implicitWidth + Style.space(14)
-                          implicitHeight: driverPillRow.implicitHeight + Style.space(6)
-                          radius: Math.min(4, Style.cornerRadius)
-                          color: Util.alpha(Color.accent, 0.12)
-                          border.width: 1
-                          border.color: Color.accent
-
-                          Row {
-                            id: driverPillRow
-                            anchors.centerIn: parent
-                            spacing: Style.space(6)
-
-                            TeamCrest {
-                              sport: "f1"
-                              teamId: root.favoriteDriverStanding ? root.favoriteDriverStanding.teamId : ""
-                              teamName: root.favoriteDriverStanding ? root.favoriteDriverStanding.teamName : ""
-                              crestSize: Style.space(16)
-                              anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            Text {
-                              text: "★ " + root.selectedTeamName + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
-                              color: Color.accent
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.caption
-                              font.bold: true
-                              anchors.verticalCenter: parent.verticalCenter
-                            }
-                          }
-                        }
-                      }
-                    }
-
-                    // Standard Team vs Team Core Layout (Football, NBA, NFL, MLB, NHL)
-                    Item {
-                      width: parent.width
-                      implicitHeight: Math.max(homeBounding.implicitHeight, awayBounding.implicitHeight, centerScoreBadge.implicitHeight)
-                      visible: !spotlightCard.isF1
-
-                      // Left Side (Home)
-                      Item {
-                        id: homeBounding
-                        anchors.left: parent.left
-                        anchors.right: centerScoreBadge.left
-                        anchors.rightMargin: Style.space(10)
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitHeight: Math.max(homeCrest.height, homeTextCol.implicitHeight)
-
-                        TeamCrest {
-                          id: homeCrest
-                          anchors.right: parent.right
-                          anchors.verticalCenter: parent.verticalCenter
-                          sport: spotlightCard.match ? spotlightCard.match.sport : "football"
-                          teamId: spotlightCard.match ? spotlightCard.match.home.id : ""
-                          teamName: spotlightCard.match ? spotlightCard.match.home.name : ""
-                          abbr: spotlightCard.match && spotlightCard.match.home.abbr ? spotlightCard.match.home.abbr : ""
-                          source: spotlightCard.match && spotlightCard.match.home.logo ? spotlightCard.match.home.logo : ""
-                          crestSize: Style.space(32)
-                        }
-
-                        Column {
-                          id: homeTextCol
-                          anchors.left: parent.left
-                          anchors.right: homeCrest.left
-                          anchors.rightMargin: Style.space(8)
-                          anchors.verticalCenter: parent.verticalCenter
-                          spacing: Style.space(2)
-
-                          Text {
-                            width: parent.width
-                            text: spotlightCard.match ? spotlightCard.match.home.name || spotlightCard.match.home.shortName : ""
-                            color: String(spotlightCard.match && spotlightCard.match.home.id) === String(root.selectedTeamId) ? Color.accent : root.fgColor
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.title
-                            font.bold: true
-                            horizontalAlignment: Text.AlignRight
-                            elide: Text.ElideRight
-                          }
-
-                          Text {
-                            width: parent.width
-                            text: spotlightCard.match && spotlightCard.match.home.record ? spotlightCard.match.home.record : (String(spotlightCard.match && spotlightCard.match.home.id) === String(root.selectedTeamId) ? "HOME · FAVORITE" : "HOME")
-                            color: Qt.darker(root.fgColor, 1.55)
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.caption
-                            horizontalAlignment: Text.AlignRight
-                            elide: Text.ElideRight
-                          }
-                        }
-                      }
-
-                      // Center Score Box
-                      Item {
-                        id: centerScoreBadge
-                        anchors.centerIn: parent
-                        width: Style.space(80)
-                        height: Style.space(32)
-
-                        Rectangle {
-                          anchors.centerIn: parent
-                          width: parent.width
-                          height: parent.height
-                          radius: Math.min(5, Style.cornerRadius)
-                          color: spotlightCard.isLive
-                            ? Util.alpha(root.urgentColor, 0.15)
-                            : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06)
-                          border.width: 1
-                          border.color: spotlightCard.isLive
-                            ? root.urgentColor
-                            : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.12)
-
-                          Text {
-                            anchors.centerIn: parent
-                            text: spotlightCard.scoreHidden
-                              ? "••••"
-                              : (spotlightCard.match && spotlightCard.match.status !== "upcoming"
-                                 ? (spotlightCard.match.scoreText || "–")
-                                 : (root.kickoffTime(spotlightCard.match) || "VS"))
-                            color: spotlightCard.isLive ? root.urgentColor : (spotlightCard.isUpcoming ? Color.accent : root.fgColor)
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.body
-                            font.bold: true
-                          }
-                        }
-                      }
-
-                      // Right Side (Away)
-                      Item {
-                        id: awayBounding
-                        anchors.left: centerScoreBadge.right
-                        anchors.leftMargin: Style.space(10)
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitHeight: Math.max(awayCrest.height, awayTextCol.implicitHeight)
-
-                        TeamCrest {
-                          id: awayCrest
-                          anchors.left: parent.left
-                          anchors.verticalCenter: parent.verticalCenter
-                          sport: spotlightCard.match ? spotlightCard.match.sport : "football"
-                          teamId: spotlightCard.match ? spotlightCard.match.away.id : ""
-                          teamName: spotlightCard.match ? spotlightCard.match.away.name : ""
-                          abbr: spotlightCard.match && spotlightCard.match.away.abbr ? spotlightCard.match.away.abbr : ""
-                          source: spotlightCard.match && spotlightCard.match.away.logo ? spotlightCard.match.away.logo : ""
-                          crestSize: Style.space(32)
-                        }
-
-                        Column {
-                          id: awayTextCol
-                          anchors.left: awayCrest.right
-                          anchors.leftMargin: Style.space(8)
-                          anchors.right: parent.right
-                          anchors.verticalCenter: parent.verticalCenter
-                          spacing: Style.space(2)
-
-                          Text {
-                            width: parent.width
-                            text: spotlightCard.match ? spotlightCard.match.away.name || spotlightCard.match.away.shortName : ""
-                            color: String(spotlightCard.match && spotlightCard.match.away.id) === String(root.selectedTeamId) ? Color.accent : root.fgColor
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.title
-                            font.bold: true
-                            horizontalAlignment: Text.AlignLeft
-                            elide: Text.ElideRight
-                          }
-
-                          Text {
-                            width: parent.width
-                            text: spotlightCard.match && spotlightCard.match.away.record ? spotlightCard.match.away.record : (String(spotlightCard.match && spotlightCard.match.away.id) === String(root.selectedTeamId) ? "AWAY · FAVORITE" : "AWAY")
-                            color: Qt.darker(root.fgColor, 1.55)
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.caption
-                            horizontalAlignment: Text.AlignLeft
-                            elide: Text.ElideRight
-                          }
-                        }
-                      }
-                    }
-
-                    // Bottom Details Line
-                    Item {
-                      width: parent.width
-                      implicitHeight: Math.max(metaTextSub.implicitHeight, fotmobTextLink.implicitHeight)
-
-                      Text {
-                        id: metaTextSub
-                        anchors.left: parent.left
-                        anchors.right: fotmobTextLink.left
-                        anchors.rightMargin: Style.space(8)
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.matchSubline(spotlightCard.match) || (spotlightCard.match && spotlightCard.match.leagueName ? spotlightCard.match.leagueName + " Event" : "Matchday Details")
-                        color: Qt.darker(root.fgColor, 1.45)
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        elide: Text.ElideRight
-                      }
-
-                      Text {
-                        id: fotmobTextLink
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: (root.activeSport === "football" ? "FotMob" : "Official") + " 󰌹"
-                        color: Color.accent
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                      }
-                    }
-                  }
-
-                  MouseArea {
-                    id: spotlightMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                      if (spotlightCard.scoreHidden) {
-                        root.revealMatch(spotlightCard.match.id)
-                      } else {
-                        root.openMatch(spotlightCard.match)
-                      }
-                    }
-                  }
-                }
+                featuredMatch: root.featuredMatch
+                fallbackMatch: root.activeSport === "f1" && root.allMatches.length > 0 ? root.allMatches[0] : null
+                isF1: root.activeSport === "f1"
+                activeSport: root.activeSport
+                fgColor: root.fgColor
+                urgentColor: root.urgentColor
+                selectedTeamId: root.selectedTeamId
+                selectedTeamIds: root.selectedTeamIds
+                selectedTeamName: root.selectedTeamName
+                antiSpoiler: root.antiSpoiler
+                revealedMatchIds: root.revealedMatchIds
+                favoriteDriverStanding: root.favoriteDriverStanding
+                kickoffTime: root.kickoffTime
+                matchSubline: root.matchSubline
+                openMatch: root.openMatch
+                revealMatch: root.revealMatch
               }
 
               // ---- Schedule Header with Filter -----------------------------
@@ -2598,7 +2285,17 @@ Panel {
 
                       Repeater {
                         model: modelData.matches
-                        delegate: MatchRow {}
+                        delegate: MatchRow {
+                          activeSport: root.activeSport
+                          fgColor: root.fgColor
+                          urgentColor: root.urgentColor
+                          selectedTeamId: root.selectedTeamId
+                          antiSpoiler: root.antiSpoiler
+                          revealedMatchIds: root.revealedMatchIds
+                          nowMs: root.nowMs
+                          revealMatch: root.revealMatch
+                          openMatch: root.openMatch
+                        }
                       }
                     }
                   }
@@ -2705,7 +2402,15 @@ Panel {
 
                 Repeater {
                   model: Model.liveMatches(root.allMatches, root.matchDetails)
-                  delegate: LiveRow {}
+                  delegate: LiveRow {
+                    activeSport: root.activeSport
+                    activeSportIcon: root.activeSportIcon
+                    fgColor: root.fgColor
+                    urgentColor: root.urgentColor
+                    matchDetails: root.matchDetails
+                    matchSubline: root.matchSubline
+                    openMatch: root.openMatch
+                  }
                 }
               }
             }
@@ -2866,7 +2571,14 @@ Panel {
 
                     Repeater {
                       model: root.standingsRows
-                      delegate: StandingsRow {}
+                      delegate: StandingsRow {
+                        activeSport: root.activeSport
+                        standingsLeagueId: root.standingsLeagueId
+                        selectedTeamId: root.selectedTeamId
+                        selectedTeamName: root.selectedTeamName
+                        fgColor: root.fgColor
+                        urgentColor: root.urgentColor
+                      }
                     }
                   }
                 }
@@ -2918,1146 +2630,6 @@ Panel {
           }
         }
       }
-    }
-  }
-
-  // ==========================================================================
-  // REUSABLE COMPONENTS
-  // ==========================================================================
-
-  // Match Row
-  component MatchRow: Item {
-    id: matchDelegate
-    required property var modelData
-
-    readonly property bool isF1: root.activeSport === "f1"
-    readonly property bool isLive: modelData.status === "live"
-    readonly property bool isUpcoming: modelData.status === "upcoming"
-    readonly property bool isFinished: modelData.status === "finished"
-    readonly property bool favIsHome: String(modelData.home.id) === String(root.selectedTeamId)
-    readonly property bool favIsAway: String(modelData.away.id) === String(root.selectedTeamId)
-    readonly property string dateBadge: Model.formatMatchDate(modelData.time)
-    readonly property bool isScoreRevealed: root.isMatchRevealed(modelData.id)
-    readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
-    property bool expanded: false
-
-    width: parent.width
-    implicitHeight: matchCard.implicitHeight
-
-    Rectangle {
-      id: matchCard
-      width: parent.width
-      implicitHeight: matchDelegate.isF1 ? (f1ContainerCol.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
-      radius: Math.min(6, Style.cornerRadius)
-      color: matchMouse.containsMouse
-        ? Style.hoverFillFor(root.fgColor, Color.accent)
-        : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.02)
-      border.width: 1
-      border.color: matchMouse.containsMouse
-        ? Color.accent
-        : (matchDelegate.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06))
-
-      Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
-      Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
-      Rectangle {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.margins: Style.space(3)
-        width: Style.space(3)
-        radius: width / 2
-        visible: matchDelegate.isLive
-        color: root.urgentColor
-      }
-
-      // F1 Grand Prix Container Layout (with sessions dropdown)
-      Column {
-        id: f1ContainerCol
-        visible: matchDelegate.isF1
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Style.space(12)
-        anchors.rightMargin: Style.space(12)
-        spacing: Style.space(8)
-
-        Row {
-          id: f1RowLayout
-          width: parent.width
-          spacing: Style.space(10)
-
-          Column {
-            width: Style.space(84)
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 1
-
-            Text {
-              text: matchDelegate.dateBadge
-              color: Qt.darker(root.fgColor, 1.35)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: true
-            }
-
-            Text {
-              text: modelData.round || "GP"
-              color: Color.accent
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: true
-            }
-          }
-
-          Row {
-            width: parent.width - Style.space(210)
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(8)
-
-            Text {
-              text: modelData.countryFlag || "🏁"
-              font.pixelSize: Style.font.heading
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Column {
-              width: parent.width - Style.space(28)
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: 1
-
-              Text {
-                width: parent.width
-                text: modelData.raceName || modelData.home.name
-                color: root.fgColor
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-                elide: Text.ElideRight
-              }
-
-              Text {
-                width: parent.width
-                text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
-                color: Qt.darker(root.fgColor, 1.55)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                elide: Text.ElideRight
-              }
-            }
-          }
-
-          Row {
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(6)
-
-            Rectangle {
-              implicitWidth: f1StatusText.implicitWidth + Style.space(10)
-              implicitHeight: f1StatusText.implicitHeight + Style.space(4)
-              radius: Math.min(4, Style.cornerRadius)
-              color: matchDelegate.isLive
-                ? root.urgentColor
-                : (matchDelegate.isFinished ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08) : Util.alpha(Color.accent, 0.15))
-
-              Text {
-                id: f1StatusText
-                anchors.centerIn: parent
-                text: matchDelegate.isFinished ? "Official" : (matchDelegate.isLive ? "RACE DAY" : root.kickoffTime(modelData))
-                color: matchDelegate.isLive ? "#ffffff" : (matchDelegate.isFinished ? Qt.darker(root.fgColor, 1.3) : Color.accent)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-            }
-
-            Text {
-              visible: matchDelegate.isF1 && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
-              text: matchDelegate.expanded ? "󰅃" : "󰅀"
-              color: Qt.darker(root.fgColor, 1.5)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              anchors.verticalCenter: parent.verticalCenter
-            }
-          }
-        }
-
-        // Expandable Grand Prix Weekend Sessions Box
-        Column {
-          id: f1SessionsDropdown
-          visible: matchDelegate.isF1 && matchDelegate.expanded && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
-          width: parent.width
-          spacing: Style.space(4)
-          topPadding: Style.space(4)
-          bottomPadding: Style.space(4)
-
-          Rectangle {
-            width: parent.width
-            height: 1
-            color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
-          }
-
-          Repeater {
-            model: modelData.sessions
-
-            delegate: Rectangle {
-              required property var modelData
-              required property int index
-
-              width: f1SessionsDropdown.width
-              implicitHeight: Style.space(22)
-              radius: 3
-              color: index % 2 === 1 ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.025) : "transparent"
-
-              Row {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Style.space(6)
-                anchors.rightMargin: Style.space(6)
-                spacing: Style.space(6)
-
-                Text {
-                  width: Style.space(140)
-                  text: (modelData.shortName === "Race" ? "🏁 " : (modelData.shortName === "Quali" ? "⏱ " : (modelData.shortName === "SQ" ? "⚡ " : "🏎 "))) + modelData.name
-                  color: modelData.shortName === "Race" ? Color.accent : root.fgColor
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  font.bold: modelData.shortName === "Race" || modelData.shortName === "Quali"
-                  elide: Text.ElideRight
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                  width: parent.width - Style.space(240)
-                  text: Qt.formatDateTime(new Date(Date.parse(modelData.time)), "ddd d MMM · HH:mm")
-                  color: Qt.darker(root.fgColor, 1.4)
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  elide: Text.ElideRight
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                  width: Style.space(84)
-                  text: {
-                    var ms = Date.parse(modelData.time)
-                    var now = root.nowMs
-                    if (isNaN(ms)) return ""
-                    if (now > ms + 2.5 * 3600 * 1000) return "Finished"
-                    if (now >= ms) return "LIVE"
-                    var diff = ms - now
-                    var hrs = Math.floor(diff / 3600000)
-                    var days = Math.floor(hrs / 24)
-                    if (days > 0) return "in " + days + "d " + (hrs % 24) + "h"
-                    var mins = Math.floor((diff % 3600000) / 60000)
-                    return "in " + hrs + "h " + mins + "m"
-                  }
-                  color: {
-                    var ms2 = Date.parse(modelData.time)
-                    if (root.nowMs >= ms2 && root.nowMs <= ms2 + 2.5 * 3600 * 1000) return root.urgentColor
-                    return Qt.darker(root.fgColor, 1.5)
-                  }
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  horizontalAlignment: Text.AlignRight
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Standard Team vs Team Match Row Layout
-      Row {
-        id: matchRowLayout
-        visible: !matchDelegate.isF1
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Style.space(12)
-        anchors.rightMargin: Style.space(12)
-        spacing: Style.space(6)
-
-        Column {
-          width: Style.space(88)
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: 1
-
-          Text {
-            text: matchDelegate.dateBadge
-            color: Qt.darker(root.fgColor, 1.35)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-
-          Text {
-            text: Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : "")
-            color: Qt.darker(root.fgColor, 1.6)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            elide: Text.ElideRight
-            width: parent.width
-          }
-        }
-
-        Item {
-          width: parent.width - Style.space(94)
-          height: Math.max(homeTeamLayout.implicitHeight, awayTeamLayout.implicitHeight, centerScoreHolder.implicitHeight)
-          anchors.verticalCenter: parent.verticalCenter
-
-          // Left Side (Home)
-          Item {
-            id: homeTeamLayout
-            anchors.left: parent.left
-            anchors.right: centerScoreHolder.left
-            anchors.rightMargin: Style.space(8)
-            anchors.verticalCenter: parent.verticalCenter
-            implicitHeight: Math.max(homeRowCrest.height, homeTeamText.implicitHeight)
-
-            TeamCrest {
-              id: homeRowCrest
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              sport: modelData.sport || "football"
-              teamId: modelData.home.id
-              teamName: modelData.home.name
-              abbr: modelData.home.abbr || ""
-              source: modelData.home.logo || ""
-              crestSize: Style.space(18)
-            }
-
-            Text {
-              id: homeTeamText
-              anchors.left: parent.left
-              anchors.right: homeRowCrest.left
-              anchors.rightMargin: Style.space(6)
-              anchors.verticalCenter: parent.verticalCenter
-              text: (matchDelegate.favIsHome ? "★ " : "") + (modelData.home.name || modelData.home.shortName)
-              color: matchDelegate.favIsHome ? Color.accent : root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
-              font.bold: matchDelegate.favIsHome || (modelData.homeScore > modelData.awayScore)
-              horizontalAlignment: Text.AlignRight
-              elide: Text.ElideRight
-            }
-          }
-
-          // Center Score
-          Item {
-            id: centerScoreHolder
-            anchors.centerIn: parent
-            width: Style.space(56)
-            height: parent.height
-
-            Row {
-              anchors.centerIn: parent
-              spacing: Style.space(3)
-
-              Rectangle {
-                visible: matchDelegate.isLive
-                width: Style.space(5)
-                height: width
-                radius: width / 2
-                color: root.urgentColor
-                anchors.verticalCenter: parent.verticalCenter
-
-                SequentialAnimation on opacity {
-                  running: matchDelegate.isLive
-                  loops: Animation.Infinite
-                  NumberAnimation { to: 0.25; duration: 500 }
-                  NumberAnimation { to: 1.0; duration: 500 }
-                }
-              }
-
-              Text {
-                id: scoreText
-                anchors.verticalCenter: parent.verticalCenter
-                text: matchDelegate.scoreHidden
-                  ? "••••"
-                  : (matchDelegate.isUpcoming
-                     ? root.kickoffTime(modelData)
-                     : (modelData.scoreText || "–"))
-                color: matchDelegate.isLive
-                  ? root.urgentColor
-                  : (matchDelegate.isUpcoming ? Qt.darker(root.fgColor, 1.2) : root.fgColor)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-              }
-            }
-          }
-
-          // Right Side (Away)
-          Item {
-            id: awayTeamLayout
-            anchors.left: centerScoreHolder.right
-            anchors.leftMargin: Style.space(8)
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            implicitHeight: Math.max(awayRowCrest.height, awayTeamText.implicitHeight)
-
-            TeamCrest {
-              id: awayRowCrest
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              sport: modelData.sport || "football"
-              teamId: modelData.away.id
-              teamName: modelData.away.name
-              abbr: modelData.away.abbr || ""
-              source: modelData.away.logo || ""
-              crestSize: Style.space(18)
-            }
-
-            Text {
-              id: awayTeamText
-              anchors.left: awayRowCrest.right
-              anchors.leftMargin: Style.space(6)
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              text: (modelData.away.name || modelData.away.shortName) + (matchDelegate.favIsAway ? " ★" : "")
-              color: matchDelegate.favIsAway ? Color.accent : root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
-              font.bold: matchDelegate.favIsAway || (modelData.awayScore > modelData.homeScore)
-              horizontalAlignment: Text.AlignLeft
-              elide: Text.ElideRight
-            }
-          }
-        }
-      }
-    }
-
-    MouseArea {
-      id: matchMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onClicked: {
-        if (matchDelegate.isF1) {
-          matchDelegate.expanded = !matchDelegate.expanded
-        } else if (matchDelegate.scoreHidden) {
-          root.revealMatch(modelData.id)
-        } else {
-          root.openMatch(modelData)
-        }
-      }
-    }
-  }
-
-  // Live Match Row
-  component LiveRow: Item {
-    id: liveDelegate
-    required property var modelData
-
-    readonly property string leagueName: Model.leagueLabel(liveDelegate.modelData.leagueId).toUpperCase()
-    readonly property var details: root.matchDetails[String(modelData.id)] || null
-
-    width: parent.width
-    implicitHeight: liveCard.implicitHeight
-
-    Rectangle {
-      id: liveCard
-      width: parent.width
-      implicitHeight: liveCol.implicitHeight + Style.space(22)
-      radius: Math.min(8, Style.cornerRadius)
-      color: liveMouse.containsMouse
-        ? Style.hoverFillFor(root.fgColor, root.urgentColor)
-        : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.05)
-      border.width: 1
-      border.color: liveMouse.containsMouse
-        ? root.urgentColor
-        : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.3)
-
-      Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
-      Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
-      Rectangle {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.margins: Style.space(4)
-        width: Style.space(4)
-        radius: width / 2
-        color: root.urgentColor
-
-        SequentialAnimation on opacity {
-          running: true
-          loops: Animation.Infinite
-          NumberAnimation { to: 0.4; duration: 600; easing.type: Easing.InOutQuad }
-          NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
-        }
-      }
-
-      Column {
-        id: liveCol
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Style.space(16)
-        anchors.rightMargin: Style.space(16)
-        spacing: Style.space(8)
-
-        Item {
-          id: liveTopRow
-          width: parent.width
-          implicitHeight: Math.max(liveLeagueText.implicitHeight, liveTimePill.implicitHeight)
-
-          Row {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(6)
-
-            Text {
-              text: root.activeSportIcon
-              font.pixelSize: Style.font.caption
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-              id: liveLeagueText
-              anchors.verticalCenter: parent.verticalCenter
-              text: liveDelegate.leagueName
-              color: root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              font.letterSpacing: 0.9
-            }
-
-            Text {
-              visible: liveDelegate.modelData.round !== ""
-              anchors.verticalCenter: parent.verticalCenter
-              text: "· " + liveDelegate.modelData.round
-              color: Qt.darker(root.fgColor, 1.5)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-          }
-
-          Rectangle {
-            id: liveTimePill
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            implicitWidth: liveTimeRow.implicitWidth + Style.space(12)
-            implicitHeight: liveTimeRow.implicitHeight + Style.space(4)
-            radius: Math.min(4, Style.cornerRadius)
-            color: root.urgentColor
-
-            Row {
-              id: liveTimeRow
-              anchors.centerIn: parent
-              spacing: Style.space(4)
-
-              Rectangle {
-                width: Style.space(5)
-                height: width
-                radius: width / 2
-                color: "#ffffff"
-                anchors.verticalCenter: parent.verticalCenter
-
-                SequentialAnimation on opacity {
-                  running: true
-                  loops: Animation.Infinite
-                  NumberAnimation { to: 0.2; duration: 500 }
-                  NumberAnimation { to: 1.0; duration: 500 }
-                }
-              }
-
-              Text {
-                text: liveDelegate.modelData.liveTime || "LIVE"
-                color: "#ffffff"
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-            }
-          }
-        }
-
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(liveHomeBounding.implicitHeight, liveAwayBounding.implicitHeight, liveScorePill.implicitHeight)
-
-          // Home Side (Left)
-          Item {
-            id: liveHomeBounding
-            anchors.left: parent.left
-            anchors.right: liveScorePill.left
-            anchors.rightMargin: Style.space(10)
-            anchors.verticalCenter: parent.verticalCenter
-            implicitHeight: Math.max(liveHomeCrest.height, liveHomeText.implicitHeight)
-
-            TeamCrest {
-              id: liveHomeCrest
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              sport: liveDelegate.modelData.sport || "football"
-              teamId: liveDelegate.modelData.home.id
-              teamName: liveDelegate.modelData.home.name
-              abbr: liveDelegate.modelData.home.abbr || ""
-              source: liveDelegate.modelData.home.logo || ""
-              crestSize: Style.space(26)
-            }
-
-            Text {
-              id: liveHomeText
-              anchors.left: parent.left
-              anchors.right: liveHomeCrest.left
-              anchors.rightMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              text: liveDelegate.modelData.home.name || liveDelegate.modelData.home.shortName
-              color: root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-              horizontalAlignment: Text.AlignRight
-              elide: Text.ElideRight
-            }
-          }
-
-          // Center Score
-          Rectangle {
-            id: liveScorePill
-            anchors.centerIn: parent
-            width: Style.space(88)
-            height: Style.space(32)
-            radius: Math.min(5, Style.cornerRadius)
-            color: Util.alpha(root.urgentColor, 0.2)
-            border.width: 1
-            border.color: root.urgentColor
-
-            Text {
-              anchors.centerIn: parent
-              text: liveDelegate.modelData.scoreText || "0–0"
-              color: root.urgentColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.heading
-              font.bold: true
-            }
-          }
-
-          // Away Side (Right)
-          Item {
-            id: liveAwayBounding
-            anchors.left: liveScorePill.right
-            anchors.leftMargin: Style.space(10)
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            implicitHeight: Math.max(liveAwayCrest.height, liveAwayText.implicitHeight)
-
-            TeamCrest {
-              id: liveAwayCrest
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              sport: liveDelegate.modelData.sport || "football"
-              teamId: liveDelegate.modelData.away.id
-              teamName: liveDelegate.modelData.away.name
-              abbr: liveDelegate.modelData.away.abbr || ""
-              source: liveDelegate.modelData.away.logo || ""
-              crestSize: Style.space(26)
-            }
-
-            Text {
-              id: liveAwayText
-              anchors.left: liveAwayCrest.right
-              anchors.leftMargin: Style.space(8)
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              text: liveDelegate.modelData.away.name || liveDelegate.modelData.away.shortName
-              color: root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-              horizontalAlignment: Text.AlignLeft
-              elide: Text.ElideRight
-            }
-          }
-        }
-
-        // Live Game Progression Bar
-        Rectangle {
-          anchors.horizontalCenter: parent.horizontalCenter
-          width: Style.space(88)
-          height: 3
-          radius: 1.5
-          color: Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.18)
-          clip: true
-
-          Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: {
-              var lt = String(liveDelegate.modelData.liveTime || "")
-              var m = parseInt(lt, 10)
-              if (!isNaN(m)) return Math.min(parent.width, Math.max(6, (m / 90) * parent.width))
-              if (lt.indexOf("HT") !== -1) return parent.width * 0.50
-              if (lt.indexOf("Q1") !== -1 || lt.indexOf("1st") !== -1) return parent.width * 0.25
-              if (lt.indexOf("Q2") !== -1 || lt.indexOf("2nd") !== -1) return parent.width * 0.50
-              if (lt.indexOf("Q3") !== -1 || lt.indexOf("3rd") !== -1) return parent.width * 0.75
-              if (lt.indexOf("Q4") !== -1 || lt.indexOf("4th") !== -1) return parent.width * 0.95
-              return parent.width * 0.60
-            }
-            radius: 1.5
-            color: root.urgentColor
-          }
-        }
-
-        Row {
-          anchors.horizontalCenter: parent.horizontalCenter
-          spacing: Style.space(6)
-          visible: liveDelegate.details && liveDelegate.details.halftimeScore && String(liveDelegate.details.halftimeScore) !== "undefined" && String(liveDelegate.details.halftimeScore).trim() !== ""
-
-          Text {
-            text: "HT " + (liveDelegate.details ? liveDelegate.details.halftimeScore : "")
-            color: Qt.darker(root.fgColor, 1.45)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-          }
-        }
-
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(liveVenueText.implicitHeight, liveLinkText.implicitHeight)
-
-          Text {
-            id: liveVenueText
-            anchors.left: parent.left
-            anchors.right: liveLinkText.left
-            anchors.rightMargin: Style.space(8)
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.matchSubline(liveDelegate.modelData) || "Live match in progress"
-            color: Qt.darker(root.fgColor, 1.45)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            elide: Text.ElideRight
-          }
-
-          Text {
-            id: liveLinkText
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            text: (root.activeSport === "football" ? "FotMob" : "Official") + " 󰌹"
-            color: Color.accent
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
-      }
-    }
-
-    MouseArea {
-      id: liveMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onClicked: root.openMatch(liveDelegate.modelData)
-    }
-  }
-
-  // Standings Row
-  component StandingsRow: Item {
-    id: tableDelegate
-    required property var modelData
-    required property int index
-
-    readonly property color rowFg: root.fgColor
-    readonly property bool isFavorite: String(modelData.id) === String(root.selectedTeamId) || (modelData.shortName && String(modelData.shortName).toLowerCase() === String(root.selectedTeamName).toLowerCase())
-
-    width: parent.width
-    implicitHeight: Style.space(26)
-    height: implicitHeight
-
-    Rectangle {
-      anchors.fill: parent
-      radius: Math.min(4, Style.cornerRadius)
-      color: tableMouse.containsMouse
-        ? Style.hoverFillFor(tableDelegate.rowFg, Color.accent)
-        : (tableDelegate.isFavorite
-           ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.12)
-           : (tableDelegate.index % 2 === 1 ? Qt.rgba(tableDelegate.rowFg.r, tableDelegate.rowFg.g, tableDelegate.rowFg.b, 0.02) : "transparent"))
-
-      Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
-    }
-
-    // Football Standings Row
-    Row {
-      visible: root.activeSport === "football"
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(6)
-      anchors.rightMargin: Style.space(6)
-
-      Item {
-        width: Style.space(28)
-        height: Style.space(20)
-        anchors.verticalCenter: parent.verticalCenter
-
-        Rectangle {
-          anchors.centerIn: parent
-          width: Style.space(20)
-          height: Style.space(18)
-          radius: 3
-          color: tableDelegate.modelData.zone === "europe"
-            ? Util.alpha(Color.accent, 0.18)
-            : (tableDelegate.modelData.zone === "relegation"
-               ? Util.alpha(root.urgentColor, 0.18)
-               : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent"))
-
-          Text {
-            anchors.centerIn: parent
-            text: tableDelegate.modelData.pos
-            color: tableDelegate.modelData.zone === "europe"
-              ? Color.accent
-              : (tableDelegate.modelData.zone === "relegation" ? root.urgentColor : Qt.darker(tableDelegate.rowFg, 1.4))
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
-      }
-
-      Row {
-        width: parent.width - Style.space(216)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
-
-        TeamCrest {
-          sport: "football"
-          teamId: tableDelegate.modelData.id
-          teamName: tableDelegate.modelData.name
-          source: tableDelegate.modelData.logo || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Text {
-          width: parent.width - Style.space(22)
-          anchors.verticalCenter: parent.verticalCenter
-          text: (tableDelegate.isFavorite ? "★ " : "") + (tableDelegate.modelData.shortName || tableDelegate.modelData.name)
-          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: tableDelegate.isFavorite
-          elide: Text.ElideRight
-        }
-      }
-
-      Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.played; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-      Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.wins; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-      Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.draws; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-      Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.losses; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-      Text {
-        width: Style.space(32)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.gd || "-")
-        color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : Qt.darker(tableDelegate.rowFg, 1.4))
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        horizontalAlignment: Text.AlignRight
-        elide: Text.ElideRight
-      }
-
-      Text {
-        width: Style.space(32)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.pts || "0")
-        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        horizontalAlignment: Text.AlignRight
-      }
-    }
-
-    // NBA / NHL / MLB / NFL Standings Row
-    Row {
-      visible: root.activeSport === "nba" || root.activeSport === "nhl" || root.activeSport === "mlb" || root.activeSport === "nfl"
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(6)
-      anchors.rightMargin: Style.space(6)
-
-      Item {
-        width: Style.space(28)
-        height: Style.space(20)
-        anchors.verticalCenter: parent.verticalCenter
-
-        Rectangle {
-          anchors.centerIn: parent
-          width: Style.space(20)
-          height: Style.space(18)
-          radius: 3
-          color: tableDelegate.modelData.zone === "europe"
-            ? Util.alpha(Color.accent, 0.18)
-            : (tableDelegate.modelData.zone === "relegation"
-               ? Util.alpha(root.urgentColor, 0.18)
-               : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent"))
-
-          Text {
-            anchors.centerIn: parent
-            text: tableDelegate.modelData.pos
-            color: tableDelegate.modelData.zone === "europe"
-              ? Color.accent
-              : (tableDelegate.modelData.zone === "relegation" ? root.urgentColor : Qt.darker(tableDelegate.rowFg, 1.4))
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
-      }
-
-      Row {
-        width: parent.width - Style.space(190)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
-
-        TeamCrest {
-          sport: root.activeSport
-          teamId: tableDelegate.modelData.id
-          teamName: tableDelegate.modelData.name
-          abbr: tableDelegate.modelData.abbr || ""
-          source: tableDelegate.modelData.logo || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Text {
-          width: parent.width - Style.space(22)
-          anchors.verticalCenter: parent.verticalCenter
-          text: (tableDelegate.isFavorite ? "★ " : "") + (tableDelegate.modelData.shortName || tableDelegate.modelData.name)
-          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: tableDelegate.isFavorite
-          elide: Text.ElideRight
-        }
-      }
-
-      Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.wins; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-      Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: tableDelegate.modelData.losses; color: Qt.darker(tableDelegate.rowFg, 1.35); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-      Text {
-        width: Style.space(36)
-        anchors.verticalCenter: parent.verticalCenter
-        text: tableDelegate.modelData.played > 0 ? (tableDelegate.modelData.wins / tableDelegate.modelData.played).toFixed(3).replace(/^0/, "") : ".000"
-        color: Qt.darker(tableDelegate.rowFg, 1.35)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        horizontalAlignment: Text.AlignRight
-      }
-      Text {
-        width: Style.space(34)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.gd || "-")
-        color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : Qt.darker(tableDelegate.rowFg, 1.4))
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        horizontalAlignment: Text.AlignRight
-        elide: Text.ElideRight
-      }
-      Text {
-        width: Style.space(36)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.pts || "0")
-        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        horizontalAlignment: Text.AlignRight
-      }
-    }
-
-    // F1 Drivers Standings Row
-    Row {
-      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Drivers" || root.standingsLeagueId === "" || root.standingsLeagueId.indexOf("Construct") === -1)
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(6)
-      anchors.rightMargin: Style.space(6)
-
-      Item {
-        width: Style.space(28)
-        height: Style.space(20)
-        anchors.verticalCenter: parent.verticalCenter
-
-        Rectangle {
-          anchors.centerIn: parent
-          width: Style.space(20)
-          height: Style.space(18)
-          radius: 3
-          color: tableDelegate.modelData.zone === "europe"
-            ? Util.alpha(Color.accent, 0.18)
-            : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent")
-
-          Text {
-            anchors.centerIn: parent
-            text: tableDelegate.modelData.pos
-            color: tableDelegate.modelData.zone === "europe" ? Color.accent : Qt.darker(tableDelegate.rowFg, 1.4)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
-      }
-
-      Row {
-        width: Style.space(160)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
-
-        TeamCrest {
-          sport: "f1"
-          teamId: tableDelegate.modelData.teamId || ""
-          teamName: tableDelegate.modelData.teamName || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Text {
-          width: parent.width - Style.space(22)
-          anchors.verticalCenter: parent.verticalCenter
-          text: (tableDelegate.isFavorite ? "★ " : "") + (tableDelegate.modelData.flag ? tableDelegate.modelData.flag + " " : "") + tableDelegate.modelData.name
-          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: tableDelegate.isFavorite
-          elide: Text.ElideRight
-        }
-      }
-
-      Text {
-        width: parent.width - Style.space(290)
-        anchors.verticalCenter: parent.verticalCenter
-        text: tableDelegate.modelData.gd || tableDelegate.modelData.teamName || ""
-        color: Qt.darker(tableDelegate.rowFg, 1.4)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        elide: Text.ElideRight
-      }
-
-      Text {
-        width: Style.space(36)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.wins)
-        color: Qt.darker(tableDelegate.rowFg, 1.35)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        horizontalAlignment: Text.AlignRight
-      }
-
-      Text {
-        width: Style.space(52)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.pts || "0")
-        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        horizontalAlignment: Text.AlignRight
-      }
-    }
-
-    // F1 Constructors Standings Row
-    Row {
-      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Constructors" || root.standingsLeagueId.indexOf("Construct") !== -1)
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(6)
-      anchors.rightMargin: Style.space(6)
-
-      Item {
-        width: Style.space(28)
-        height: Style.space(20)
-        anchors.verticalCenter: parent.verticalCenter
-
-        Rectangle {
-          anchors.centerIn: parent
-          width: Style.space(20)
-          height: Style.space(18)
-          radius: 3
-          color: tableDelegate.modelData.zone === "europe"
-            ? Util.alpha(Color.accent, 0.18)
-            : (tableDelegate.modelData.zone === "playin" ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08) : "transparent")
-
-          Text {
-            anchors.centerIn: parent
-            text: tableDelegate.modelData.pos
-            color: tableDelegate.modelData.zone === "europe" ? Color.accent : Qt.darker(tableDelegate.rowFg, 1.4)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
-      }
-
-      Row {
-        width: Style.space(170)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
-
-        TeamCrest {
-          sport: "f1"
-          teamId: tableDelegate.modelData.id || ""
-          teamName: tableDelegate.modelData.name || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Text {
-          width: parent.width - Style.space(22)
-          anchors.verticalCenter: parent.verticalCenter
-          text: (tableDelegate.isFavorite ? "★ " : "") + tableDelegate.modelData.name
-          color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: tableDelegate.isFavorite
-          elide: Text.ElideRight
-        }
-      }
-
-      Text {
-        width: parent.width - Style.space(300)
-        anchors.verticalCenter: parent.verticalCenter
-        text: tableDelegate.modelData.gd || ""
-        color: Qt.darker(tableDelegate.rowFg, 1.4)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        elide: Text.ElideRight
-      }
-
-      Text {
-        width: Style.space(36)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.wins)
-        color: Qt.darker(tableDelegate.rowFg, 1.35)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        horizontalAlignment: Text.AlignRight
-      }
-
-      Text {
-        width: Style.space(52)
-        anchors.verticalCenter: parent.verticalCenter
-        text: String(tableDelegate.modelData.pts || "0")
-        color: tableDelegate.isFavorite ? Color.accent : tableDelegate.rowFg
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        horizontalAlignment: Text.AlignRight
-      }
-    }
-
-    MouseArea {
-      id: tableMouse
-      anchors.fill: parent
-      hoverEnabled: true
     }
   }
 }

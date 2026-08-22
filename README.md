@@ -7,7 +7,7 @@
 Track real-time scores, team schedules, and standings across **Football**, **NBA**, **Formula 1**, **NFL**, **MLB**, and **NHL** directly from your Linux desktop bar.
 
 [![Omarchy Plugin](https://img.shields.io/badge/omarchy-plugin-blue.svg)](https://omarchy.org)
-[![Version](https://img.shields.io/badge/version-1.3.0-emerald.svg)](manifest.json)
+[![Version](https://img.shields.io/badge/version-1.4.0-emerald.svg)](manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-orange.svg)]()
 
@@ -18,10 +18,13 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
 ## 🌟 Highlights
 
 - **🔔 Native Desktop Notifications (`notify-send`)**:
-  - Instant notifications on **Goals** (`⚽ GOLO! <Team>`) with club crests and updated match scorelines.
-  - Alerts when a match or race **Kicks off live** (`● LIVE`).
-  - **15-minute Pre-Match Warning** for upcoming games and F1 Grand Prix sessions.
+  - Instant notifications on **Goals** (`⚽ GOAL! <Team>`) for your **followed teams**, with club crests and updated match scorelines.
+  - Alerts when a match **kicks off live** (`● LIVE`) and a **15-minute pre-match warning** for upcoming games and F1 Grand Prix sessions.
   - Quick-toggle bell icon `󰂚` / `󰂛` directly in the top header.
+
+- **📅 Multi-Day Schedules (NBA, NFL, MLB, NHL)**:
+  - ESPN fixtures cover yesterday's results plus the next three days, not just today's slate.
+  - Automatic retry with backoff when a provider round fails, for every sport.
 
 - **⭐ Multi-Team & Multi-Driver Following**:
   - Follow multiple clubs and drivers simultaneously per sport (e.g. *Benfica* + *Arsenal*, *Lakers* + *Warriors*, *Leclerc* + *Hamilton*).
@@ -40,8 +43,8 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
   - One-click / hover reveal for individual matches, or toggle globally via the header button `󰈈` / `󰈉` or the `s` key.
 
 - **🛡️ Team Crests & Monogram Fallbacks**:
-  - Fast local disk caching (`~/.cache/omarchy-matchday/logos/`) and asynchronous club badges for all sports.
-  - Beautiful circular monogram fallbacks (`SL`, `FC`, `LAL`, `BOS`) ensure a pristine, polished UI with zero visual holes.
+  - Fast local disk caching (`~/.cache/omarchy-matchday/logos/`) with a single shared cache-key scheme, so every downloaded logo is guaranteed to render.
+  - Remote fallback on first run (before the disk cache is warm) and beautiful circular monogram fallbacks (`SL`, `FC`, `LAL`, `BOS`) with zero visual holes.
 
 - **★ Team & Driver Spotlight**:
   - Dedicated hero card highlighting your favorite club, franchise, or driver.
@@ -87,7 +90,7 @@ omarchy plugin validate .
 
 # 2. Copy files to your Omarchy plugins directory
 mkdir -p "$HOME/.config/omarchy/plugins/miguel.matchday"
-cp manifest.json BarWidget.qml Panel.qml TeamCrest.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.matchday/"
+cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.matchday/"
 
 # 3. Rescan and enable
 omarchy-shell shell rescanPlugins
@@ -118,6 +121,36 @@ Configuration is automatically saved to `~/.config/omarchy/sports-favorites.json
 | **American Football** | 🏈 | National Football League (NFL) — All 32 teams, AFC & NFC | ESPN |
 | **Baseball** | ⚾ | Major League Baseball (MLB) — All 30 teams, AL & NL | ESPN |
 | **Ice Hockey** | 🏒 | National Hockey League (NHL) — All 32 teams, Eastern & Western Conferences | ESPN |
+
+---
+
+## 🧪 Development & Testing
+
+The data engine (`SportsModel.js`) is pure JavaScript with no QML dependencies, so the parsers are covered by a Node test suite:
+
+```bash
+node tests/sportsmodel.test.mjs
+```
+
+This covers state persistence/migration, the shared crest cache-key scheme, ESPN/FotMob/Jolpica parsers, zone cutoffs per sport, match filtering/grouping, and catalog integrity (including the ESPN-verified NHL/MLB team ids).
+
+There is also a **live end-to-end harness** that fetches real payloads from FotMob, ESPN, and Jolpica using the exact same `curl` invocations the plugin uses at runtime, then runs the actual parsers against them:
+
+```bash
+node tests/live.mjs all        # every sport
+node tests/live.mjs football   # FotMob leagues, standings, team page, crest CDN, grouping, spotlight, live details
+node tests/live.mjs nba        # ESPN scoreboard + standings
+node tests/live.mjs nfl
+node tests/live.mjs mlb
+node tests/live.mjs nhl
+node tests/live.mjs f1         # Jolpica calendar + driver/constructor standings
+```
+
+QML files can be syntax-checked with `qmllint` (from `qt6-declarative`):
+
+```bash
+qmllint *.qml
+```
 
 ---
 

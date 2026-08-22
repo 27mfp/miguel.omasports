@@ -270,7 +270,7 @@ var popularFootballClubs = [
   { value: "1060144", label: "Inter Miami CF", description: "MLS · USA" }
 ]
 
-// Pre-populated F1 Constructors & Drivers
+// Pre-populated F1 Constructors & Drivers (2026 season, ids match Jolpica/Ergast driverIds)
 var f1Drivers = [
   // Constructors
   { value: "red_bull", label: "Red Bull Racing", description: "Constructor · Oracle Red Bull Racing" },
@@ -280,31 +280,35 @@ var f1Drivers = [
   { value: "aston_martin", label: "Aston Martin", description: "Constructor · Aston Martin Aramco F1 Team" },
   { value: "alpine", label: "Alpine", description: "Constructor · BWT Alpine F1 Team" },
   { value: "williams", label: "Williams", description: "Constructor · Williams Racing" },
-  { value: "sauber", label: "Kick Sauber", description: "Constructor · Stake F1 Team Kick Sauber" },
-  { value: "rb", label: "RB Formula One Team", description: "Constructor · Visa Cash App RB" },
+  { value: "audi", label: "Audi", description: "Constructor · Audi F1 Team" },
+  { value: "rb", label: "Racing Bulls", description: "Constructor · RB F1 Team" },
   { value: "haas", label: "Haas F1 Team", description: "Constructor · MoneyGram Haas F1 Team" },
+  { value: "cadillac", label: "Cadillac", description: "Constructor · Cadillac F1 Team" },
 
   // Drivers
-  { value: "verstappen", label: "Max Verstappen", description: "Red Bull Racing" },
-  { value: "hamilton", label: "Lewis Hamilton", description: "Scuderia Ferrari" },
-  { value: "leclerc", label: "Charles Leclerc", description: "Scuderia Ferrari" },
-  { value: "norris", label: "Lando Norris", description: "McLaren" },
-  { value: "piastri", label: "Oscar Piastri", description: "McLaren" },
-  { value: "russell", label: "George Russell", description: "Mercedes" },
   { value: "antonelli", label: "Andrea Kimi Antonelli", description: "Mercedes" },
+  { value: "hamilton", label: "Lewis Hamilton", description: "Ferrari" },
+  { value: "russell", label: "George Russell", description: "Mercedes" },
+  { value: "leclerc", label: "Charles Leclerc", description: "Ferrari" },
+  { value: "norris", label: "Lando Norris", description: "McLaren" },
+  { value: "max_verstappen", label: "Max Verstappen", description: "Red Bull Racing" },
+  { value: "piastri", label: "Oscar Piastri", description: "McLaren" },
+  { value: "hadjar", label: "Isack Hadjar", description: "Red Bull Racing" },
+  { value: "gasly", label: "Pierre Gasly", description: "Alpine" },
+  { value: "lawson", label: "Liam Lawson", description: "Racing Bulls" },
+  { value: "arvid_lindblad", label: "Arvid Lindblad", description: "Racing Bulls" },
+  { value: "colapinto", label: "Franco Colapinto", description: "Alpine" },
+  { value: "bearman", label: "Oliver Bearman", description: "Haas F1 Team" },
+  { value: "bortoleto", label: "Gabriel Bortoleto", description: "Audi" },
+  { value: "sainz", label: "Carlos Sainz", description: "Williams" },
+  { value: "albon", label: "Alexander Albon", description: "Williams" },
+  { value: "ocon", label: "Esteban Ocon", description: "Haas F1 Team" },
+  { value: "hulkenberg", label: "Nico Hülkenberg", description: "Audi" },
   { value: "alonso", label: "Fernando Alonso", description: "Aston Martin" },
   { value: "stroll", label: "Lance Stroll", description: "Aston Martin" },
-  { value: "gasly", label: "Pierre Gasly", description: "Alpine" },
-  { value: "doohan", label: "Jack Doohan", description: "Alpine" },
-  { value: "albon", label: "Alexander Albon", description: "Williams" },
-  { value: "sainz", label: "Carlos Sainz", description: "Williams" },
-  { value: "hulkenberg", label: "Nico Hülkenberg", description: "Sauber / Audi" },
-  { value: "bortoleto", label: "Gabriel Bortoleto", description: "Sauber / Audi" },
-  { value: "tsunoda", label: "Yuki Tsunoda", description: "RB F1 Team" },
-  { value: "hadjar", label: "Isack Hadjar", description: "RB F1 Team" },
-  { value: "lawson", label: "Liam Lawson", description: "Red Bull Racing" },
-  { value: "ocon", label: "Esteban Ocon", description: "Haas F1 Team" },
-  { value: "bearman", label: "Oliver Bearman", description: "Haas F1 Team" }
+  { value: "bottas", label: "Valtteri Bottas", description: "Cadillac" },
+  { value: "perez", label: "Sergio Pérez", description: "Cadillac" },
+  { value: "tsunoda", label: "Yuki Tsunoda", description: "Racing Bulls" }
 ]
 
 // Pre-populated NFL Teams
@@ -343,74 +347,74 @@ var nflTeams = [
   { value: "34", label: "Houston Texans", description: "AFC South" }
 ]
 
-// Pre-populated MLB Teams
+// Pre-populated MLB Teams (ESPN team ids, verified against site.api.espn.com)
 var mlbTeams = [
-  { value: "14", label: "New York Yankees", description: "AL East" },
-  { value: "2", label: "Boston Red Sox", description: "AL East" },
-  { value: "19", label: "Los Angeles Dodgers", description: "NL West" },
-  { value: "21", label: "New York Mets", description: "NL East" },
-  { value: "15", label: "Atlanta Braves", description: "NL East" },
-  { value: "16", label: "Chicago Cubs", description: "NL Central" },
-  { value: "26", label: "San Francisco Giants", description: "NL West" },
-  { value: "18", label: "Houston Astros", description: "AL West" },
-  { value: "22", label: "Philadelphia Phillies", description: "NL East" },
-  { value: "25", label: "San Diego Padres", description: "NL West" },
-  { value: "29", label: "Arizona Diamondbacks", description: "NL West" },
   { value: "1", label: "Baltimore Orioles", description: "AL East" },
-  { value: "3", label: "Chicago White Sox", description: "AL Central" },
-  { value: "4", label: "Cincinnati Reds", description: "NL Central" },
+  { value: "2", label: "Boston Red Sox", description: "AL East" },
+  { value: "10", label: "New York Yankees", description: "AL East" },
+  { value: "30", label: "Tampa Bay Rays", description: "AL East" },
+  { value: "14", label: "Toronto Blue Jays", description: "AL East" },
+  { value: "4", label: "Chicago White Sox", description: "AL Central" },
   { value: "5", label: "Cleveland Guardians", description: "AL Central" },
-  { value: "6", label: "Colorado Rockies", description: "NL West" },
-  { value: "7", label: "Detroit Tigers", description: "AL Central" },
-  { value: "8", label: "Kansas City Royals", description: "AL Central" },
-  { value: "9", label: "Los Angeles Angels", description: "AL West" },
-  { value: "10", label: "Miami Marlins", description: "NL East" },
-  { value: "11", label: "Milwaukee Brewers", description: "NL Central" },
-  { value: "12", label: "Minnesota Twins", description: "AL Central" },
-  { value: "13", label: "Oakland Athletics", description: "AL West" },
-  { value: "17", label: "Pittsburgh Pirates", description: "NL Central" },
+  { value: "6", label: "Detroit Tigers", description: "AL Central" },
+  { value: "7", label: "Kansas City Royals", description: "AL Central" },
+  { value: "9", label: "Minnesota Twins", description: "AL Central" },
+  { value: "11", label: "Athletics", description: "AL West" },
+  { value: "18", label: "Houston Astros", description: "AL West" },
+  { value: "3", label: "Los Angeles Angels", description: "AL West" },
+  { value: "12", label: "Seattle Mariners", description: "AL West" },
+  { value: "13", label: "Texas Rangers", description: "AL West" },
+  { value: "15", label: "Atlanta Braves", description: "NL East" },
+  { value: "28", label: "Miami Marlins", description: "NL East" },
+  { value: "21", label: "New York Mets", description: "NL East" },
+  { value: "22", label: "Philadelphia Phillies", description: "NL East" },
   { value: "20", label: "Washington Nationals", description: "NL East" },
-  { value: "23", label: "Seattle Mariners", description: "AL West" },
+  { value: "16", label: "Chicago Cubs", description: "NL Central" },
+  { value: "17", label: "Cincinnati Reds", description: "NL Central" },
+  { value: "8", label: "Milwaukee Brewers", description: "NL Central" },
+  { value: "23", label: "Pittsburgh Pirates", description: "NL Central" },
   { value: "24", label: "St. Louis Cardinals", description: "NL Central" },
-  { value: "27", label: "Tampa Bay Rays", description: "AL East" },
-  { value: "28", label: "Texas Rangers", description: "AL West" },
-  { value: "30", label: "Toronto Blue Jays", description: "AL East" }
+  { value: "29", label: "Arizona Diamondbacks", description: "NL West" },
+  { value: "27", label: "Colorado Rockies", description: "NL West" },
+  { value: "19", label: "Los Angeles Dodgers", description: "NL West" },
+  { value: "25", label: "San Diego Padres", description: "NL West" },
+  { value: "26", label: "San Francisco Giants", description: "NL West" }
 ]
 
-// Pre-populated NHL Teams
+// Pre-populated NHL Teams (ESPN team ids, verified against site.api.espn.com)
 var nhlTeams = [
-  { value: "10", label: "Toronto Maple Leafs", description: "Atlantic" },
-  { value: "6", label: "Boston Bruins", description: "Atlantic" },
-  { value: "13", label: "New York Rangers", description: "Metropolitan" },
-  { value: "8", label: "Montreal Canadiens", description: "Atlantic" },
-  { value: "22", label: "Edmonton Oilers", description: "Pacific" },
-  { value: "20", label: "Colorado Avalanche", description: "Central" },
-  { value: "16", label: "Chicago Blackhawks", description: "Central" },
-  { value: "17", label: "Detroit Red Wings", description: "Atlantic" },
-  { value: "15", label: "Washington Capitals", description: "Metropolitan" },
-  { value: "14", label: "Tampa Bay Lightning", description: "Atlantic" },
-  { value: "37", label: "Vegas Golden Knights", description: "Pacific" },
-  { value: "38", label: "Seattle Kraken", description: "Pacific" },
-  { value: "23", label: "Vancouver Canucks", description: "Pacific" },
-  { value: "21", label: "Dallas Stars", description: "Central" },
-  { value: "24", label: "Calgary Flames", description: "Pacific" },
-  { value: "18", label: "Nashville Predators", description: "Central" },
-  { value: "19", label: "St. Louis Blues", description: "Central" },
-  { value: "4", label: "Philadelphia Flyers", description: "Metropolitan" },
-  { value: "5", label: "Pittsburgh Penguins", description: "Metropolitan" },
-  { value: "1", label: "New Jersey Devils", description: "Metropolitan" },
-  { value: "2", label: "New York Islanders", description: "Metropolitan" },
-  { value: "3", label: "Carolina Hurricanes", description: "Metropolitan" },
-  { value: "7", label: "Buffalo Sabres", description: "Atlantic" },
-  { value: "9", label: "Ottawa Senators", description: "Atlantic" },
-  { value: "12", label: "Florida Panthers", description: "Atlantic" },
-  { value: "25", label: "San Jose Sharks", description: "Pacific" },
-  { value: "26", label: "Los Angeles Kings", description: "Pacific" },
-  { value: "27", label: "Anaheim Ducks", description: "Pacific" },
+  { value: "1", label: "Boston Bruins", description: "Atlantic" },
+  { value: "2", label: "Buffalo Sabres", description: "Atlantic" },
+  { value: "5", label: "Detroit Red Wings", description: "Atlantic" },
+  { value: "26", label: "Florida Panthers", description: "Atlantic" },
+  { value: "10", label: "Montreal Canadiens", description: "Atlantic" },
+  { value: "14", label: "Ottawa Senators", description: "Atlantic" },
+  { value: "20", label: "Tampa Bay Lightning", description: "Atlantic" },
+  { value: "21", label: "Toronto Maple Leafs", description: "Atlantic" },
+  { value: "7", label: "Carolina Hurricanes", description: "Metropolitan" },
   { value: "29", label: "Columbus Blue Jackets", description: "Metropolitan" },
+  { value: "11", label: "New Jersey Devils", description: "Metropolitan" },
+  { value: "12", label: "New York Islanders", description: "Metropolitan" },
+  { value: "13", label: "New York Rangers", description: "Metropolitan" },
+  { value: "15", label: "Philadelphia Flyers", description: "Metropolitan" },
+  { value: "16", label: "Pittsburgh Penguins", description: "Metropolitan" },
+  { value: "23", label: "Washington Capitals", description: "Metropolitan" },
+  { value: "4", label: "Chicago Blackhawks", description: "Central" },
+  { value: "17", label: "Colorado Avalanche", description: "Central" },
+  { value: "9", label: "Dallas Stars", description: "Central" },
   { value: "30", label: "Minnesota Wild", description: "Central" },
-  { value: "52", label: "Winnipeg Jets", description: "Central" },
-  { value: "59", label: "Utah Hockey Club", description: "Central" }
+  { value: "27", label: "Nashville Predators", description: "Central" },
+  { value: "19", label: "St. Louis Blues", description: "Central" },
+  { value: "28", label: "Winnipeg Jets", description: "Central" },
+  { value: "129764", label: "Utah Mammoth", description: "Central" },
+  { value: "25", label: "Anaheim Ducks", description: "Pacific" },
+  { value: "3", label: "Calgary Flames", description: "Pacific" },
+  { value: "6", label: "Edmonton Oilers", description: "Pacific" },
+  { value: "8", label: "Los Angeles Kings", description: "Pacific" },
+  { value: "124292", label: "Seattle Kraken", description: "Pacific" },
+  { value: "18", label: "San Jose Sharks", description: "Pacific" },
+  { value: "22", label: "Vancouver Canucks", description: "Pacific" },
+  { value: "37", label: "Vegas Golden Knights", description: "Pacific" }
 ]
 
 function defaultState() {
@@ -422,37 +426,43 @@ function defaultState() {
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsLeagueId: "61"
+      standingsLeagueId: "61",
+      tab: "fixtures"
     },
     nba: {
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsGroup: "Eastern Conference"
+      standingsGroup: "Eastern Conference",
+      tab: "fixtures"
     },
     f1: {
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsGroup: "Drivers"
+      standingsGroup: "Drivers",
+      tab: "fixtures"
     },
     nfl: {
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsGroup: "American Football Conference"
+      standingsGroup: "American Football Conference",
+      tab: "fixtures"
     },
     mlb: {
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsGroup: "American League"
+      standingsGroup: "American League",
+      tab: "fixtures"
     },
     nhl: {
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsGroup: "Eastern Conference"
+      standingsGroup: "Eastern Conference",
+      tab: "fixtures"
     },
     antiSpoiler: false,
     notifications: true,
@@ -507,6 +517,42 @@ function normalizeTeamIds(value) {
   return result
 }
 
+// Single source of truth for crest cache file names. Both the panel's
+// background downloader and TeamCrest.qml must resolve the exact same key,
+// otherwise downloaded logos are never displayed.
+// Football and F1 key by provider id; US sports key by ESPN abbreviation
+// (fallback: id) which is what the ESPN CDN logos are named after.
+function crestCacheKey(sport, teamId, abbr) {
+  var sp = String(sport || "football").toLowerCase()
+  var id = String(teamId || "").trim().toLowerCase()
+  var a = String(abbr || "").trim().toLowerCase()
+  var base = (sp === "football" || sp === "f1") ? id : (a || id)
+  if (!base) return ""
+  return (sp + "-" + base).replace(/[^a-z0-9_-]/g, "")
+}
+
+// ESPN scoreboard `dates=YYYYMMDD-YYYYMMDD` range covering recent results
+// plus upcoming fixtures (without it the API only returns today's events).
+function espnDateRange(daysBack, daysAhead) {
+  function fmt(d) {
+    var y = d.getFullYear()
+    var m = ("0" + (d.getMonth() + 1)).slice(-2)
+    var day = ("0" + d.getDate()).slice(-2)
+    return y + m + day
+  }
+  var now = Date.now()
+  var back = typeof daysBack === "number" ? daysBack : 1
+  var ahead = typeof daysAhead === "number" ? daysAhead : 3
+  return fmt(new Date(now - back * 86400000)) + "-" + fmt(new Date(now + ahead * 86400000))
+}
+
+function formatKickoff(timeIso) {
+  var t = Date.parse(timeIso || "")
+  if (isNaN(t)) return ""
+  var d = new Date(t)
+  return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2)
+}
+
 function parseState(raw) {
   var defaults = defaultState()
   var parsed = null
@@ -537,7 +583,8 @@ function parseState(raw) {
       teamIds: tids,
       teamId: String(obj.teamId || (tids.length > 0 ? tids[0] : "")),
       teamName: String(obj.teamName || ""),
-      standingsGroup: String(obj.standingsGroup || def.standingsGroup)
+      standingsGroup: String(obj.standingsGroup || def.standingsGroup),
+      tab: String(obj.tab || "fixtures")
     }
   }
 
@@ -549,7 +596,8 @@ function parseState(raw) {
       teamIds: fbTeamIds,
       teamId: String(fb.teamId || (fbTeamIds.length > 0 ? fbTeamIds[0] : "") || parsed.teamId || ""),
       teamName: String(fb.teamName || parsed.teamName || ""),
-      standingsLeagueId: String(fb.standingsLeagueId || parsed.standingsLeagueId || fbLeagues[0])
+      standingsLeagueId: String(fb.standingsLeagueId || parsed.standingsLeagueId || fbLeagues[0]),
+      tab: String(fb.tab || "fixtures")
     },
     nba: parseSubSport("nba", defaults.nba),
     f1: parseSubSport("f1", defaults.f1),
@@ -715,8 +763,17 @@ function parseEspnStandings(raw, sportName) {
       var logoUrl = (team.logos && team.logos[0] && team.logos[0].href) || (team.logo) || ""
 
       var zone = ""
-      if (seed <= 6) zone = "europe"
-      else if (seed <= 10) zone = "playin"
+      if (sportName === "nfl") {
+        if (seed <= 7) zone = "europe"
+      } else if (sportName === "nhl") {
+        if (seed <= 8) zone = "europe"
+      } else if (sportName === "mlb") {
+        if (seed <= 6) zone = "europe"
+      } else {
+        // NBA: top 6 playoff seeds, 7-10 play-in
+        if (seed <= 6) zone = "europe"
+        else if (seed <= 10) zone = "playin"
+      }
 
       rows.push({
         pos: String(seed),
@@ -770,18 +827,22 @@ function f1CountryFlag(countryName, raceName) {
 
 function f1DriverFlag(driverIdOrNat) {
   var d = String(driverIdOrNat || "").toLowerCase()
-  if (d.indexOf("hamilton") !== -1 || d.indexOf("norris") !== -1 || d.indexOf("russell") !== -1 || d.indexOf("bearman") !== -1 || d.indexOf("british") !== -1) return "🇬🇧"
+  if (d.indexOf("british") !== -1 || d.indexOf("hamilton") !== -1 || d.indexOf("norris") !== -1 || d.indexOf("russell") !== -1 || d.indexOf("bearman") !== -1 || d.indexOf("lindblad") !== -1) return "🇬🇧"
   if (d.indexOf("verstappen") !== -1 || d.indexOf("dutch") !== -1) return "🇳🇱"
   if (d.indexOf("leclerc") !== -1 || d.indexOf("monegasque") !== -1) return "🇲🇨"
   if (d.indexOf("piastri") !== -1 || d.indexOf("australian") !== -1) return "🇦🇺"
   if (d.indexOf("alonso") !== -1 || d.indexOf("sainz") !== -1 || d.indexOf("spanish") !== -1) return "🇪🇸"
   if (d.indexOf("antonelli") !== -1 || d.indexOf("italian") !== -1) return "🇮🇹"
-  if (d.indexOf("gasly") !== -1 || d.indexOf("ocon") !== -1 || d.indexOf("french") !== -1) return "🇫🇷"
+  if (d.indexOf("gasly") !== -1 || d.indexOf("ocon") !== -1 || d.indexOf("hadjar") !== -1 || d.indexOf("french") !== -1) return "🇫🇷"
   if (d.indexOf("hulkenberg") !== -1 || d.indexOf("german") !== -1) return "🇩🇪"
   if (d.indexOf("tsunoda") !== -1 || d.indexOf("japanese") !== -1) return "🇯🇵"
   if (d.indexOf("albon") !== -1 || d.indexOf("thai") !== -1) return "🇹🇭"
   if (d.indexOf("stroll") !== -1 || d.indexOf("canadian") !== -1) return "🇨🇦"
   if (d.indexOf("bortoleto") !== -1 || d.indexOf("brazilian") !== -1) return "🇧🇷"
+  if (d.indexOf("lawson") !== -1 || d.indexOf("zealand") !== -1) return "🇳🇿"
+  if (d.indexOf("colapinto") !== -1 || d.indexOf("argentin") !== -1) return "🇦🇷"
+  if (d.indexOf("bottas") !== -1 || d.indexOf("finnish") !== -1) return "🇫🇮"
+  if (d.indexOf("perez") !== -1 || d.indexOf("pérez") !== -1 || d.indexOf("mexican") !== -1) return "🇲🇽"
   return "🏎"
 }
 
@@ -1083,8 +1144,7 @@ function parseDetails(html) {
   if (status.reason && status.reason.short) out.reason = String(status.reason.short)
   if (status.finished === true) out.finished = true
 
-  for (var key in out) return out
-  return null
+  return Object.keys(out).length > 0 ? out : null
 }
 
 function parseStandings(props) {
