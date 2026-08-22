@@ -7,7 +7,7 @@
 Track real-time scores, team schedules, and standings across **Football**, **NBA**, **Formula 1**, **NFL**, **MLB**, and **NHL** directly from your Linux desktop bar.
 
 [![Omarchy Plugin](https://img.shields.io/badge/omarchy-plugin-blue.svg)](https://omarchy.org)
-[![Version](https://img.shields.io/badge/version-1.2.0-emerald.svg)](manifest.json)
+[![Version](https://img.shields.io/badge/version-1.3.0-emerald.svg)](manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-orange.svg)]()
 
@@ -16,6 +16,20 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
 ---
 
 ## 🌟 Highlights
+
+- **🔔 Native Desktop Notifications (`notify-send`)**:
+  - Instant notifications on **Goals** (`⚽ GOLO! <Team>`) with club crests and updated match scorelines.
+  - Alerts when a match or race **Kicks off live** (`● LIVE`).
+  - **15-minute Pre-Match Warning** for upcoming games and F1 Grand Prix sessions.
+  - Quick-toggle bell icon `󰂚` / `󰂛` directly in the top header.
+
+- **⭐ Multi-Team & Multi-Driver Following**:
+  - Follow multiple clubs and drivers simultaneously per sport (e.g. *Benfica* + *Arsenal*, *Lakers* + *Warriors*, *Leclerc* + *Hamilton*).
+  - Quick-remove badge chips (`★ Benfica ✕`) and dedicated combined schedule views (`★ All Followed Favorites`).
+
+- **⚡ Zero-Latency Instant Team Search**:
+  - Pre-populated database with over 90+ major global clubs (Primeira Liga, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão, etc.) and all 2026 F1 constructors and drivers.
+  - Search and filter teams in 0ms without waiting for network loads.
 
 - **⚡ Live Bar Ticker & Dynamic Pill**:
   - Live score ticker directly on your status bar whenever your favorite team is playing (e.g. `⚽ BEN 2-1 SPO 74'` or `🏀 LAL 104-98 GSW Q4`).
@@ -26,7 +40,7 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
   - One-click / hover reveal for individual matches, or toggle globally via the header button `󰈈` / `󰈉` or the `s` key.
 
 - **🛡️ Team Crests & Monogram Fallbacks**:
-  - Asynchronous club badges and logos for football teams, NBA franchises, MLB, NFL, and NHL teams.
+  - Fast local disk caching (`~/.cache/omarchy-matchday/logos/`) and asynchronous club badges for all sports.
   - Beautiful circular monogram fallbacks (`SL`, `FC`, `LAL`, `BOS`) ensure a pristine, polished UI with zero visual holes.
 
 - **★ Team & Driver Spotlight**:

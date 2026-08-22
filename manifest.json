@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "miguel.matchday",
   "name": "Matchday",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "Miguel",
   "license": "MIT",
   "description": "All-in-one live sports tracker (Football, NBA, F1, NFL, MLB, NHL) on your Omarchy bar.",
