@@ -16,6 +16,12 @@ Item {
   property var matchDetails: ({})
   property var matchSubline: null // function(match)
   property var openMatch: null // function(match)
+  property double nowMs: Date.now()      // ticking clock from Panel for interpolation
+  property double fetchedAtMs: -1        // when the provider data was fetched
+
+  // Provider minute ticked forward between polls (capped stoppage buffer)
+  readonly property string syncedLiveTime:
+    Model.interpolateLiveTime(root.modelData, root.nowMs, root.fetchedAtMs) || "LIVE"
 
   readonly property string leagueName: Model.leagueLabel(root.modelData.leagueId).toUpperCase()
   readonly property var details: root.matchDetails[String(root.modelData.id)] || null
@@ -132,7 +138,7 @@ Item {
             }
 
             Text {
-              text: root.modelData.liveTime || "LIVE"
+              text: root.syncedLiveTime
               color: "#ffffff"
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -256,7 +262,7 @@ Item {
           anchors.top: parent.top
           anchors.bottom: parent.bottom
           width: {
-            var lt = String(root.modelData.liveTime || "")
+            var lt = String(root.syncedLiveTime)
             var m = parseInt(lt, 10)
             if (!isNaN(m)) return Math.min(parent.width, Math.max(6, (m / 90) * parent.width))
             if (lt.indexOf("HT") !== -1) return parent.width * 0.50

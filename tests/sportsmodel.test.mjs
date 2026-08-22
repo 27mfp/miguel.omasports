@@ -16,7 +16,7 @@ const exported = [
   "parseStandings", "zoneFromLegend", "mergePages", "teamOptionsForSport",
   "matchesForTeam", "matchesForLeague", "featuredMatchForTeam", "teamOutcome",
   "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel",
-  "sportMeta", "shortTournamentName", "liveMatches", "matchLine"
+  "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -93,7 +93,7 @@ test("parseState falls back to defaults on garbage", () => {
   for (const bad of ["", "not json", "42", "null"]) {
     const st = Model.parseState(bad)
     assert.equal(st.sport, "football")
-    assert.deepEqual(st.football.leagueIds, ["61"])
+    assert.deepEqual(st.football.leagueIds, ["47"])
     assert.equal(st.football.tab, "fixtures")
   }
 })
@@ -386,6 +386,29 @@ test("matchStatusText and shortTournamentName", () => {
   assert.equal(Model.matchStatusText({ status: "live", liveTime: "45'" }), "45'")
   assert.equal(Model.shortTournamentName("UEFA Champions League"), "Champions Lg")
   assert.equal(Model.shortTournamentName("Primeira Liga"), "Liga Portugal")
+})
+test("interpolateLiveTime ticks the clock forward with a stoppage cap", () => {
+  const now = Date.now()
+  const m = { status: "live", liveTime: "13’", sport: "football" }
+  // fresh data → untouched
+  assert.equal(Model.interpolateLiveTime(m, now, now - 20000), "13’")
+  // 2 min stale → ticks to 15 (FotMob wraps clocks in invisible bi-di marks)
+  const lrm = "\u200e"
+  const tick = (n) => lrm + n + "\u2019" + lrm
+  const fotmob = { status: "live", liveTime: tick(13), sport: "football" }
+  assert.equal(Model.interpolateLiveTime(fotmob, now, now - 2.5 * 60000), tick(15))
+  assert.equal(Model.interpolateLiveTime(m, now, now - 2.5 * 60000), tick(15))
+  // very stale → capped at +4
+  assert.equal(Model.interpolateLiveTime(m, now, now - 40 * 60000), tick(17))
+  // non-numeric clocks (HT, stoppage, quarters) are never guessed
+  for (const t of ["HT", "45+2’", "8:44", "Q4 - 8:44", "Pen", "LIVE"]) {
+    assert.equal(Model.interpolateLiveTime({ status: "live", liveTime: t, sport: "football" }, now, now - 30 * 60000), t)
+  }
+  // non-football sports are provider-true only
+  const nba = { status: "live", liveTime: "8:44", sport: "nba" }
+  assert.equal(Model.interpolateLiveTime(nba, now, now - 30 * 60000), "8:44")
+  // non-live matches pass through untouched
+  assert.equal(Model.interpolateLiveTime({ status: "finished", sport: "football" }, now, now - 60000), "")
 })
 
 // ---------------------------------------------------------------- catalogs

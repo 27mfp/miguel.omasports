@@ -38,10 +38,10 @@ Panel {
   // Snapshot of the last state we wrote ourselves, so our own FileView writes
   // can be distinguished from external edits (which trigger a fresh round)
   property string ignoredStateSignature: ""
-  property var selectedLeagueIds: ["61"]
+  property var selectedLeagueIds: ["47"]
   property var selectedTeamIds: []
   property string selectedTeamId: ""
-  property string standingsLeagueId: "61"
+  property string standingsLeagueId: "47"
   property bool antiSpoiler: false
   property bool enableNotifications: true
   property var revealedMatchIds: ({})
@@ -346,7 +346,7 @@ Panel {
         if (m.status === "live") {
           var h = (m.home.shortName || m.home.name).slice(0, 3).toUpperCase()
           var a = (m.away.shortName || m.away.name).slice(0, 3).toUpperCase()
-          return h + " " + (m.scoreText || "0–0") + " " + a + (m.liveTime ? " " + m.liveTime : "")
+          return h + " " + (m.scoreText || "0–0") + " " + a + " " + Model.interpolateLiveTime(m, root.nowMs, root.lastUpdated.getTime())
         }
       }
     }
@@ -480,6 +480,9 @@ Panel {
     Qt.callLater(function() {
       if (!root.opened) return
       setCenterHoverRevealSuppressed(true)
+      // Surface live action immediately when the panel opens
+      if (root.liveCount > 0 && root.tabIndex === 0) root.tabIndex = 1
+      root.scheduleNextPoll()
       if (root.stateLoaded && !root.loading && (needsAutoRefresh() || root.allMatches.length === 0)) root.refresh()
       else if (!root.loading && detailQueue.length > 0) Qt.callLater(root.nextDetail)
     })
@@ -488,6 +491,7 @@ Panel {
   function close() {
     setCenterHoverRevealSuppressed(false)
     openedFromHotkey = false
+    scheduleNextPoll()
     root.controller.hide()
   }
 
@@ -764,7 +768,7 @@ Panel {
     var minutes = Math.max(5, Math.min(60, parseInt(value, 10) || 15))
     savedState.refreshMinutes = minutes
     persistState()
-    refreshTimer.restart()
+    scheduleNextPoll()
   }
 
   function setStandingsLeague(value) {
@@ -935,6 +939,7 @@ Panel {
     startDetailFetch()
     downloadMissingLogos()
     checkScoreNotifications()
+    scheduleNextPoll()
 
     if (pages.length === 0 && !hasData) {
       errorMessage = "Unable to load matches. Check your connection."
@@ -1003,6 +1008,7 @@ Panel {
       if (allMatches.length === 0 && Object.keys(multiSportStandings).length === 0) {
         errorMessage = "Unable to load " + activeSportMeta.label + " data. Check connection."
       }
+      scheduleNextPoll()
     }
   }
 
@@ -1036,6 +1042,7 @@ Panel {
       ensureStandingsSelection()
       downloadMissingLogos()
       checkScoreNotifications()
+      scheduleNextPoll()
       if (allMatches.length === 0) {
         errorMessage = "Unable to load F1 race calendar. Check connection."
       }
@@ -1226,6 +1233,7 @@ Panel {
     if (loading) return "󰥔 Updating scores…"
     if (errorMessage !== "") return errorMessage
     if (!hasData) return "Select options above to track " + activeSportMeta.label + "."
+    if (fastPolling) return "● LIVE · auto-updating · 󰥔 " + Qt.formatDateTime(lastUpdated, "HH:mm")
     return "󰥔 Updated " + Qt.formatDateTime(lastUpdated, "HH:mm")
   }
 
@@ -1525,13 +1533,42 @@ Panel {
     }
   }
 
+  // Adaptive polling: while a followed match is live we poll every 40s so the
+  // clock and score track reality; otherwise we fall back to the user interval.
+  readonly property int slowRefreshMs: Math.max(5, parseInt(root.savedState.refreshMinutes || 15, 10)) * 60 * 1000
+  property bool fastPolling: false
+
+  function hasLiveFollowedMatch() {
+    var source = teamMatches.length > 0 ? teamMatches : allMatches
+    for (var i = 0; i < source.length; i++)
+      if (source[i] && source[i].status === "live") return true
+    return false
+  }
+
+  function scheduleNextPoll() {
+    var wantRunning = root.opened || root.backgroundUpdates
+    fastPolling = wantRunning && hasLiveFollowedMatch()
+    if (!wantRunning) {
+      refreshTimer.running = false
+      return
+    }
+    var ms = fastPolling ? 40000 : root.slowRefreshMs
+    if (refreshTimer.interval !== ms) refreshTimer.interval = ms
+    refreshTimer.restart()
+  }
+
   Timer {
     id: refreshTimer
-    interval: Math.max(5, parseInt(root.savedState.refreshMinutes || 15, 10)) * 60 * 1000
+    interval: 60000
     repeat: true
-    running: root.opened || root.backgroundUpdates
-    onTriggered: root.refresh()
+    running: false
+    onTriggered: {
+      if (!root.loading) root.refresh()
+      else scheduleNextPoll()
+    }
   }
+
+  onBackgroundUpdatesChanged: scheduleNextPoll()
 
   IpcHandler {
     target: root.ipcTarget
@@ -1704,6 +1741,17 @@ Panel {
                   }
                 }
               }
+            }
+
+            // Live auto-refresh hint so the interval picker's scope is clear
+            Text {
+              width: parent.width
+              visible: root.liveCount > 0
+              text: "● " + root.liveCount + " live — scores update automatically every ~40s"
+              color: root.urgentColor
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
             }
 
             // ---- Sport Selector Segmented Row -------------------------------
@@ -2410,6 +2458,8 @@ Panel {
                     matchDetails: root.matchDetails
                     matchSubline: root.matchSubline
                     openMatch: root.openMatch
+                    nowMs: root.nowMs
+                    fetchedAtMs: root.lastUpdated.getTime()
                   }
                 }
               }

@@ -54,6 +54,11 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
   - Live game minute indicators with animated pulsing badges (`● 45' HT`, `● Q3 4:21`, `● Top 5th`, `● 3rd 12:10`, `● RACE DAY`).
   - Broadcast scorecard layout showing stadium venue, city, referee, attendance, and period scores.
 
+- **⏱ Live Clock That Actually Tracks The Match**:
+  - While any followed match is live, the plugin auto-polls every ~40 seconds (regardless of the slower background refresh interval).
+  - Between polls, the minute is interpolated forward from the provider's last report with a stoppage-time cap, so the clock never sits frozen.
+  - Opening the panel during a live match lands you directly on the **Live** tab.
+
 - **󰝘 Standings & League Tables**:
   - ⚽ **Football**: Champions League, European qualification, Relegation zones.
   - 🏀 **NBA**: Eastern & Western Conference tables with Playoff (1–6) and Play-in (7–10) seeds.

@@ -422,11 +422,11 @@ function defaultState() {
     version: 2,
     sport: "football",
     football: {
-      leagueIds: ["61"],
+      leagueIds: ["47"],
       teamIds: [],
       teamId: "",
       teamName: "",
-      standingsLeagueId: "61",
+      standingsLeagueId: "47",
       tab: "fixtures"
     },
     nba: {
@@ -573,7 +573,7 @@ function parseState(raw) {
   // V1 legacy migration
   var fb = parsed.football && typeof parsed.football === "object" ? parsed.football : {}
   var fbLeagues = normalizeLeagueIds(fb.leagueIds || parsed.leagueIds)
-  if (fbLeagues.length === 0) fbLeagues = ["61"]
+  if (fbLeagues.length === 0) fbLeagues = ["47"]
   var fbTeamIds = normalizeTeamIds(fb.teamIds || (fb.teamId || parsed.teamId ? [fb.teamId || parsed.teamId] : []))
 
   function parseSubSport(key, def) {
@@ -622,7 +622,7 @@ function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, f
     teamIds: tids,
     teamId: String(tids.length > 0 ? tids[0] : ""),
     teamName: String(fbTeamName || ""),
-    standingsLeagueId: String(fbStandingsId || (fbLeagues && fbLeagues[0]) || "61")
+    standingsLeagueId: String(fbStandingsId || (fbLeagues && fbLeagues[0]) || "47")
   }
   if (sportSettings && typeof sportSettings === "object") {
     if (sportSettings.nba) state.nba = sportSettings.nba
@@ -1480,6 +1480,31 @@ function matchStatusText(match) {
   if (match.status === "finished") return "FT"
   if (match.status === "cancelled") return "Postponed"
   return formatMatchDate(match.time)
+}
+
+// Between provider polls, tick a football live clock forward from the last
+// fetched minute using wall-clock time, capped by a stoppage-time buffer so we
+// never run far ahead of the broadcast clock. Returns the original string
+// untouched when the data is fresh or the clock is not a plain minute
+// ("HT", "45+2’", quarter labels, penalties…).
+function interpolateLiveTime(match, nowMs, fetchedAtMs) {
+  if (!match || match.status !== "live") return match ? String(match.liveTime || "") : ""
+  if (match.sport && match.sport !== "football") return String(match.liveTime || "")
+  var lt = String(match.liveTime || "")
+  // Only tick a bare minute like "13" / "13’" — never "8:44", "45+2’, "HT"…
+  // (strip invisible LRM/RLM bi-di control chars FotMob wraps its clocks in)
+  var cleaned = lt.replace(/[\u200e\u200f\s]/g, "")
+  var m = cleaned.match(/^(\d{1,3})[\u2019\u2032']?$/)
+  if (!m) return lt
+  var base = parseInt(m[1], 10)
+  if (base < 0 || base > 130) return lt
+  var age = (Number(nowMs) - Number(fetchedAtMs)) / 60000
+  if (!isFinite(age) || age <= 0) return lt
+  var drift = Math.floor(age)
+  if (drift <= 0) return lt
+  // Never show more than +4 minutes beyond what the provider reported —
+  // beyond that a refetch is overdue and guessing is worse than honesty
+  return "\u200e" + String(base + Math.min(drift, 4)) + "\u2019\u200e"
 }
 
 function leagueLabel(id) {
