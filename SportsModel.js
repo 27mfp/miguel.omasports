@@ -289,36 +289,43 @@ function defaultState() {
     sport: "football",
     football: {
       leagueIds: ["61"],
+      teamIds: [],
       teamId: "",
       teamName: "",
       standingsLeagueId: "61"
     },
     nba: {
+      teamIds: [],
       teamId: "",
       teamName: "",
       standingsGroup: "Eastern Conference"
     },
     f1: {
+      teamIds: [],
       teamId: "",
       teamName: "",
       standingsGroup: "Drivers"
     },
     nfl: {
+      teamIds: [],
       teamId: "",
       teamName: "",
       standingsGroup: "American Football Conference"
     },
     mlb: {
+      teamIds: [],
       teamId: "",
       teamName: "",
       standingsGroup: "American League"
     },
     nhl: {
+      teamIds: [],
       teamId: "",
       teamName: "",
       standingsGroup: "Eastern Conference"
     },
     antiSpoiler: false,
+    notifications: true,
     refreshMinutes: 15
   }
 }
@@ -357,6 +364,19 @@ function normalizeLeagueIds(value) {
   return result
 }
 
+function normalizeTeamIds(value) {
+  var result = []
+  var seen = {}
+  var source = arrayFrom(value)
+  for (var i = 0; i < source.length && result.length < 24; i++) {
+    var raw = String(source[i] || "").trim()
+    if (!raw || seen[raw]) continue
+    seen[raw] = true
+    result.push(raw)
+  }
+  return result
+}
+
 function parseState(raw) {
   var defaults = defaultState()
   var parsed = null
@@ -378,34 +398,51 @@ function parseState(raw) {
   var fb = parsed.football && typeof parsed.football === "object" ? parsed.football : {}
   var fbLeagues = normalizeLeagueIds(fb.leagueIds || parsed.leagueIds)
   if (fbLeagues.length === 0) fbLeagues = ["61"]
+  var fbTeamIds = normalizeTeamIds(fb.teamIds || (fb.teamId || parsed.teamId ? [fb.teamId || parsed.teamId] : []))
+
+  function parseSubSport(key, def) {
+    var obj = parsed[key] && typeof parsed[key] === "object" ? parsed[key] : {}
+    var tids = normalizeTeamIds(obj.teamIds || (obj.teamId ? [obj.teamId] : []))
+    return {
+      teamIds: tids,
+      teamId: String(obj.teamId || (tids.length > 0 ? tids[0] : "")),
+      teamName: String(obj.teamName || ""),
+      standingsGroup: String(obj.standingsGroup || def.standingsGroup)
+    }
+  }
 
   return {
     version: 2,
     sport: sport,
     football: {
       leagueIds: fbLeagues,
-      teamId: String(fb.teamId || parsed.teamId || ""),
+      teamIds: fbTeamIds,
+      teamId: String(fb.teamId || (fbTeamIds.length > 0 ? fbTeamIds[0] : "") || parsed.teamId || ""),
       teamName: String(fb.teamName || parsed.teamName || ""),
       standingsLeagueId: String(fb.standingsLeagueId || parsed.standingsLeagueId || fbLeagues[0])
     },
-    nba: parsed.nba && typeof parsed.nba === "object" ? parsed.nba : defaults.nba,
-    f1: parsed.f1 && typeof parsed.f1 === "object" ? parsed.f1 : defaults.f1,
-    nfl: parsed.nfl && typeof parsed.nfl === "object" ? parsed.nfl : defaults.nfl,
-    mlb: parsed.mlb && typeof parsed.mlb === "object" ? parsed.mlb : defaults.mlb,
-    nhl: parsed.nhl && typeof parsed.nhl === "object" ? parsed.nhl : defaults.nhl,
+    nba: parseSubSport("nba", defaults.nba),
+    f1: parseSubSport("f1", defaults.f1),
+    nfl: parseSubSport("nfl", defaults.nfl),
+    mlb: parseSubSport("mlb", defaults.mlb),
+    nhl: parseSubSport("nhl", defaults.nhl),
     antiSpoiler: parsed.antiSpoiler === true,
+    notifications: parsed.notifications !== false,
     refreshMinutes: Math.max(5, Math.min(60, parseInt(parsed.refreshMinutes, 10) || 15))
   }
 }
 
-function statePayload(sport, fbLeagues, fbTeamId, fbTeamName, refreshMinutes, fbStandingsId, sportSettings, antiSpoiler) {
+function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, fbStandingsId, sportSettings, antiSpoiler, notifications) {
   var state = defaultState()
   state.sport = String(sport || "football")
   state.antiSpoiler = antiSpoiler === true
+  state.notifications = notifications !== false
   state.refreshMinutes = Math.max(5, Math.min(60, parseInt(refreshMinutes, 10) || 15))
+  var tids = normalizeTeamIds(fbTeamIds)
   state.football = {
     leagueIds: normalizeLeagueIds(fbLeagues),
-    teamId: String(fbTeamId || ""),
+    teamIds: tids,
+    teamId: String(tids.length > 0 ? tids[0] : ""),
     teamName: String(fbTeamName || ""),
     standingsLeagueId: String(fbStandingsId || (fbLeagues && fbLeagues[0]) || "61")
   }
@@ -1076,18 +1113,25 @@ function teamOptionsForSport(sport, matches) {
   return list
 }
 
-function matchesForTeam(matches, teamId, sport) {
+function matchesForTeam(matches, teamIdOrIds, sport) {
   var s = String(sport || "football").toLowerCase()
   if (s === "f1") {
     return arrayFrom(matches)
   }
-  var id = String(teamId || "").toLowerCase()
-  if (!id) return []
+  var rawIds = Array.isArray(teamIdOrIds) ? teamIdOrIds : [teamIdOrIds]
+  var ids = []
+  for (var k = 0; k < rawIds.length; k++) {
+    var str = String(rawIds[k] || "").trim().toLowerCase()
+    if (str) ids.push(str)
+  }
+  if (ids.length === 0) return []
+
   var result = []
+  var seen = {}
   var source = arrayFrom(matches)
   for (var i = 0; i < source.length; i++) {
     var m = source[i]
-    if (!m) continue
+    if (!m || seen[m.id]) continue
     var homeId = String(m.home && m.home.id || "").toLowerCase()
     var awayId = String(m.away && m.away.id || "").toLowerCase()
     var homeName = String(m.home && m.home.name || "").toLowerCase()
@@ -1095,7 +1139,16 @@ function matchesForTeam(matches, teamId, sport) {
     var homeShort = String(m.home && m.home.shortName || "").toLowerCase()
     var awayShort = String(m.away && m.away.shortName || "").toLowerCase()
 
-    if (homeId === id || awayId === id || homeName.indexOf(id) !== -1 || awayName.indexOf(id) !== -1 || homeShort.indexOf(id) !== -1 || awayShort.indexOf(id) !== -1) {
+    var matchFound = false
+    for (var j = 0; j < ids.length; j++) {
+      var id = ids[j]
+      if (homeId === id || awayId === id || homeName.indexOf(id) !== -1 || awayName.indexOf(id) !== -1 || homeShort.indexOf(id) !== -1 || awayShort.indexOf(id) !== -1) {
+        matchFound = true
+        break
+      }
+    }
+    if (matchFound) {
+      seen[m.id] = true
       result.push(m)
     }
   }

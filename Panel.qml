@@ -35,18 +35,16 @@ Panel {
 
   property var savedState: Model.defaultState()
   property bool stateLoaded: false
-  property string ignoredStateSignature: ""
-
-  // Anti-Spoiler Mode
-  property bool antiSpoiler: false
-  property var revealedMatchIds: ({})
-
-  // Sport-specific selections
   property var selectedLeagueIds: ["61"]
+  property var selectedTeamIds: []
   property string selectedTeamId: ""
   property string standingsLeagueId: "61"
+  property bool antiSpoiler: false
+  property bool enableNotifications: true
+  property var revealedMatchIds: ({})
+  property var lastSeenMatches: ({})
 
-  // ---- Match data --------------------------------------------------------
+  // Match and standings storage
   property var allMatches: []
   property var teamMatchesRaw: []
   property var teamOptions: []
@@ -67,41 +65,59 @@ Panel {
   readonly property bool hasData: allMatches.length > 0
   readonly property var baseTeamOptions: Model.teamOptionsForSport(activeSport, allMatches)
 
-  // Combined team options ensuring saved favorite is always present and searchable
+  function teamNameFor(id) {
+    var str = String(id || "").toLowerCase()
+    if (!str) return ""
+    for (var i = 0; i < baseTeamOptions.length; i++) {
+      if (String(baseTeamOptions[i].value).toLowerCase() === str) return baseTeamOptions[i].label
+    }
+    for (var j = 0; j < allMatches.length; j++) {
+      var m = allMatches[j]
+      if (m && m.home && String(m.home.id).toLowerCase() === str) return m.home.name
+      if (m && m.away && String(m.away.id).toLowerCase() === str) return m.away.name
+    }
+    return String(id)
+  }
+
+  // Combined team options ensuring saved favorites are always present and searchable
   readonly property var combinedTeamOptions: {
     var base = Model.arrayFrom(baseTeamOptions)
-    var curId = String(selectedTeamId || "")
-    var curName = ""
-    if (activeSport === "football") curName = String((savedState.football && savedState.football.teamName) || "")
-    else if (savedState[activeSport]) curName = String(savedState[activeSport].teamName || "")
+    var ids = Model.arrayFrom(selectedTeamIds)
+    var seen = {}
+    for (var b = 0; b < base.length; b++) seen[String(base[b].value).toLowerCase()] = true
 
-    if (curId !== "" && curName !== "") {
-      var found = false
-      for (var i = 0; i < base.length; i++) {
-        if (String(base[i].value) === curId) { found = true; break }
-      }
-      if (!found) {
-        base.unshift({ value: curId, label: curName, description: "Saved favorite" })
+    for (var k = 0; k < ids.length; k++) {
+      var curId = String(ids[k]).toLowerCase()
+      if (!seen[curId]) {
+        seen[curId] = true
+        base.unshift({ value: ids[k], label: root.teamNameFor(ids[k]), description: "Saved favorite" })
       }
     }
     return base
   }
 
   // ---- Fixtures League / Matchday / Team Filter --------------------------
-  property string fixtureFilterId: activeSport === "f1" ? "all" : (selectedTeamId !== "" ? "team" : "all")
+  property string fixtureFilterId: activeSport === "f1" ? "all" : (selectedTeamIds.length > 0 ? "team" : "all")
 
   readonly property var fixtureFilterOptions: {
     var opts = []
     if (activeSport === "f1") {
       opts.push({ value: "all", label: "🏁 2026 Grand Prix Calendar" })
-      if (selectedTeamId !== "") {
-        opts.push({ value: "team", label: "★ " + (selectedTeamName || "My Favorite Driver") })
+      if (selectedTeamIds.length > 0) {
+        opts.push({ value: "team", label: "★ " + (root.teamNameFor(selectedTeamIds[0]) || "My Favorite Driver") })
       }
       return opts
     }
 
-    if (selectedTeamId !== "") {
-      opts.push({ value: "team", label: "★ " + (selectedTeamName || "My Favorite") })
+    if (selectedTeamIds.length > 0) {
+      if (selectedTeamIds.length === 1) {
+        opts.push({ value: "team", label: "★ " + root.teamNameFor(selectedTeamIds[0]) })
+      } else {
+        opts.push({ value: "team", label: "★ All Followed Favorites (" + selectedTeamIds.length + ")" })
+        for (var f = 0; f < selectedTeamIds.length; f++) {
+          opts.push({ value: "fav_" + selectedTeamIds[f], label: "★ " + root.teamNameFor(selectedTeamIds[f]) })
+        }
+      }
     }
     opts.push({ value: "all", label: "🏆 All " + activeSportMeta.label })
     if (activeSport === "football") {
@@ -115,8 +131,11 @@ Panel {
 
   readonly property var activeFixturesList: {
     if (activeSport === "f1") return allMatches
-    if (fixtureFilterId === "team" && selectedTeamId !== "") {
+    if (fixtureFilterId === "team" && selectedTeamIds.length > 0) {
       return teamMatches
+    }
+    if (fixtureFilterId.indexOf("fav_") === 0) {
+      return Model.matchesForTeam(allMatches, fixtureFilterId.slice(4), activeSport)
     }
     if (fixtureFilterId === "all") {
       return allMatches
@@ -294,23 +313,26 @@ Panel {
   readonly property var teamMatches: {
     if (activeSport === "f1") return allMatches
     if (teamMatchesRaw && teamMatchesRaw.length > 0) return teamMatchesRaw
-    return Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
+    if (selectedTeamIds.length > 0) return Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
+    if (selectedTeamId !== "") return Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
+    return []
   }
-  readonly property var featuredMatch: Model.featuredMatchForTeam(teamMatches)
-  readonly property string selectedTeamName: selectedTeamLabel()
+  readonly property var featuredMatch: Model.featuredMatchForTeam(teamMatches.length > 0 ? teamMatches : allMatches)
+  readonly property string selectedTeamName: selectedTeamIds.length > 0 ? root.teamNameFor(selectedTeamIds[0]) : selectedTeamLabel()
   readonly property string selectedLeagueNames: selectedLeagueNameList()
 
   // Bar badge + summary
   readonly property bool favoriteTeamLive: {
-    var source = teamMatches
+    var source = teamMatches.length > 0 ? teamMatches : allMatches
     for (var i = 0; i < source.length; i++)
       if (source[i].status === "live") return true
     return false
   }
   readonly property string favoriteSummaryText: {
     if (favoriteTeamLive) {
-      for (var i = 0; i < teamMatches.length; i++) {
-        var m = teamMatches[i]
+      var source = teamMatches.length > 0 ? teamMatches : allMatches
+      for (var i = 0; i < source.length; i++) {
+        var m = source[i]
         if (m.status === "live") {
           var h = (m.home.shortName || m.home.name).slice(0, 3).toUpperCase()
           var a = (m.away.shortName || m.away.name).slice(0, 3).toUpperCase()
@@ -318,10 +340,11 @@ Panel {
         }
       }
     }
-    if (selectedTeamId === "" || teamMatches.length === 0) return ""
-    var first = teamMatches[0]
+    if (teamMatches.length === 0 && allMatches.length === 0) return ""
+    var first = teamMatches.length > 0 ? teamMatches[0] : allMatches[0]
     var status = Model.matchStatusText(first)
-    return selectedTeamName + " · " + status + (first.scoreText && first.status !== "upcoming" ? " " + first.scoreText : "")
+    var tLabel = first.home && (selectedTeamIds.indexOf(String(first.home.id)) !== -1) ? (first.home.shortName || first.home.name) : (first.away ? (first.away.shortName || first.away.name) : (selectedTeamName || (first.home ? first.home.name : "")))
+    return tLabel + " · " + status + (first.scoreText && first.status !== "upcoming" ? " " + first.scoreText : "")
   }
 
   readonly property var refreshIntervalOptions: [
@@ -338,13 +361,14 @@ Panel {
     activeSport = String(sportValue)
     savedState.sport = activeSport
     restoreSportSelections()
-    fixtureFilterId = activeSport === "f1" ? "all" : (selectedTeamId !== "" ? "team" : "all")
+    fixtureFilterId = activeSport === "f1" ? "all" : (selectedTeamIds.length > 0 ? "team" : "all")
     persistState()
     allMatches = []
     teamMatchesRaw = []
     multiSportStandings = {}
     lastPages = []
     matchDetails = {}
+    ensureStandingsSelection()
     refresh()
   }
 
@@ -353,21 +377,24 @@ Panel {
       var fb = savedState.football || {}
       selectedLeagueIds = Model.normalizeLeagueIds(fb.leagueIds)
       if (selectedLeagueIds.length === 0) selectedLeagueIds = ["61"]
-      selectedTeamId = String(fb.teamId || "")
+      selectedTeamIds = Model.normalizeTeamIds(fb.teamIds || (fb.teamId ? [fb.teamId] : []))
+      selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (fb.teamId || ""))
       standingsLeagueId = String(fb.standingsLeagueId || selectedLeagueIds[0])
       if (fb.tab === "standings") root.tabIndex = 2
       else if (fb.tab === "live") root.tabIndex = 1
       else root.tabIndex = 0
     } else if (activeSport === "f1") {
       var f1 = savedState.f1 || {}
-      selectedTeamId = String(f1.teamId || "")
+      selectedTeamIds = Model.normalizeTeamIds(f1.teamIds || (f1.teamId ? [f1.teamId] : []))
+      selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (f1.teamId || ""))
       standingsLeagueId = String(f1.standingsGroup || "Drivers")
       if (f1.tab === "standings") root.tabIndex = 2
       else if (f1.tab === "live") root.tabIndex = 1
       else root.tabIndex = 0
     } else {
       var sp = savedState[activeSport] || {}
-      selectedTeamId = String(sp.teamId || "")
+      selectedTeamIds = Model.normalizeTeamIds(sp.teamIds || (sp.teamId ? [sp.teamId] : []))
+      selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (sp.teamId || ""))
       standingsLeagueId = String(sp.standingsGroup || (standingsOptions.length > 0 ? standingsOptions[0].value : ""))
       if (sp.tab === "standings") root.tabIndex = 2
       else if (sp.tab === "live") root.tabIndex = 1
@@ -438,7 +465,7 @@ Panel {
     Qt.callLater(function() {
       if (!root.opened) return
       setCenterHoverRevealSuppressed(true)
-      if (root.stateLoaded && !root.loading && needsAutoRefresh()) root.refresh()
+      if (root.stateLoaded && !root.loading && (needsAutoRefresh() || root.allMatches.length === 0)) root.refresh()
       else if (!root.loading && detailQueue.length > 0) Qt.callLater(root.nextDetail)
     })
   }
@@ -472,6 +499,7 @@ Panel {
   }
 
   function needsAutoRefresh() {
+    if (allMatches.length === 0) return true
     if (lastUpdated.getTime() <= 0) return true
     return (new Date()).getTime() - lastUpdated.getTime() > 60000
   }
@@ -505,43 +533,152 @@ Panel {
     savedState = nextState
     activeSport = String(savedState.sport || "football")
     antiSpoiler = savedState.antiSpoiler === true
+    enableNotifications = savedState.notifications !== false
     restoreSportSelections()
     stateLoaded = true
 
     if (leaguePicker) leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
-    if (root.opened && !root.loading && !ownWrite && root.needsAutoRefresh()) Qt.callLater(root.refresh)
+    if (!ownWrite) root.startRound()
   }
 
   function persistState() {
     if (!stateLoaded) return
     var curSport = activeSport
     var sportSettings = {}
-    if (curSport === "nba") {
-      sportSettings.nba = { teamId: selectedTeamId, teamName: selectedTeamName, standingsGroup: standingsLeagueId }
-    } else if (curSport === "f1") {
-      sportSettings.f1 = { teamId: selectedTeamId, teamName: selectedTeamName, standingsGroup: standingsLeagueId }
-    } else if (curSport === "nfl") {
-      sportSettings.nfl = { teamId: selectedTeamId, teamName: selectedTeamName, standingsGroup: standingsLeagueId }
-    } else if (curSport === "mlb") {
-      sportSettings.mlb = { teamId: selectedTeamId, teamName: selectedTeamName, standingsGroup: standingsLeagueId }
-    } else if (curSport === "nhl") {
-      sportSettings.nhl = { teamId: selectedTeamId, teamName: selectedTeamName, standingsGroup: standingsLeagueId }
+    var sportsList = ["nba", "f1", "nfl", "mlb", "nhl"]
+    for (var s = 0; s < sportsList.length; s++) {
+      var spk = sportsList[s]
+      var prevSp = savedState[spk] || {}
+      if (curSport === spk) {
+        sportSettings[spk] = {
+          teamIds: selectedTeamIds,
+          teamId: selectedTeamId,
+          teamName: selectedTeamName,
+          standingsGroup: standingsLeagueId
+        }
+      } else {
+        sportSettings[spk] = prevSp
+      }
     }
 
     var fb = savedState.football || {}
+    var fbTeamIds = curSport === "football" ? selectedTeamIds : (fb.teamIds || (fb.teamId ? [fb.teamId] : []))
     savedState = Model.statePayload(
       curSport,
       fb.leagueIds || selectedLeagueIds,
-      curSport === "football" ? selectedTeamId : fb.teamId,
+      fbTeamIds,
       curSport === "football" ? selectedTeamName : fb.teamName,
       savedState.refreshMinutes,
       curSport === "football" ? standingsLeagueId : fb.standingsLeagueId,
       sportSettings,
-      antiSpoiler
+      antiSpoiler,
+      enableNotifications
     )
     ignoredStateSignature = JSON.stringify(savedState)
     stateFile.setText(JSON.stringify(savedState, null, 2) + "\n")
+  }
+
+  function toggleNotifications() {
+    enableNotifications = !enableNotifications
+    savedState.notifications = enableNotifications
+    persistState()
+    if (enableNotifications) {
+      sendDesktopNotification("Omarchy Matchday", "Notificações de golos e inícios de jogo ativadas!", "", "normal")
+    }
+  }
+
+  function sendDesktopNotification(title, body, iconPath, urgency) {
+    if (!root.enableNotifications) return
+    var cmd = ["notify-send", "-a", "Omarchy Matchday"]
+    if (iconPath && String(iconPath).trim()) {
+      var p = String(iconPath)
+      if (p.indexOf("file://") === 0) p = p.slice(7)
+      cmd.push("-i", p)
+    }
+    if (urgency) cmd.push("-u", urgency)
+    cmd.push(title, body)
+    notifierProc.command = cmd
+    notifierProc.running = true
+  }
+
+  function checkScoreNotifications() {
+    if (!root.enableNotifications || allMatches.length === 0) return
+
+    var ms = Model.arrayFrom(allMatches)
+    var favIds = Model.arrayFrom(root.selectedTeamIds)
+    var favSet = {}
+    for (var f = 0; f < favIds.length; f++) favSet[String(favIds[f]).toLowerCase()] = true
+
+    var now = root.nowMs
+    var nextSeen = {}
+
+    for (var i = 0; i < ms.length; i++) {
+      var m = ms[i]
+      if (!m || !m.id) continue
+
+      var hId = String(m.home && m.home.id || "").toLowerCase()
+      var aId = String(m.away && m.away.id || "").toLowerCase()
+      var hName = String(m.home && m.home.name || "").toLowerCase()
+      var aName = String(m.away && m.away.name || "").toLowerCase()
+      var isFav = (favSet[hId] || favSet[aId] || favSet[hName] || favSet[aName] || root.activeSport === "f1" || favIds.length === 0)
+
+      var prev = lastSeenMatches[m.id]
+
+      if (prev && isFav) {
+        // 1. Kickoff / Started Live
+        if (m.status === "live" && prev.status === "upcoming") {
+          var startTitle = m.sport === "f1" ? ("🏁 F1: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("● LIVE: " + m.home.name + " vs " + m.away.name)
+          var startBody = m.sport === "f1" ? ("A sessão começou em " + (m.locality || m.country || "direto") + "!") : ("O jogo começou! " + (m.leagueName ? "· " + m.leagueName : ""))
+          var startLogo = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + (m.home && m.home.id ? m.home.id : "logo") + ".png"
+          sendDesktopNotification(startTitle, startBody, startLogo, "normal")
+        }
+
+        // 2. Goal / Score change
+        if (m.status === "live") {
+          var hDiff = (m.homeScore || 0) - (prev.homeScore || 0)
+          var aDiff = (m.awayScore || 0) - (prev.awayScore || 0)
+
+          if (hDiff > 0) {
+            var gTitle1 = m.sport === "football" ? ("⚽ GOLO! " + m.home.name) : ("🏀 " + m.home.name + " (+" + hDiff + ")")
+            var gBody1 = m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : "")
+            var gLogo1 = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + m.home.id + ".png"
+            sendDesktopNotification(gTitle1, gBody1, gLogo1, "critical")
+          }
+
+          if (aDiff > 0) {
+            var gTitle2 = m.sport === "football" ? ("⚽ GOLO! " + m.away.name) : ("🏀 " + m.away.name + " (+" + aDiff + ")")
+            var gBody2 = m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : "")
+            var gLogo2 = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + m.away.id + ".png"
+            sendDesktopNotification(gTitle2, gBody2, gLogo2, "critical")
+          }
+        }
+
+        // 3. Match Imminent (15 min before kickoff)
+        if (m.status === "upcoming" && !prev.notifiedUpcoming) {
+          var msTime = Date.parse(m.time)
+          if (!isNaN(msTime)) {
+            var diffMins = Math.floor((msTime - now) / 60000)
+            if (diffMins > 0 && diffMins <= 15) {
+              var uTitle = m.sport === "f1" ? ("🏎️ F1 a começar: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("⏰ A começar em " + diffMins + "m: " + m.home.name + " vs " + m.away.name)
+              var uBody = (m.leagueName ? m.leagueName + " · " : "") + "Início previsto às " + Qt.formatDateTime(new Date(msTime), "HH:mm")
+              var uLogo = "/home/miguel/.cache/omarchy-matchday/logos/" + (m.sport || "football") + "-" + (m.home && m.home.id ? m.home.id : "") + ".png"
+              sendDesktopNotification(uTitle, uBody, uLogo, "normal")
+              prev.notifiedUpcoming = true
+            }
+          }
+        }
+      }
+
+      nextSeen[m.id] = {
+        homeScore: m.homeScore || 0,
+        awayScore: m.awayScore || 0,
+        status: m.status || "upcoming",
+        notifiedUpcoming: prev ? (prev.notifiedUpcoming || false) : false
+      }
+    }
+
+    lastSeenMatches = nextSeen
   }
 
   function setSelectedLeagues(values) {
@@ -553,16 +690,45 @@ Panel {
     if (root.opened || root.backgroundUpdates) root.refresh()
   }
 
-  function setSelectedTeam(value) {
-    selectedTeamId = String(value || "")
+  function toggleSelectedTeam(value) {
+    var id = String(value || "").trim()
+    if (!id) return
+    var arr = Model.arrayFrom(selectedTeamIds)
+    var idx = arr.indexOf(id)
+    if (idx !== -1) {
+      arr.splice(idx, 1)
+    } else {
+      arr.push(id)
+    }
+    selectedTeamIds = arr
+    selectedTeamId = arr.length > 0 ? arr[0] : ""
     teamMatchesRaw = []
-    if (teamPicker) teamPicker.value = selectedTeamId
     persistState()
-    if (activeSport === "football" && selectedTeamId !== "") root.fetchFootballTeamPage()
+    if (activeSport === "football" && arr.length > 0) root.fetchFootballTeamPage()
+  }
+
+  function removeSelectedTeam(value) {
+    var id = String(value || "").trim()
+    var arr = Model.arrayFrom(selectedTeamIds)
+    var idx = arr.indexOf(id)
+    if (idx !== -1) {
+      arr.splice(idx, 1)
+      selectedTeamIds = arr
+      selectedTeamId = arr.length > 0 ? arr[0] : ""
+      teamMatchesRaw = []
+      persistState()
+    }
+  }
+
+  function setSelectedTeam(value) {
+    root.toggleSelectedTeam(value)
   }
 
   function clearSelectedTeam() {
-    root.setSelectedTeam("")
+    selectedTeamIds = []
+    selectedTeamId = ""
+    teamMatchesRaw = []
+    persistState()
   }
 
   function setRefreshMinutes(value) {
@@ -737,6 +903,7 @@ Panel {
     ensureStandingsSelection()
     startDetailFetch()
     downloadMissingLogos()
+    checkScoreNotifications()
 
     if (pages.length === 0 && !hasData) {
       errorMessage = "Unable to load matches. Check your connection."
@@ -788,6 +955,7 @@ Panel {
       loading = false
       ensureStandingsSelection()
       downloadMissingLogos()
+      checkScoreNotifications()
       if (allMatches.length === 0 && Object.keys(multiSportStandings).length === 0) {
         errorMessage = "Unable to load " + activeSportMeta.label + " data. Check connection."
       }
@@ -817,6 +985,7 @@ Panel {
       loading = false
       ensureStandingsSelection()
       downloadMissingLogos()
+      checkScoreNotifications()
       if (allMatches.length === 0) {
         errorMessage = "Unable to load F1 race calendar. Check connection."
       }
@@ -1009,14 +1178,8 @@ Panel {
     return "󰥔 Updated " + Qt.formatDateTime(lastUpdated, "HH:mm")
   }
 
-  // ---- Self-heal ------------------------------------------------------------
-  Timer {
-    interval: 1500
-    running: true
-    onTriggered: {
-      stateFile.reload()
-      if (root.backgroundUpdates) root.refresh()
-    }
+  Component.onCompleted: {
+    stateFile.reload()
   }
 
   FileView {
@@ -1025,13 +1188,18 @@ Panel {
     watchChanges: true
     atomicWrites: true
     printErrors: false
-    onLoaded: root.applyState(text())
+    onLoaded: {
+      var str = ""
+      try { str = typeof text === "function" ? text() : String(text || "") } catch (e) { str = "" }
+      root.applyState(str)
+    }
     onLoadFailed: root.applyState("")
     onFileChanged: reload()
   }
 
   Process { id: matchOpener }
   Process { id: logoCacheProc }
+  Process { id: notifierProc }
 
   // ---- Multi-sport Workers -------------------------------------------------
   Process {
@@ -1408,6 +1576,17 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Style.space(8)
 
+                // Notifications Toggle Button
+                Button {
+                  id: notifyBtn
+                  text: ""
+                  iconText: root.enableNotifications ? "󰂚" : "󰂛"
+                  selected: root.enableNotifications
+                  accent: Color.accent
+                  foreground: root.fgColor
+                  onClicked: root.toggleNotifications()
+                }
+
                 // Anti-Spoiler Toggle Button
                 Button {
                   id: spoilerBtn
@@ -1440,7 +1619,7 @@ Panel {
                     showLabel: false
                     value: root.refreshIntervalLabel()
                     options: root.refreshIntervalOptions
-                    hasCursor: root.focusSection === (root.selectedTeamId === "" ? 4 : 5)
+                    hasCursor: root.focusSection === (root.selectedTeamIds.length === 0 ? 4 : 5)
                     foreground: root.fgColor
                     background: Color.popups.background
                     onChanged: function(value) { root.setRefreshMinutes(value) }
@@ -1498,12 +1677,11 @@ Panel {
 
                       Text {
                         text: modelData.label
-                        color: root.activeSport === modelData.value ? Color.accent : Qt.darker(root.fgColor, 1.2)
+                        color: root.activeSport === modelData.value ? Color.accent : Qt.darker(root.fgColor, 1.25)
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                         font.bold: root.activeSport === modelData.value
                         anchors.verticalCenter: parent.verticalCenter
-                        elide: Text.ElideRight
                       }
                     }
 
@@ -1587,11 +1765,12 @@ Panel {
                   }
 
                   Text {
-                    text: (root.liveCount === 1 ? "1 LIVE" : root.liveCount + " LIVE")
+                    text: root.liveCount + " LIVE"
                     color: root.urgentColor
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
                   }
                 }
 
@@ -1606,21 +1785,21 @@ Panel {
             PanelSeparator { foreground: root.fgColor }
 
             // ================================================================
-            // TAB 0: FIXTURES & FAVORITES
+            // TAB 0: FIXTURES / CALENDAR (Default View)
             // ================================================================
             Column {
-              id: teamTab
+              id: fixturesTab
               width: parent.width
               spacing: Style.space(12)
               visible: root.tabIndex === 0
 
-              // ---- Setup / Picker Card --------------------------------------
+              // ---- Collapsible Setup Section ---------------------------------
               Rectangle {
-                id: setupCard
+                id: setupSection
                 width: parent.width
-                implicitHeight: setupCol.implicitHeight + Style.space(20)
+                implicitHeight: setupCol.implicitHeight + Style.space(16)
                 radius: Style.cornerRadius
-                color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.03)
+                color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.02)
                 border.width: 1
                 border.color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
 
@@ -1640,7 +1819,7 @@ Panel {
                       id: setupSecHeader
                       anchors.left: parent.left
                       anchors.verticalCenter: parent.verticalCenter
-                      text: (root.activeSport === "f1" ? "FAVORITE DRIVER & PREFERENCES" : ("FOLLOWED " + root.activeSportMeta.label.toUpperCase() + " & CLUB"))
+                      text: (root.activeSport === "f1" ? "FAVORITE DRIVER & PREFERENCES" : ("FOLLOWED " + root.activeSportMeta.label.toUpperCase() + " & CLUBS"))
                       foreground: root.fgColor
                     }
 
@@ -1650,7 +1829,7 @@ Panel {
                       anchors.verticalCenter: parent.verticalCenter
                       text: root.setupExpanded ? "Done" : "Edit"
                       iconText: root.setupExpanded ? "󰅃" : "󰅀"
-                      visible: root.selectedTeamId !== "" || (root.activeSport === "football" && root.selectedLeagueIds.length > 0)
+                      visible: root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0)
                       foreground: root.fgColor
                       onClicked: root.setupExpanded = !root.setupExpanded
                     }
@@ -1660,7 +1839,7 @@ Panel {
                   Row {
                     width: parent.width
                     spacing: Style.space(8)
-                    visible: !root.setupExpanded && (root.selectedTeamId !== "" || (root.activeSport === "football" && root.selectedLeagueIds.length > 0))
+                    visible: !root.setupExpanded && (root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0))
 
                     Rectangle {
                       implicitWidth: summaryPillRow.implicitWidth + Style.space(14)
@@ -1681,7 +1860,7 @@ Panel {
 
                         Text {
                           visible: root.activeSport === "football"
-                          text: "🏆 " + root.selectedLeagueIds.length + " Followed Leagues"
+                          text: "🏆 " + root.selectedLeagueIds.length + " Leagues"
                           color: root.fgColor
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
@@ -1689,7 +1868,7 @@ Panel {
                         }
 
                         Text {
-                          visible: root.activeSport === "football" && root.selectedTeamId !== ""
+                          visible: root.activeSport === "football" && root.selectedTeamIds.length > 0
                           text: "·"
                           color: Qt.darker(root.fgColor, 1.5)
                           font.family: Style.font.family
@@ -1697,8 +1876,8 @@ Panel {
                         }
 
                         Text {
-                          visible: root.selectedTeamId !== ""
-                          text: "★ " + root.selectedTeamName
+                          visible: root.selectedTeamIds.length > 0
+                          text: root.selectedTeamIds.length === 1 ? ("★ " + root.teamNameFor(root.selectedTeamIds[0])) : ("★ " + root.selectedTeamIds.length + " Followed Favorites")
                           color: Color.accent
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
@@ -1720,7 +1899,7 @@ Panel {
                   Column {
                     width: parent.width
                     spacing: Style.space(10)
-                    visible: root.setupExpanded || (root.activeSport === "football" && root.selectedLeagueIds.length === 0) || root.selectedTeamId === ""
+                    visible: root.setupExpanded || (root.activeSport === "football" && root.selectedLeagueIds.length === 0) || root.selectedTeamIds.length === 0
 
                     // League Picker (Football only)
                     FocusScope {
@@ -1818,38 +1997,95 @@ Panel {
 
                       FocusScope {
                         id: teamScope
-                        width: root.selectedTeamId !== "" ? parent.width - clearButton.width - Style.space(8) : parent.width
+                        width: root.selectedTeamIds.length > 0 ? parent.width - clearButton.width - Style.space(8) : parent.width
                         height: teamPicker.implicitHeight
 
                         SearchableDropdown {
                           id: teamPicker
                           anchors.fill: parent
-                          label: root.activeSport === "f1" ? "Favorite Driver / Team" : "Favorite Club / Team"
-                          value: root.selectedTeamId
+                          label: root.activeSport === "f1" ? "Follow Favorite Drivers / Teams" : "Follow Favorite Clubs / Teams"
+                          value: ""
                           options: root.combinedTeamOptions
-                          placeholderText: root.activeSport === "f1" ? "Search driver or constructor…" : "Search team by name…"
-                          triggerLabel: root.activeSport === "f1" ? "Choose favorite driver" : "Choose favorite team"
+                          placeholderText: root.activeSport === "f1" ? "Search driver or constructor to follow…" : "Search team to follow…"
+                          triggerLabel: root.activeSport === "f1" ? "Add / select favorite driver" : "Add / select favorite team"
                           emptyText: "No results match search"
                           popupRowHeight: Style.space(48)
                           popupMinHeight: Style.space(200)
                           hasCursor: root.focusSection === 2
                           foreground: root.fgColor
                           background: Color.popups.background
-                          onChanged: function(value) { root.setSelectedTeam(value) }
+                          onChanged: function(value) { root.toggleSelectedTeam(value) }
                         }
                       }
 
                       Button {
                         id: clearButton
-                        visible: root.selectedTeamId !== ""
+                        visible: root.selectedTeamIds.length > 0
                         text: ""
                         iconText: "󰅖"
                         bordered: true
                         focusable: true
-                        hasCursor: root.focusSection === 4 && root.selectedTeamId !== ""
+                        hasCursor: root.focusSection === 4 && root.selectedTeamIds.length > 0
                         foreground: root.fgColor
                         anchors.bottom: teamScope.bottom
                         onClicked: root.clearSelectedTeam()
+                      }
+                    }
+
+                    // Followed Favorite Team Badges
+                    Flow {
+                      width: parent.width
+                      spacing: Style.space(6)
+                      visible: root.selectedTeamIds.length > 0
+
+                      Repeater {
+                        model: root.selectedTeamIds
+
+                        delegate: Rectangle {
+                          required property var modelData
+                          required property int index
+
+                          implicitWidth: favTeamChipRow.implicitWidth + Style.space(14)
+                          implicitHeight: favTeamChipRow.implicitHeight + Style.space(6)
+                          radius: Math.min(4, Style.cornerRadius)
+                          color: favChipMouse.containsMouse
+                            ? Style.hoverFillFor(root.fgColor, root.urgentColor)
+                            : Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.12)
+                          border.width: 1
+                          border.color: favChipMouse.containsMouse
+                            ? root.urgentColor
+                            : Color.accent
+
+                          Row {
+                            id: favTeamChipRow
+                            anchors.centerIn: parent
+                            spacing: Style.space(6)
+
+                            Text {
+                              text: "★ " + root.teamNameFor(modelData)
+                              color: Color.accent
+                              font.family: Style.font.family
+                              font.pixelSize: Style.font.caption
+                              font.bold: true
+                            }
+
+                            Text {
+                              text: "✕"
+                              color: favChipMouse.containsMouse ? root.urgentColor : Qt.darker(root.fgColor, 1.5)
+                              font.family: Style.font.family
+                              font.pixelSize: Style.font.caption
+                              font.bold: true
+                            }
+                          }
+
+                          MouseArea {
+                            id: favChipMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.removeSelectedTeam(modelData)
+                          }
+                        }
                       }
                     }
                   }
@@ -1861,7 +2097,7 @@ Panel {
                 id: spotlightCard
                 width: parent.width
                 implicitHeight: spotlightSurface.implicitHeight
-                visible: (root.selectedTeamId !== "" && root.featuredMatch !== null) || (root.activeSport === "f1" && root.allMatches.length > 0)
+                visible: (root.selectedTeamIds.length > 0 && root.featuredMatch !== null) || (root.activeSport === "f1" && root.allMatches.length > 0)
 
                 readonly property var match: root.featuredMatch || (root.activeSport === "f1" && root.allMatches.length > 0 ? root.allMatches[0] : null)
                 readonly property bool isF1: root.activeSport === "f1"
