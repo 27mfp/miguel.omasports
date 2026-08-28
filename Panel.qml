@@ -4,12 +4,15 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "SportsModel.js" as Model
+import "Theme.qml" as Theme
 
 Panel {
   id: root
   moduleName: "miguel.omasports"
   ipcTarget: "miguel.omasports"
   manageIpc: false
+
+  Theme { id: theme }
 
   property var anchorItem: null
   property bool openedFromHotkey: false
@@ -52,7 +55,6 @@ Panel {
   property string ignoredStateSignature: ""
   property var selectedLeagueIds: ["47"]
   property var selectedTeamIds: []
-  property string selectedTeamId: ""
   property string standingsLeagueId: "47"
   property bool antiSpoiler: false
   property bool enableNotifications: true
@@ -187,7 +189,6 @@ Panel {
     if (activeSport === "f1") tm = selectedTeamIds.length > 0 ? allMatches : []
     else if (teamMatchesRaw && teamMatchesRaw.length > 0) tm = teamMatchesRaw
     else if (selectedTeamIds.length > 0) tm = Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
-    else if (selectedTeamId !== "") tm = Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
     else tm = []
     if (!Model.sameMatches(teamMatches, tm)) teamMatches = tm
 
@@ -424,7 +425,7 @@ Panel {
   // visibility gate in MatchSpotlight already requires favorites-or-F1, so a
   // bare `allMatches` fallback here would silently surface any league match.
   readonly property var featuredMatch: teamMatches.length > 0 ? Model.featuredMatchForTeam(teamMatches) : null
-  readonly property string selectedTeamName: selectedTeamIds.length > 0 ? root.teamNameFor(selectedTeamIds[0]) : selectedTeamLabel()
+  readonly property string selectedTeamName: selectedTeamIds.length > 0 ? root.teamNameFor(selectedTeamIds[0]) : ""
   readonly property string selectedLeagueNames: selectedLeagueNameList()
 
   // Bar badge + summary — driven ONLY by followed teams. An unrelated league
@@ -489,7 +490,6 @@ Panel {
       var fb = savedState.football || {}
       selectedLeagueIds = Model.normalizeLeagueIds(fb.leagueIds)
       selectedTeamIds = Model.normalizeTeamIds(fb.teamIds || (fb.teamId ? [fb.teamId] : []))
-      selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (fb.teamId || ""))
       standingsLeagueId = String(fb.standingsLeagueId || selectedLeagueIds[0])
       if (fb.tab === "standings") root.tabIndex = 2
       else if (fb.tab === "live") root.tabIndex = 1
@@ -497,7 +497,6 @@ Panel {
     } else if (activeSport === "f1") {
       var f1 = savedState.f1 || {}
       selectedTeamIds = Model.normalizeTeamIds(f1.teamIds || (f1.teamId ? [f1.teamId] : []))
-      selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (f1.teamId || ""))
       standingsLeagueId = String(f1.standingsGroup || "Drivers")
       if (f1.tab === "standings") root.tabIndex = 2
       else if (f1.tab === "live") root.tabIndex = 1
@@ -505,7 +504,6 @@ Panel {
     } else {
       var sp = savedState[activeSport] || {}
       selectedTeamIds = Model.normalizeTeamIds(sp.teamIds || (sp.teamId ? [sp.teamId] : []))
-      selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (sp.teamId || ""))
       standingsLeagueId = String(sp.standingsGroup || (standingsOptions.length > 0 ? standingsOptions[0].value : ""))
       if (sp.tab === "standings") root.tabIndex = 2
       else if (sp.tab === "live") root.tabIndex = 1
@@ -529,10 +527,7 @@ Panel {
   }
 
   function revealMatch(matchId) {
-    var next = {}
-    for (var k in revealedMatchIds) next[k] = revealedMatchIds[k]
-    next[String(matchId)] = true
-    revealedMatchIds = next
+    revealedMatchIds = Model.dictSet(revealedMatchIds, String(matchId), true)
   }
 
   // Which F1 weekend cards have their sessions timetable unfolded
@@ -540,10 +535,7 @@ Panel {
 
   function toggleF1Expand(matchId) {
     var key = String(matchId)
-    var next = {}
-    for (var k in f1ExpandedIds) next[k] = f1ExpandedIds[k]
-    if (next[key]) delete next[key]
-    else next[key] = true
+    var next = f1ExpandedIds[key] ? Model.dictDelete(f1ExpandedIds, key) : Model.dictSet(f1ExpandedIds, key, true)
     f1ExpandedIds = next
   }
 
@@ -743,18 +735,6 @@ Panel {
     return names.join(", ")
   }
 
-  function selectedTeamLabel() {
-    var id = String(selectedTeamId || "")
-    if (!id) return ""
-    var opts = baseTeamOptions
-    for (var i = 0; i < opts.length; i++) {
-      if (String(opts[i].value) === id) return String(opts[i].label)
-    }
-    if (activeSport === "football") return String((savedState.football && savedState.football.teamName) || "")
-    if (savedState[activeSport]) return String(savedState[activeSport].teamName || "")
-    return ""
-  }
-
   function stateFilePath() {
     return Quickshell.env("HOME") + "/.config/omarchy/sports-favorites.json"
   }
@@ -800,7 +780,6 @@ Panel {
       tabName: tabName,
       selectedLeagueIds: selectedLeagueIds,
       selectedTeamIds: selectedTeamIds,
-      selectedTeamId: selectedTeamId,
       selectedTeamName: selectedTeamName,
       standingsLeagueId: standingsLeagueId,
       antiSpoiler: antiSpoiler,
@@ -812,7 +791,15 @@ Panel {
   }
 
   function toggleNotifications() {
-    if (!notificationToolAvailable) return
+    if (!notificationToolAvailable) {
+      // The probe ran once at startup; if the user installed libnotify-bin
+      // later, re-probe before giving up. A second failed probe leaves the
+      // button disabled and surfaces a one-time warning to the logs.
+      if (notificationProbe.running) return
+      notificationWarningShown = false
+      notificationProbe.running = true
+      return
+    }
     enableNotifications = !enableNotifications
     savedState.notifications = enableNotifications
     persistState()
@@ -914,7 +901,6 @@ Panel {
     else arr.push(id)
     errorMessage = ""
     selectedTeamIds = arr
-    selectedTeamId = arr.length > 0 ? arr[0] : ""
     teamMatchesRaw = []
     normalizeFixtureFilter()
     persistState()
@@ -930,7 +916,6 @@ Panel {
       arr.splice(idx, 1)
       errorMessage = ""
       selectedTeamIds = arr
-      selectedTeamId = arr.length > 0 ? arr[0] : ""
       teamMatchesRaw = []
       normalizeFixtureFilter()
       persistState()
@@ -946,7 +931,6 @@ Panel {
   function clearSelectedTeam() {
     errorMessage = ""
     selectedTeamIds = []
-    selectedTeamId = ""
     teamMatchesRaw = []
     normalizeFixtureFilter()
     if (activeSport === "football") {
@@ -1168,7 +1152,7 @@ Panel {
     errorMessage = ""
     requestSerial++
     stopNetworkWorkers()
-    beginTeamPageFetch(selectedTeamIds.length > 0 ? selectedTeamIds : [selectedTeamId], false)
+    beginTeamPageFetch(selectedTeamIds, false)
   }
 
   function fetchNextFootballTeamPage() {
@@ -1774,7 +1758,7 @@ Panel {
   }
 
   function tableHeaderColor() {
-    return root.mutedColor(root.fgColor, 0.45)
+    return theme.mutedColor(root.fgColor, 0.45)
   }
 
   function matchSubline(match) {
@@ -1802,10 +1786,6 @@ Panel {
 
   // Alpha-derived muted foreground: Qt.darker() inverts text hierarchy on
   // light themes (darkening an already-dark fg makes secondary text heavier)
-  function mutedColor(c, a) {
-    return Qt.rgba(c.r, c.g, c.b, a)
-  }
-
   // Data older than two refresh cycles should look stale at a glance
   readonly property bool dataStale: {
     if (!root.hasData || root.loading) return false
@@ -1989,46 +1969,53 @@ Panel {
     onFailed: root.resolveFootballWorker(workerD, "")
   }
 
-  Timer {
+  RetryTimer {
     id: retryDelay
-    interval: 2500
-    onTriggered: {
-      if (!root.loading || pendingRetryIds.length === 0) {
-        pendingRetryIds = []
-        return
-      }
+    predicate: function() {
+      return root.loading && pendingRetryIds.length > 0
+    }
+    callback: function() {
       roundQueue = roundQueue.concat(pendingRetryIds)
       pendingRetryIds = []
       root.pumpFootball()
     }
   }
 
-  Timer {
+  RetryTimer {
     id: teamRetryDelay
-    interval: 2500
-    onTriggered: {
-      if (!root.teamFetchActive || root.teamRetrySerial !== root.requestSerial || root.teamRetryId === "") return
+    predicate: function() {
+      return root.teamFetchActive
+        && root.teamRetrySerial === root.requestSerial
+        && root.teamRetryId !== ""
+    }
+    callback: function() {
       root.teamRetryId = ""
       root.fetchNextFootballTeamPage()
     }
   }
 
   // Retry dead rounds for ESPN sports (same contract as the football retry)
-  Timer {
+  RetryTimer {
     id: espnRetryDelay
-    interval: 2500
-    onTriggered: {
-      if (root.loading && root.activeSport === root.espnSportCode && root.requestSerial === root.espnRetrySerial)
-        root.startEspnRound(root.espnSportPath, root.espnSportCode, root.espnDefaultName)
+    predicate: function() {
+      return root.loading
+        && root.activeSport === root.espnSportCode
+        && root.requestSerial === root.espnRetrySerial
+    }
+    callback: function() {
+      root.startEspnRound(root.espnSportPath, root.espnSportCode, root.espnDefaultName)
     }
   }
 
-  Timer {
+  RetryTimer {
     id: f1RetryDelay
-    interval: 2500
-    onTriggered: {
-      if (root.loading && root.activeSport === "f1" && root.requestSerial === root.f1RetrySerial)
-        root.startF1Round()
+    predicate: function() {
+      return root.loading
+        && root.activeSport === "f1"
+        && root.requestSerial === root.f1RetrySerial
+    }
+    callback: function() {
+      root.startF1Round()
     }
   }
 
@@ -2103,10 +2090,10 @@ Panel {
     if (root.opened || root.backgroundUpdates) refreshTimer.start()
   }
 
-  onBackgroundUpdatesChanged: {
-    scheduleNextPoll()
-    if (root.backgroundUpdates && root.stateLoaded && !root.loading) root.refresh()
-  }
+  // onBackgroundUpdatesChanged was removed: `backgroundUpdates` is `readonly`
+  // (Quickshell settings are evaluated declaratively and don't fire change
+  // signals), so the handler was dead code that future contributors would
+  // trust. Toggling the setting requires restarting the shell.
 
   IpcHandler {
     target: root.ipcTarget
@@ -2217,7 +2204,7 @@ Panel {
                     text: root.statusLine()
                     color: root.errorMessage !== "" || root.persistenceError !== "" || root.dataStale
                       ? root.urgentColor
-                      : root.mutedColor(root.fgColor, 0.55)
+                      : theme.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     elide: Text.ElideRight
@@ -2314,7 +2301,7 @@ Panel {
             Rectangle {
               width: parent.width
               implicitHeight: sportSelectorRow.implicitHeight + Style.space(6)
-              radius: Math.min(6, Style.cornerRadius)
+              radius: theme.subtleRadius(6)
               color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.035)
               border.width: 1
               border.color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
@@ -2338,7 +2325,7 @@ Panel {
                     Accessible.name: modelData.label + (root.activeSport === modelData.value ? " (selected)" : "")
                     width: (sportSelectorRow.width - (Model.sports().length - 1) * Style.space(3)) / Model.sports().length
                     implicitHeight: Style.space(26)
-                    radius: Math.min(4, Style.cornerRadius)
+                    radius: theme.subtleRadius(4)
                     color: root.activeSport === modelData.value
                       ? Util.alpha(Color.accent, 0.20)
                       : (sportMouse.containsMouse ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06) : "transparent")
@@ -2361,7 +2348,7 @@ Panel {
 
                       Text {
                         text: modelData.label
-                        color: root.activeSport === modelData.value ? Color.accent : root.mutedColor(root.fgColor, 0.75)
+                        color: root.activeSport === modelData.value ? Color.accent : theme.mutedColor(root.fgColor, 0.75)
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                         font.bold: root.activeSport === modelData.value
@@ -2423,7 +2410,7 @@ Panel {
                 visible: root.liveCount > 0 && root.tabIndex !== 1
                 implicitWidth: liveRowBadge.implicitWidth + Style.space(12)
                 implicitHeight: liveRowBadge.implicitHeight + Style.space(4)
-                radius: Math.min(4, Style.cornerRadius)
+                radius: theme.subtleRadius(4)
                 color: Util.alpha(root.urgentColor, 0.15)
                 border.width: 1
                 border.color: root.urgentColor
@@ -2535,7 +2522,7 @@ Panel {
                     Rectangle {
                       implicitWidth: summaryPillRow.implicitWidth + Style.space(14)
                       implicitHeight: summaryPillRow.implicitHeight + Style.space(6)
-                      radius: Math.min(4, Style.cornerRadius)
+                      radius: theme.subtleRadius(4)
                       color: summaryMouse.containsMouse
                         ? Style.hoverFillFor(root.fgColor, Color.accent)
                         : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.05)
@@ -2561,7 +2548,7 @@ Panel {
                         Text {
                           visible: root.activeSport === "football" && root.selectedTeamIds.length > 0
                           text: "·"
-                          color: root.mutedColor(root.fgColor, 0.45)
+                          color: theme.mutedColor(root.fgColor, 0.45)
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
                         }
@@ -2632,7 +2619,7 @@ Panel {
 
                           implicitWidth: chipRow.implicitWidth + Style.space(14)
                           implicitHeight: chipRow.implicitHeight + Style.space(6)
-                          radius: Math.min(4, Style.cornerRadius)
+                          radius: theme.subtleRadius(4)
                           color: chipMouse.containsMouse
                             ? Style.hoverFillFor(root.fgColor, root.urgentColor)
                             : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06)
@@ -2657,7 +2644,7 @@ Panel {
                             Text {
                               id: leagueChipX
                               text: "✕"
-                              color: chipMouse.containsMouse ? root.urgentColor : root.mutedColor(root.fgColor, 0.45)
+                              color: chipMouse.containsMouse ? root.urgentColor : theme.mutedColor(root.fgColor, 0.45)
                               font.family: Style.font.family
                               font.pixelSize: Style.font.caption
                               font.bold: true
@@ -2747,7 +2734,7 @@ Panel {
 
                           implicitWidth: favTeamChipRow.implicitWidth + Style.space(14)
                           implicitHeight: favTeamChipRow.implicitHeight + Style.space(6)
-                          radius: Math.min(4, Style.cornerRadius)
+                          radius: theme.subtleRadius(4)
                           color: favChipMouse.containsMouse
                             ? Style.hoverFillFor(root.fgColor, root.urgentColor)
                             : Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.12)
@@ -2771,7 +2758,7 @@ Panel {
 
                             Text {
                               text: "✕"
-                              color: favChipMouse.containsMouse ? root.urgentColor : root.mutedColor(root.fgColor, 0.45)
+                              color: favChipMouse.containsMouse ? root.urgentColor : theme.mutedColor(root.fgColor, 0.45)
                               font.family: Style.font.family
                               font.pixelSize: Style.font.caption
                               font.bold: true
@@ -2830,7 +2817,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
                   text: root.activeFixtureHeader
-                  color: root.mutedColor(root.fgColor, 0.55)
+                  color: theme.mutedColor(root.fgColor, 0.55)
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -2864,7 +2851,7 @@ Panel {
                 visible: root.activeFixturesList.length === 0 && !root.loading
                   && (root.hasData || root.fetchedOnce) && root.errorMessage === ""
                 text: "No matches in the next days for this selection. Use the refresh button above or press R."
-                color: root.mutedColor(root.fgColor, 0.65)
+                color: theme.mutedColor(root.fgColor, 0.65)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 wrapMode: Text.WordWrap
@@ -2876,7 +2863,7 @@ Panel {
                 width: parent.width
                 implicitHeight: errorCol.implicitHeight + Style.space(16)
                 visible: root.errorMessage !== "" && !root.loading
-                radius: Math.min(6, Style.cornerRadius)
+                radius: theme.subtleRadius(6)
                 color: Util.alpha(root.urgentColor, 0.08)
                 border.width: 1
                 border.color: Util.alpha(root.urgentColor, 0.4)
@@ -2924,7 +2911,7 @@ Panel {
                   delegate: Rectangle {
                     width: parent.width
                     implicitHeight: Style.space(40)
-                    radius: Math.min(6, Style.cornerRadius)
+                    radius: theme.subtleRadius(6)
                     color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.05)
 
                     SequentialAnimation on opacity {
@@ -2969,7 +2956,7 @@ Panel {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label.toUpperCase()
-                        color: modelData.label === "Live Matches" ? root.urgentColor : root.mutedColor(root.fgColor, 0.55)
+                        color: modelData.label === "Live Matches" ? root.urgentColor : theme.mutedColor(root.fgColor, 0.55)
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                         font.bold: true
@@ -2996,7 +2983,6 @@ Panel {
                           activeSport: root.activeSport
                           fgColor: root.fgColor
                           urgentColor: root.urgentColor
-                          selectedTeamId: root.selectedTeamId
                           selectedTeamIds: root.selectedTeamIds
                           antiSpoiler: root.antiSpoiler
                           revealedMatchIds: root.revealedMatchIds
@@ -3060,7 +3046,7 @@ Panel {
                     text: (root.hasData || root.fetchedOnce)
                       ? "No live events in progress right now for " + root.activeSportMeta.label + "."
                       : "Load " + root.activeSportMeta.label + " schedule to see live scores."
-                    color: root.mutedColor(root.fgColor, 0.65)
+                    color: theme.mutedColor(root.fgColor, 0.65)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     horizontalAlignment: Text.AlignHCenter
@@ -3072,7 +3058,7 @@ Panel {
                     visible: root.nextKickoffText !== ""
                     width: parent.width
                     implicitHeight: nextCol.implicitHeight + Style.space(12)
-                    radius: Math.min(4, Style.cornerRadius)
+                    radius: theme.subtleRadius(4)
                     color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08)
                     border.width: 1
                     border.color: Util.alpha(Color.accent, 0.25)
@@ -3149,7 +3135,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
                   text: root.activeSportMeta.label.toUpperCase() + " STANDINGS"
-                  color: root.mutedColor(root.fgColor, 0.55)
+                  color: theme.mutedColor(root.fgColor, 0.55)
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -3185,7 +3171,7 @@ Panel {
                 text: root.hasData
                   ? "No standings available for this selection."
                   : "No standings yet — use the refresh button above or press R."
-                color: root.mutedColor(root.fgColor, 0.65)
+                color: theme.mutedColor(root.fgColor, 0.65)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
                 wrapMode: Text.WordWrap
@@ -3292,7 +3278,6 @@ Panel {
                       delegate: StandingsRow {
                         activeSport: root.activeSport
                         standingsLeagueId: root.standingsLeagueId
-                        selectedTeamId: root.selectedTeamId
                         selectedTeamIds: root.selectedTeamIds
                         selectedTeamName: root.selectedTeamName
                         fgColor: root.fgColor
@@ -3321,7 +3306,7 @@ Panel {
                   }
                   Text {
                     text: root.activeSport === "f1" ? "Podium / P1" : "Playoffs / Europe"
-                    color: root.mutedColor(root.fgColor, 0.55)
+                    color: theme.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     anchors.verticalCenter: parent.verticalCenter
@@ -3342,7 +3327,7 @@ Panel {
                   }
                   Text {
                     text: root.activeSport === "f1" ? "Podium places" : "Play-in"
-                    color: root.mutedColor(root.fgColor, 0.55)
+                    color: theme.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     anchors.verticalCenter: parent.verticalCenter
@@ -3359,7 +3344,7 @@ Panel {
                   }
                   Text {
                     text: "Favorite"
-                    color: root.mutedColor(root.fgColor, 0.55)
+                    color: theme.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     anchors.verticalCenter: parent.verticalCenter
@@ -3380,7 +3365,7 @@ Panel {
                   }
                   Text {
                     text: "Relegation"
-                    color: root.mutedColor(root.fgColor, 0.55)
+                    color: theme.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     anchors.verticalCenter: parent.verticalCenter

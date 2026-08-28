@@ -29,6 +29,28 @@ function parseMatchTimeMs(match) {
   return isNaN(t) ? NaN : t
 }
 
+// QML binding system observes property identity, so map-shaped state
+// (revealedMatchIds, f1ExpandedIds, lastSeenMatches) must be replaced
+// with a shallow clone for any change to take effect. These helpers
+// centralize the clone-and-mutate pattern so callers cannot forget the
+// clone and silently leave a binding pointing at the stale object.
+function dictSet(map, key, value) {
+  var next = {}
+  for (var k in map) {
+    if (Object.prototype.hasOwnProperty.call(map, k)) next[k] = map[k]
+  }
+  if (value === undefined || value === null) {
+    delete next[key]
+  } else {
+    next[key] = value
+  }
+  return next
+}
+
+function dictDelete(map, key) {
+  return dictSet(map, key, undefined)
+}
+
 var supportedSports = [
   { value: "football", label: "Football", icon: "⚽", description: "100+ Leagues & Cups" },
   { value: "nba", label: "NBA", icon: "🏀", description: "National Basketball Assn" },
@@ -553,6 +575,11 @@ function normalizeTab(value) {
 // Football and F1 key by provider id; US sports key by ESPN abbreviation
 // (fallback: id) which is what the ESPN CDN logos are named after.
 function crestCacheKey(sport, teamId, abbr) {
+  // The character class is filesystem-safe: any non-alphanumeric/dash/underscore
+  // bytes (including provider-supplied weirdness like slashes or unicode) are
+  // stripped, leaving at worst a sport-prefixed key. Unknown sport values
+  // default to "football" so the cache layout is stable even when a parser
+  // ships a new sport slug before the catalog knows about it.
   var sp = String(sport || "football").toLowerCase()
   var id = String(teamId || "").trim().toLowerCase()
   var a = String(abbr || "").trim().toLowerCase()

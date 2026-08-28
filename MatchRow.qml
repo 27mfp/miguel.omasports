@@ -1,6 +1,9 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
+import "Theme.qml" as Theme
+
+Theme { id: theme }
 
 // One fixture/result row: a team-vs-team card, or an expandable F1 Grand Prix
 // weekend entry with its sessions timetable. Theme/state inputs are injected
@@ -14,7 +17,6 @@ Item {
   property string activeSport: "football"
   property color fgColor
   property color urgentColor
-  property string selectedTeamId: ""
   property var selectedTeamIds: []
   property bool antiSpoiler: false
   property var revealedMatchIds: ({})
@@ -28,8 +30,8 @@ Item {
   readonly property bool isLive: modelData.status === "live"
   readonly property bool isUpcoming: modelData.status === "upcoming"
   readonly property bool isFinished: modelData.status === "finished"
-  readonly property bool favIsHome: Model.isFollowedTeam(modelData.home && modelData.home.id, root.selectedTeamIds.length > 0 ? root.selectedTeamIds : [root.selectedTeamId])
-  readonly property bool favIsAway: Model.isFollowedTeam(modelData.away && modelData.away.id, root.selectedTeamIds.length > 0 ? root.selectedTeamIds : [root.selectedTeamId])
+  readonly property bool favIsHome: Model.isFollowedTeam(modelData.home && modelData.home.id, root.selectedTeamIds)
+  readonly property bool favIsAway: Model.isFollowedTeam(modelData.away && modelData.away.id, root.selectedTeamIds)
   readonly property string dateBadge: Model.formatMatchDate(modelData.time)
   readonly property bool isScoreRevealed: root.revealedMatchIds[String(modelData.id)] === true
   readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
@@ -47,15 +49,15 @@ Item {
   width: parent.width
   implicitHeight: matchCard.implicitHeight
 
-  function mutedColor(c, a) {
-    return Qt.rgba(c.r, c.g, c.b, a)
+  function theme.mutedColor(c, a) {
+    return theme.mutedColor(c, a)
   }
 
   Rectangle {
     id: matchCard
     width: parent.width
     implicitHeight: root.isF1 ? (f1ContainerCol.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
-    radius: Math.min(6, Style.cornerRadius)
+    radius: theme.subtleRadius(6)
     Accessible.role: Accessible.Button
     Accessible.name: {
       var h = (modelData.home && (modelData.home.name || modelData.home.shortName)) || ""
@@ -113,7 +115,7 @@ Item {
 
           Text {
             text: root.dateBadge
-            color: root.mutedColor(root.fgColor, 0.65)
+            color: theme.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -157,7 +159,7 @@ Item {
             Text {
               width: parent.width
               text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
-              color: root.mutedColor(root.fgColor, 0.45)
+              color: theme.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               elide: Text.ElideRight
@@ -172,7 +174,7 @@ Item {
           Rectangle {
             implicitWidth: f1StatusText.implicitWidth + Style.space(10)
             implicitHeight: f1StatusText.implicitHeight + Style.space(4)
-            radius: Math.min(4, Style.cornerRadius)
+            radius: theme.subtleRadius(4)
             color: root.isLive
               ? root.urgentColor
               : (root.isFinished ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08) : Util.alpha(Color.accent, 0.15))
@@ -181,7 +183,7 @@ Item {
               id: f1StatusText
               anchors.centerIn: parent
               text: root.isFinished ? "Official" : (root.isLive ? "RACE DAY" : Model.formatKickoff(modelData.time))
-              color: root.isLive ? "#ffffff" : (root.isFinished ? root.mutedColor(root.fgColor, 0.65) : Color.accent)
+              color: root.isLive ? "#ffffff" : (root.isFinished ? theme.mutedColor(root.fgColor, 0.65) : Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -191,7 +193,7 @@ Item {
           Text {
             visible: root.isF1 && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
             text: root.expanded ? "󰅃" : "󰅀"
-            color: root.mutedColor(root.fgColor, 0.45)
+            color: theme.mutedColor(root.fgColor, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             anchors.verticalCenter: parent.verticalCenter
@@ -248,7 +250,7 @@ Item {
               Text {
                 width: parent.width - Style.space(240)
                 text: Qt.formatDateTime(new Date(Date.parse(modelData.time)), "ddd d MMM · HH:mm")
-                color: root.mutedColor(root.fgColor, 0.55)
+                color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 elide: Text.ElideRight
@@ -273,7 +275,7 @@ Item {
                 color: {
                   var ms2 = Date.parse(modelData.time)
                   if (root.nowMs >= ms2 && root.nowMs <= ms2 + 2.5 * 3600 * 1000) return root.urgentColor
-                  return root.mutedColor(root.fgColor, 0.45)
+                  return theme.mutedColor(root.fgColor, 0.45)
                 }
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -305,7 +307,7 @@ Item {
 
         Text {
           text: root.dateBadge
-          color: root.mutedColor(root.fgColor, 0.65)
+          color: theme.mutedColor(root.fgColor, 0.65)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -315,7 +317,7 @@ Item {
           text: root.isLive
             ? ("● " + (modelData.liveTime || "LIVE"))
             : (Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : ""))
-          color: root.isLive ? root.urgentColor : root.mutedColor(root.fgColor, 0.40)
+          color: root.isLive ? root.urgentColor : theme.mutedColor(root.fgColor, 0.40)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: root.isLive
@@ -401,7 +403,7 @@ Item {
               text: root.scoreLabel
               color: root.isLive
                 ? root.urgentColor
-                : (root.isUpcoming ? root.mutedColor(root.fgColor, 0.75) : root.fgColor)
+                : (root.isUpcoming ? theme.mutedColor(root.fgColor, 0.75) : root.fgColor)
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               font.bold: true

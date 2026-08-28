@@ -1,6 +1,9 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
+import "Theme.qml" as Theme
+
+Theme { id: theme }
 
 // One league table row; the layout adapts per sport (football, US sports,
 // F1 drivers/constructors). Theme/state inputs are injected by Panel.qml.
@@ -12,26 +15,25 @@ Item {
 
   property string activeSport: "football"
   property string standingsLeagueId: ""
-  property string selectedTeamId: ""
   property var selectedTeamIds: []
   property string selectedTeamName: ""
   property color fgColor
   property color urgentColor
 
   readonly property color rowFg: root.fgColor
-  readonly property bool isFavorite: Model.isStandingsRowFavorite(root.modelData, root.selectedTeamIds.length > 0 ? root.selectedTeamIds : [root.selectedTeamId], root.selectedTeamName)
+  readonly property bool isFavorite: Model.isStandingsRowFavorite(root.modelData, root.selectedTeamIds, root.selectedTeamName)
 
   width: parent.width
   implicitHeight: Style.space(26)
 
-  function mutedColor(c, a) {
-    return Qt.rgba(c.r, c.g, c.b, a)
+  function theme.mutedColor(c, a) {
+    return theme.mutedColor(c, a)
   }
   height: implicitHeight
 
   Rectangle {
     anchors.fill: parent
-    radius: Math.min(4, Style.cornerRadius)
+    radius: theme.subtleRadius(4)
     Accessible.role: Accessible.ListItem
     Accessible.name: {
       var pos = String(root.modelData.pos || "")
@@ -95,7 +97,7 @@ Item {
           text: root.modelData.pos
           color: root.modelData.zone === "europe"
             ? Color.accent
-            : (root.modelData.zone === "relegation" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
+            : (root.modelData.zone === "relegation" ? root.urgentColor : theme.mutedColor(root.rowFg, 0.55))
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -129,15 +131,15 @@ Item {
       }
     }
 
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.gd || "-")
-      color: String(root.modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(root.modelData.gd || "").indexOf("-") === 0 && String(root.modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
+      color: String(root.modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(root.modelData.gd || "").indexOf("-") === 0 && String(root.modelData.gd) !== "-" ? root.urgentColor : theme.mutedColor(root.rowFg, 0.55))
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -186,7 +188,7 @@ Item {
           text: root.modelData.pos
           color: root.modelData.zone === "europe"
             ? Color.accent
-            : (root.modelData.zone === "relegation" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
+            : (root.modelData.zone === "relegation" ? root.urgentColor : theme.mutedColor(root.rowFg, 0.55))
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -221,13 +223,13 @@ Item {
       }
     }
 
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: root.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
       width: Style.space(36)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.played > 0 ? (root.modelData.wins / root.modelData.played).toFixed(3).replace(/^0/, "") : ".000"
-      color: root.mutedColor(root.rowFg, 0.65)
+      color: theme.mutedColor(root.rowFg, 0.65)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -236,7 +238,7 @@ Item {
       width: Style.space(34)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.gd || "-")
-      color: String(root.modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(root.modelData.gd || "").indexOf("-") === 0 && String(root.modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
+      color: String(root.modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(root.modelData.gd || "").indexOf("-") === 0 && String(root.modelData.gd) !== "-" ? root.urgentColor : theme.mutedColor(root.rowFg, 0.55))
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -280,7 +282,7 @@ Item {
         Text {
           anchors.centerIn: parent
           text: root.modelData.pos
-          color: root.modelData.zone === "europe" ? Color.accent : root.mutedColor(root.rowFg, 0.55)
+          color: root.modelData.zone === "europe" ? Color.accent : theme.mutedColor(root.rowFg, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -317,7 +319,7 @@ Item {
       width: parent.width - Style.space(290)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || root.modelData.teamName || ""
-      color: root.mutedColor(root.rowFg, 0.55)
+      color: theme.mutedColor(root.rowFg, 0.55)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
@@ -327,7 +329,7 @@ Item {
       width: Style.space(36)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
-      color: root.mutedColor(root.rowFg, 0.65)
+      color: theme.mutedColor(root.rowFg, 0.65)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -371,7 +373,7 @@ Item {
         Text {
           anchors.centerIn: parent
           text: root.modelData.pos
-          color: root.modelData.zone === "europe" ? Color.accent : root.mutedColor(root.rowFg, 0.55)
+          color: root.modelData.zone === "europe" ? Color.accent : theme.mutedColor(root.rowFg, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -408,7 +410,7 @@ Item {
       width: parent.width - Style.space(300)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || ""
-      color: root.mutedColor(root.rowFg, 0.55)
+      color: theme.mutedColor(root.rowFg, 0.55)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
@@ -418,7 +420,7 @@ Item {
       width: Style.space(36)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
-      color: root.mutedColor(root.rowFg, 0.65)
+      color: theme.mutedColor(root.rowFg, 0.65)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight

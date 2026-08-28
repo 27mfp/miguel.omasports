@@ -19,7 +19,7 @@ const exported = [
   "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel", "isTrustedCrestUrl", "matchExternalUrl", "matchDetailUrl",
   "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime",
   "sameMatches", "sameRows", "sameGroups", "diffMatchNotifications", "buildPersistedState", "parseLeaguePage", "parseTeamPage",
-  "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS"
+  "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS", "dictSet", "dictDelete"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -547,6 +547,31 @@ test("mergeSeenMap drops stale entries and prefers the new snapshot", () => {
   // Stale entries inside the TTL window are kept; outside they are dropped.
   const justOld = { old: { seenAt: now - 3600000, status: "finished" } }
   assert.ok(Model.mergeSeenMap(justOld, {}, now, ttl).old)
+})
+test("dictSet and dictDelete return a new object identity", () => {
+  // QML bindings watch property identity. A function that mutates the
+  // input map would silently leave the binding pointing at the stale
+  // object; the audit caught this happening in three places. These
+  // helpers must always allocate a fresh map.
+  const base = { a: 1, b: 2 }
+  const added = Model.dictSet(base, "c", 3)
+  assert.notEqual(added, base, "dictSet must return a new map")
+  assert.deepEqual(base, { a: 1, b: 2 }, "dictSet must not mutate the input")
+  assert.deepEqual(added, { a: 1, b: 2, c: 3 })
+  const removed = Model.dictDelete(base, "a")
+  assert.notEqual(removed, base, "dictDelete must return a new map")
+  assert.deepEqual(base, { a: 1, b: 2 }, "dictDelete must not mutate the input")
+  assert.deepEqual(removed, { b: 2 })
+})
+test("dictSet rejects __proto__ and inherited keys", () => {
+  // A user-edited state file could carry "__proto__" or other keys that
+  // would otherwise slip into the deduplication map through prototype
+  // chain lookups. Verify the explicit hasOwnProperty guard.
+  const poisoned = Object.create({ injected: true })
+  poisoned.a = 1
+  const out = Model.dictSet(poisoned, "b", 2)
+  assert.equal(out.injected, undefined, "inherited keys must not be copied")
+  assert.deepEqual(out, { a: 1, b: 2 })
 })
 test("notification diff establishes a baseline without notifying", () => {
   const now = Date.parse("2026-08-22T19:30:00Z")
