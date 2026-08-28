@@ -95,7 +95,7 @@ omarchy plugin validate .
 
 # 2. Copy files to your Omarchy plugins directory
 mkdir -p "$HOME/.config/omarchy/plugins/miguel.omasports"
-cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml NetworkProcess.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
+cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml NetworkProcess.qml Theme.qml RetryTimer.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
 
 # 3. Rescan and enable
 omarchy-shell shell rescanPlugins

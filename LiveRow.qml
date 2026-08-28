@@ -1,6 +1,9 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
+import "Theme.qml" as Theme
+
+Theme { id: theme }
 
 // Broadcast-style live match card with pulsing clock pill, scorecard layout
 // and game progression bar. Theme/state inputs are injected by Panel.qml.
@@ -34,15 +37,15 @@ Item {
   width: parent.width
   implicitHeight: liveCard.implicitHeight
 
-  function mutedColor(c, a) {
-    return Qt.rgba(c.r, c.g, c.b, a)
+  function theme.mutedColor(c, a) {
+    return theme.mutedColor(c, a)
   }
 
   Rectangle {
     id: liveCard
     width: parent.width
     implicitHeight: liveCol.implicitHeight + Style.space(22)
-    radius: Math.min(8, Style.cornerRadius)
+    radius: theme.subtleRadius(8)
     Accessible.role: Accessible.Button
     Accessible.name: {
       var h = (root.modelData.home && (root.modelData.home.name || root.modelData.home.shortName)) || ""
@@ -117,7 +120,7 @@ Item {
             visible: root.modelData.round !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: "· " + root.modelData.round
-            color: root.mutedColor(root.fgColor, 0.45)
+            color: theme.mutedColor(root.fgColor, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
@@ -129,7 +132,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           implicitWidth: liveTimeRow.implicitWidth + Style.space(12)
           implicitHeight: liveTimeRow.implicitHeight + Style.space(4)
-          radius: Math.min(4, Style.cornerRadius)
+          radius: theme.subtleRadius(4)
           color: root.urgentColor
 
           Row {
@@ -210,7 +213,7 @@ Item {
           anchors.centerIn: parent
           width: Style.space(88)
           height: Style.space(32)
-          radius: Math.min(5, Style.cornerRadius)
+          radius: theme.subtleRadius(5)
           color: Util.alpha(root.urgentColor, 0.2)
           border.width: 1
           border.color: root.urgentColor
@@ -326,7 +329,7 @@ Item {
               for (var i = 0; i < ls.length; i++) out.push(ls[i] === undefined ? "–" : String(ls[i]))
               return out.join("   ")
             }
-            color: modelData === "home" ? root.mutedColor(root.fgColor, 0.8) : root.mutedColor(root.fgColor, 0.5)
+            color: modelData === "home" ? theme.mutedColor(root.fgColor, 0.8) : theme.mutedColor(root.fgColor, 0.5)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.letterSpacing: 2
@@ -342,7 +345,7 @@ Item {
 
         Text {
           text: "HT " + (root.details ? root.details.halftimeScore : "")
-          color: root.mutedColor(root.fgColor, 0.55)
+          color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
@@ -359,7 +362,7 @@ Item {
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           text: root.matchSubline(root.modelData) || "Live match in progress"
-          color: root.mutedColor(root.fgColor, 0.55)
+          color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight

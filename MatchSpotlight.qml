@@ -1,6 +1,9 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
+import "Theme.qml" as Theme
+
+Theme { id: theme }
 
 // Hero card highlighting the featured match of a followed team, or the next
 // Grand Prix weekend when the active sport is F1. Injected by Panel.qml.
@@ -27,8 +30,8 @@ Item {
   width: parent.width
   implicitHeight: spotlightSurface.implicitHeight
 
-  function mutedColor(c, a) {
-    return Qt.rgba(c.r, c.g, c.b, a)
+  function theme.mutedColor(c, a) {
+    return theme.mutedColor(c, a)
   }
 
   readonly property var match: featuredMatch || fallbackMatch
@@ -104,7 +107,7 @@ Item {
           Rectangle {
             implicitWidth: spotlightTagLabel.implicitWidth + Style.space(8)
             implicitHeight: spotlightTagLabel.implicitHeight + Style.space(4)
-            radius: Math.min(3, Style.cornerRadius)
+            radius: theme.subtleRadius(3)
             color: Util.alpha(Color.accent, 0.18)
             anchors.verticalCenter: parent.verticalCenter
 
@@ -123,7 +126,7 @@ Item {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             text: (root.match ? root.match.leagueName : "") + (root.match && root.match.round ? " · " + root.match.round : "")
-            color: root.mutedColor(root.fgColor, 0.65)
+            color: theme.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -136,7 +139,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           implicitWidth: statusPillRow.implicitWidth + Style.space(10)
           implicitHeight: statusPillRow.implicitHeight + Style.space(4)
-          radius: Math.min(4, Style.cornerRadius)
+          radius: theme.subtleRadius(4)
           color: root.isLive
             ? root.urgentColor
             : (root.outcome === "win" && !root.scoreHidden
@@ -218,7 +221,7 @@ Item {
               Text {
                 width: parent.width
                 text: root.match ? ((root.match.circuitName || "") + (root.match.locality ? " · " + root.match.locality : "") + (root.match.country ? ", " + root.match.country : "")) : ""
-                color: root.mutedColor(root.fgColor, 0.55)
+                color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
@@ -231,7 +234,7 @@ Item {
             visible: root.favoriteDriverStanding !== null
             implicitWidth: driverPillRow.implicitWidth + Style.space(14)
             implicitHeight: driverPillRow.implicitHeight + Style.space(6)
-            radius: Math.min(4, Style.cornerRadius)
+            radius: theme.subtleRadius(4)
             color: Util.alpha(Color.accent, 0.12)
             border.width: 1
             border.color: Color.accent
@@ -311,7 +314,7 @@ Item {
             Text {
               width: parent.width
               text: root.match && root.match.home.record ? root.match.home.record : (String(root.match && root.match.home.id) === String(root.favoriteMatchTeamId) ? "HOME · FAVORITE" : "HOME")
-              color: root.mutedColor(root.fgColor, 0.45)
+              color: theme.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               horizontalAlignment: Text.AlignRight
@@ -331,7 +334,7 @@ Item {
             anchors.centerIn: parent
             width: parent.width
             height: parent.height
-            radius: Math.min(5, Style.cornerRadius)
+            radius: theme.subtleRadius(5)
             color: root.isLive
               ? Util.alpha(root.urgentColor, 0.15)
               : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06)
@@ -398,7 +401,7 @@ Item {
             Text {
               width: parent.width
               text: root.match && root.match.away.record ? root.match.away.record : (String(root.match && root.match.away.id) === String(root.favoriteMatchTeamId) ? "AWAY · FAVORITE" : "AWAY")
-              color: root.mutedColor(root.fgColor, 0.45)
+              color: theme.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               horizontalAlignment: Text.AlignLeft
@@ -420,7 +423,7 @@ Item {
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           text: root.matchSubline(root.match) || (root.match && root.match.leagueName ? root.match.leagueName + " Event" : "Matchday Details")
-          color: root.mutedColor(root.fgColor, 0.55)
+          color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight
