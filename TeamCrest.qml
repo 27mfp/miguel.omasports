@@ -18,10 +18,10 @@ Item {
   property real crestSize: Style.space(22)
   property bool dimmed: false
 
-  implicitWidth: crestSize
-  implicitHeight: crestSize
-  width: crestSize
-  height: crestSize
+  implicitWidth: root.crestSize
+  implicitHeight: root.crestSize
+  width: root.crestSize
+  height: root.crestSize
   opacity: dimmed ? 0.5 : 1.0
 
   Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -34,14 +34,15 @@ Item {
     : ""
 
   readonly property string monogramText: {
-    if (abbr && String(abbr).trim()) {
-      return String(abbr).slice(0, 3).toUpperCase()
+    var abbreviation = root.abbr.trim()
+    if (abbreviation) {
+      return abbreviation.substring(0, 3).toUpperCase()
     }
-    var name = String(teamName || "").trim()
+    var name = root.teamName.trim()
     if (!name) return "?"
     var parts = name.split(/\s+/)
     if (parts.length >= 2) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase()
+      return String(parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase()
     }
     return name.slice(0, 2).toUpperCase()
   }
@@ -78,8 +79,8 @@ Item {
     // Decode at display resolution — provider PNGs are up to 500px wide and
     // rendering them at ~20px otherwise wastes ~20x memory per crest
     sourceSize: Qt.size(root.crestSize * 2, root.crestSize * 2)
-    visible: status === Image.Ready
-    opacity: status === Image.Ready ? 1.0 : 0.0
+    visible: localImg.status === Image.Ready
+    opacity: localImg.status === Image.Ready ? 1.0 : 0.0
     Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
   }
 
@@ -87,7 +88,10 @@ Item {
   Image {
     id: remoteImg
     anchors.fill: parent
-    source: String(root.source).indexOf("http") === 0 ? root.source : ""
+    // Keep a warm local cache from triggering a second CDN request. The
+    // remote fallback starts only after the local file is absent or fails.
+    source: (root.localCachePath === "" || localImg.status === Image.Error)
+      && Model.isTrustedCrestUrl(root.source, root.sport) ? root.source : ""
     fillMode: Image.PreserveAspectFit
     asynchronous: true
     cache: true

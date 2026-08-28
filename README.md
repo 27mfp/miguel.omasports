@@ -95,7 +95,7 @@ omarchy plugin validate .
 
 # 2. Copy files to your Omarchy plugins directory
 mkdir -p "$HOME/.config/omarchy/plugins/miguel.omasports"
-cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
+cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml NetworkProcess.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
 
 # 3. Rescan and enable
 omarchy-shell shell rescanPlugins
@@ -149,6 +149,13 @@ node tests/offline.mjs            # replay parsers vs fixtures + goldens (offlin
 ```
 
 Run `offline.mjs` before every commit that touches `SportsModel.js`; re-run the capture script only when you want to accept new provider data.
+
+### Runtime requirements
+
+The widget uses the system `curl`, `xdg-open`, and `notify-send` commands. Scores
+remain available without `notify-send`, but desktop alerts are disabled and the
+panel reports that capability. `curl` is required for provider data; the
+built-in mock mode remains available for offline UI development.
 
 ### Mock mode (`OMASPORTS_MOCK=1`)
 

@@ -13,7 +13,6 @@ Item {
   property string activeSport: "football"
   property color fgColor
   property color urgentColor
-  property string selectedTeamId: ""
   property var selectedTeamIds: []
   property string selectedTeamName: ""
   property bool antiSpoiler: false
@@ -23,6 +22,7 @@ Item {
   property var matchSubline: null // function(match)
   property var openMatch: null // function(match)
   property var revealMatch: null // function(matchId)
+  property bool rowFocused: false
 
   width: parent.width
   implicitHeight: spotlightSurface.implicitHeight
@@ -35,7 +35,17 @@ Item {
   readonly property bool isLive: match && match.status === "live"
   readonly property bool isUpcoming: match && match.status === "upcoming"
   readonly property bool isFinished: match && match.status === "finished"
-  readonly property string outcome: match ? Model.teamOutcome(match, root.selectedTeamId) : ""
+  readonly property string favoriteMatchTeamId: match
+    ? Model.teamIdForMatch(match, root.selectedTeamIds)
+    : ""
+  readonly property string favoriteMatchTeamName: match && root.favoriteMatchTeamId !== ""
+    ? (String(match.home && match.home.id) === String(root.favoriteMatchTeamId)
+       ? String(match.home.name || match.home.shortName || root.selectedTeamName)
+       : (String(match.away && match.away.id) === String(root.favoriteMatchTeamId)
+          ? String(match.away.name || match.away.shortName || root.selectedTeamName)
+          : root.selectedTeamName))
+    : root.selectedTeamName
+  readonly property string outcome: match ? Model.teamOutcome(match, root.favoriteMatchTeamId) : ""
   readonly property bool scoreHidden: root.antiSpoiler && isFinished && !(root.revealedMatchIds[match ? match.id : ""] === true)
 
   Rectangle {
@@ -46,10 +56,27 @@ Item {
     color: spotlightMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
       : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.035)
-    border.width: 1
+    border.width: root.rowFocused ? 2 : 1
     border.color: spotlightMouse.containsMouse
       ? Color.accent
-      : (root.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.12))
+      : (root.rowFocused
+         ? root.urgentColor
+         : (root.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.12)))
+    // When there's no match to announce, the surface is an empty card, not a
+    // button — mirror that in accessibility so screen readers don't claim an
+    // actionable item that the mouse handler already early-returns on.
+    Accessible.role: root.match ? Accessible.Button : Accessible.StaticText
+    Accessible.name: root.match
+      ? (root.isF1
+          ? (root.match.raceName || (root.match.home && root.match.home.name) || "Grand Prix")
+             + ", " + (root.isLive ? "live" : (root.match.status || ""))
+          : ((root.match.home && (root.match.home.name || root.match.home.shortName)) || "")
+             + " versus "
+             + ((root.match.away && (root.match.away.name || root.match.away.shortName)) || "")
+             + (root.scoreHidden
+                  ? ", result hidden"
+                  : (root.match.scoreText ? ", " + root.match.scoreText : "")))
+      : ""
 
     Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutCubic } }
@@ -223,7 +250,7 @@ Item {
               }
 
               Text {
-                text: "★ " + root.selectedTeamName + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
+                text: "★ " + root.favoriteMatchTeamName + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
                 color: Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -273,7 +300,7 @@ Item {
             Text {
               width: parent.width
               text: root.match ? root.match.home.name || root.match.home.shortName : ""
-              color: String(root.match && root.match.home.id) === String(root.selectedTeamId) ? Color.accent : root.fgColor
+              color: String(root.match && root.match.home.id) === String(root.favoriteMatchTeamId) ? Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.title
               font.bold: true
@@ -283,7 +310,7 @@ Item {
 
             Text {
               width: parent.width
-              text: root.match && root.match.home.record ? root.match.home.record : (String(root.match && root.match.home.id) === String(root.selectedTeamId) ? "HOME · FAVORITE" : "HOME")
+              text: root.match && root.match.home.record ? root.match.home.record : (String(root.match && root.match.home.id) === String(root.favoriteMatchTeamId) ? "HOME · FAVORITE" : "HOME")
               color: root.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -360,7 +387,7 @@ Item {
             Text {
               width: parent.width
               text: root.match ? root.match.away.name || root.match.away.shortName : ""
-              color: String(root.match && root.match.away.id) === String(root.selectedTeamId) ? Color.accent : root.fgColor
+              color: String(root.match && root.match.away.id) === String(root.favoriteMatchTeamId) ? Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.title
               font.bold: true
@@ -370,7 +397,7 @@ Item {
 
             Text {
               width: parent.width
-              text: root.match && root.match.away.record ? root.match.away.record : (String(root.match && root.match.away.id) === String(root.selectedTeamId) ? "AWAY · FAVORITE" : "AWAY")
+              text: root.match && root.match.away.record ? root.match.away.record : (String(root.match && root.match.away.id) === String(root.favoriteMatchTeamId) ? "AWAY · FAVORITE" : "AWAY")
               color: root.mutedColor(root.fgColor, 0.45)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -418,9 +445,10 @@ Item {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: {
+        if (!root.match) return
         if (root.scoreHidden) {
-          root.revealMatch(root.match.id)
-        } else {
+          if (root.revealMatch) root.revealMatch(root.match.id)
+        } else if (root.openMatch) {
           root.openMatch(root.match)
         }
       }

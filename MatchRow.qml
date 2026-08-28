@@ -9,11 +9,13 @@ Item {
   id: root
 
   required property var modelData
+  required property int index
 
   property string activeSport: "football"
   property color fgColor
   property color urgentColor
   property string selectedTeamId: ""
+  property var selectedTeamIds: []
   property bool antiSpoiler: false
   property var revealedMatchIds: ({})
   property double nowMs: 0
@@ -26,8 +28,8 @@ Item {
   readonly property bool isLive: modelData.status === "live"
   readonly property bool isUpcoming: modelData.status === "upcoming"
   readonly property bool isFinished: modelData.status === "finished"
-  readonly property bool favIsHome: String(modelData.home.id) === String(root.selectedTeamId)
-  readonly property bool favIsAway: String(modelData.away.id) === String(root.selectedTeamId)
+  readonly property bool favIsHome: Model.isFollowedTeam(modelData.home && modelData.home.id, root.selectedTeamIds.length > 0 ? root.selectedTeamIds : [root.selectedTeamId])
+  readonly property bool favIsAway: Model.isFollowedTeam(modelData.away && modelData.away.id, root.selectedTeamIds.length > 0 ? root.selectedTeamIds : [root.selectedTeamId])
   readonly property string dateBadge: Model.formatMatchDate(modelData.time)
   readonly property bool isScoreRevealed: root.revealedMatchIds[String(modelData.id)] === true
   readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
@@ -36,7 +38,11 @@ Item {
     : (root.isUpcoming
        ? Model.formatKickoff(modelData.time)
        : (modelData.scoreText || "–"))
-  property bool expanded: false
+  // Expansion state lives in the panel's id-keyed map so keyboard activation
+  // (Enter) can toggle it exactly like the mouse click does
+  property var expandedIds: ({})
+  property var toggleExpand: null // function(matchId)
+  readonly property bool expanded: root.expandedIds[String(modelData.id)] === true
 
   width: parent.width
   implicitHeight: matchCard.implicitHeight
@@ -50,7 +56,7 @@ Item {
     width: parent.width
     implicitHeight: root.isF1 ? (f1ContainerCol.implicitHeight + Style.space(14)) : (matchRowLayout.implicitHeight + Style.space(14))
     radius: Math.min(6, Style.cornerRadius)
-    Accessible.role: Accessible.ListItem
+    Accessible.role: Accessible.Button
     Accessible.name: {
       var h = (modelData.home && (modelData.home.name || modelData.home.shortName)) || ""
       var a = (modelData.away && (modelData.away.name || modelData.away.shortName)) || ""
@@ -306,10 +312,13 @@ Item {
         }
 
         Text {
-          text: Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : "")
-          color: root.mutedColor(root.fgColor, 0.40)
+          text: root.isLive
+            ? ("● " + (modelData.liveTime || "LIVE"))
+            : (Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : ""))
+          color: root.isLive ? root.urgentColor : root.mutedColor(root.fgColor, 0.40)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
+          font.bold: root.isLive
           elide: Text.ElideRight
           width: parent.width
         }
@@ -361,7 +370,9 @@ Item {
         Item {
           id: centerScoreHolder
           anchors.centerIn: parent
-          width: Style.space(56)
+          // Grow with the scoreline: three-digit basketball totals would
+          // otherwise spill over the crests on both sides
+          width: Math.max(Style.space(56), scoreText.implicitWidth + (root.isLive ? Style.space(12) : Style.space(2)))
           height: parent.height
 
           Row {
@@ -445,10 +456,10 @@ Item {
     cursorShape: Qt.PointingHandCursor
     onClicked: {
       if (root.isF1) {
-        root.expanded = !root.expanded
+        if (root.toggleExpand) root.toggleExpand(modelData.id)
       } else if (root.scoreHidden) {
-        root.revealMatch(modelData.id)
-      } else {
+        if (root.revealMatch) root.revealMatch(modelData.id)
+      } else if (root.openMatch) {
         root.openMatch(modelData)
       }
     }

@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import "SportsModel.js" as Model
 
 // One league table row; the layout adapts per sport (football, US sports,
 // F1 drivers/constructors). Theme/state inputs are injected by Panel.qml.
@@ -12,12 +13,13 @@ Item {
   property string activeSport: "football"
   property string standingsLeagueId: ""
   property string selectedTeamId: ""
+  property var selectedTeamIds: []
   property string selectedTeamName: ""
   property color fgColor
   property color urgentColor
 
   readonly property color rowFg: root.fgColor
-  readonly property bool isFavorite: String(modelData.id) === String(root.selectedTeamId) || (modelData.shortName && String(modelData.shortName).toLowerCase() === String(root.selectedTeamName).toLowerCase())
+  readonly property bool isFavorite: Model.isStandingsRowFavorite(root.modelData, root.selectedTeamIds.length > 0 ? root.selectedTeamIds : [root.selectedTeamId], root.selectedTeamName)
 
   width: parent.width
   implicitHeight: Style.space(26)
@@ -30,6 +32,30 @@ Item {
   Rectangle {
     anchors.fill: parent
     radius: Math.min(4, Style.cornerRadius)
+    Accessible.role: Accessible.ListItem
+    Accessible.name: {
+      var pos = String(root.modelData.pos || "")
+      var nm = String(root.modelData.shortName || root.modelData.name || "")
+      var parts = []
+      if (root.activeSport === "f1") {
+        parts.push("P" + pos)
+        parts.push(nm)
+        if (root.modelData.teamName) parts.push(root.modelData.teamName)
+        parts.push(String(root.modelData.pts || "0") + " points")
+        if (Number(root.modelData.wins || 0) > 0) parts.push(root.modelData.wins + " wins")
+      } else {
+        if (pos) parts.push(pos + ".")
+        parts.push(nm)
+        if (root.modelData.played) parts.push(root.modelData.played + " played")
+        if (root.modelData.wins) parts.push(root.modelData.wins + " wins")
+        if (root.modelData.draws) parts.push(root.modelData.draws + " draws")
+        if (root.modelData.losses) parts.push(root.modelData.losses + " losses")
+        if (root.modelData.gd !== undefined && root.modelData.gd !== "") parts.push(String(root.modelData.gd) + " goal difference")
+        parts.push(String(root.modelData.pts || "0") + " points")
+      }
+      if (root.isFavorite) parts.push("favorite")
+      return parts.join(", ")
+    }
     color: tableMouse.containsMouse
       ? Style.hoverFillFor(root.rowFg, Color.accent)
       : (root.isFavorite
@@ -111,7 +137,7 @@ Item {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.gd || "-")
-      color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
+      color: String(root.modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(root.modelData.gd || "").indexOf("-") === 0 && String(root.modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
@@ -210,7 +236,7 @@ Item {
       width: Style.space(34)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.gd || "-")
-      color: String(modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(modelData.gd || "").indexOf("-") === 0 && String(modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
+      color: String(root.modelData.gd || "").indexOf("+") === 0 ? Color.accent : (String(root.modelData.gd || "").indexOf("-") === 0 && String(root.modelData.gd) !== "-" ? root.urgentColor : root.mutedColor(root.rowFg, 0.55))
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight

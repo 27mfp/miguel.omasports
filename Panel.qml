@@ -14,6 +14,13 @@ Panel {
   property var anchorItem: null
   property bool openedFromHotkey: false
 
+  // Long slates (a full MLB week, an F1 season) must scroll instead of
+  // stretching the card to the whole screen: cap content at ~72% of the
+  // usable height (floor guards tiny/unknown geometries)
+  readonly property double maxPanelContentHeight: panel && panel.availableCardHeight > 0
+    ? Math.max(Style.space(320), Math.round(panel.availableCardHeight * 0.72))
+    : Infinity
+
   // The bar tracks the widget mounted in its slot — BarWidget.qml — not this
   // nested panel, so popout coordination and switchPanelFrom must identify
   // the host widget (same contract as omarchy.weather).
@@ -51,11 +58,14 @@ Panel {
   property bool enableNotifications: true
   property var revealedMatchIds: ({})
   property var lastSeenMatches: ({})
+  property var notificationQueue: []
+  property bool notificationToolAvailable: true
+  property bool notificationWarningShown: false
+  property string persistenceError: ""
 
   // Match and standings storage
   property var allMatches: []
   property var teamMatchesRaw: []
-  property var teamOptions: []
   property bool loading: false
   property string errorMessage: ""
   property var failedLeagues: []
@@ -73,8 +83,12 @@ Panel {
   // Crest disk-cache bookkeeping: keys already on disk are never re-downloaded
   property var knownLogoKeys: ({})
   property var pendingLogoKeys: []
+  property bool logoScanDone: false
 
   readonly property bool hasData: allMatches.length > 0
+  // A completed fetch with zero games (off-season, quiet window) must read as
+  // "nothing scheduled", never as "you haven't configured anything yet"
+  readonly property bool fetchedOnce: root.lastUpdated.getTime() > 0
   readonly property var baseTeamOptions: Model.teamOptionsForSport(activeSport, allMatches)
 
   function teamNameFor(id) {
@@ -152,20 +166,6 @@ Panel {
   property double nextKickoffMs: -1
   property var nextKickoffMatch: null
 
-  function sameRows(a, b) {
-    if (a === b) return true
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
-    for (var i = 0; i < a.length; i++) {
-      var x = a[i] || {}
-      var y = b[i] || {}
-      if ((x.pos || "") !== (y.pos || "") || String(x.id) !== String(y.id)) return false
-      if ((x.pts || 0) !== (y.pts || 0) || (x.gd || 0) !== (y.gd || 0)) return false
-      if ((x.wins || 0) !== (y.wins || 0) || (x.losses || 0) !== (y.losses || 0)) return false
-      if ((x.zone || "") !== (y.zone || "")) return false
-    }
-    return true
-  }
-
   function refreshDerivedLists() {
     // Fixtures under the current filter
     var fx
@@ -176,7 +176,7 @@ Panel {
     else fx = Model.matchesForLeague(allMatches, fixtureFilterId)
     if (!Model.sameMatches(activeFixturesList, fx)) activeFixturesList = fx
 
-    var groups = Model.groupMatches(fx, new Date(), function(d) { return Qt.formatDate(d, "ddd d MMM") })
+    var groups = Model.groupMatches(fx)
     if (!Model.sameGroups(matchGroups, groups)) matchGroups = groups
 
     var live = Model.liveMatches(allMatches, matchDetails)
@@ -184,7 +184,7 @@ Panel {
 
     // Followed-team schedule (multi-competition)
     var tm
-    if (activeSport === "f1") tm = allMatches
+    if (activeSport === "f1") tm = selectedTeamIds.length > 0 ? allMatches : []
     else if (teamMatchesRaw && teamMatchesRaw.length > 0) tm = teamMatchesRaw
     else if (selectedTeamIds.length > 0) tm = Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
     else if (selectedTeamId !== "") tm = Model.matchesForTeam(allMatches, selectedTeamId, activeSport)
@@ -193,7 +193,7 @@ Panel {
 
     // Standings table for the active selection
     var rows = computeStandingsRows()
-    if (!sameRows(standingsRows, rows)) standingsRows = rows
+    if (!Model.sameRows(standingsRows, rows)) standingsRows = rows
 
     // Nearest upcoming kickoff, resolved once per data change so the per-second
     // clock never rescans the whole fixture list
@@ -225,7 +225,7 @@ Panel {
 
   readonly property string activeFixtureHeader: {
     if (activeSport === "f1") return "FIA FORMULA 1 WORLD CHAMPIONSHIP · CALENDAR"
-    if (fixtureFilterId === "team" && selectedTeamId !== "") return "MATCH SCHEDULE"
+    if (fixtureFilterId === "team" && selectedTeamIds.length > 0) return "MATCH SCHEDULE"
     if (fixtureFilterId === "all") return "ALL " + activeSportMeta.label.toUpperCase() + " FIXTURES"
     var lName = Model.leagueLabel(fixtureFilterId).toUpperCase()
     var list = Model.matchesForLeague(allMatches, fixtureFilterId)
@@ -241,10 +241,16 @@ Panel {
   }
 
   property bool setupExpanded: false
+  readonly property bool setupEditorVisible: setupExpanded
+    || selectedTeamIds.length === 0
+    || (activeSport === "football" && selectedLeagueIds.length === 0)
 
   // ---- Tabs ---------------------------------------------------------------
   property int tabIndex: 0
-  onTabIndexChanged: focusSection = 0
+  onTabIndexChanged: {
+    focusSection = 0
+    if (stateLoaded) persistState()
+  }
   readonly property var tabOptions: [
     { value: "team", label: "Fixtures", icon: "★" },
     { value: "live", label: "Live", icon: "●" },
@@ -297,6 +303,14 @@ Panel {
 
   property var standingsRows: []
 
+  // The lighter accent swatch in the table legend only makes sense when the
+  // current table actually carries play-in/podium seeds
+  readonly property bool standingsHasPlayin: {
+    for (var i = 0; i < standingsRows.length; i++)
+      if (standingsRows[i] && standingsRows[i].zone === "playin") return true
+    return false
+  }
+
   function computeStandingsRows() {
     var id = String(standingsLeagueId || "")
     if (activeSport === "football") {
@@ -330,13 +344,18 @@ Panel {
 
   // Driver standings summary for F1 spotlight
   readonly property var favoriteDriverStanding: {
-    if (activeSport !== "f1" || selectedTeamId === "") return null
+    if (activeSport !== "f1" || selectedTeamIds.length === 0) return null
     var drivers = (multiSportStandings && multiSportStandings["Drivers"]) || []
-    var fav = String(selectedTeamId).toLowerCase()
+    var ids = Model.arrayFrom(selectedTeamIds)
     for (var i = 0; i < drivers.length; i++) {
-      var d = drivers[i]
-      if (d.id === fav || d.shortName.toLowerCase() === fav || d.name.toLowerCase().indexOf(fav) !== -1)
-        return d
+      var d = drivers[i] || {}
+      for (var j = 0; j < ids.length; j++) {
+        var fav = String(ids[j] || "").toLowerCase()
+        if (String(d.id || "").toLowerCase() === fav
+            || String(d.shortName || "").toLowerCase() === fav
+            || String(d.name || "").toLowerCase() === fav
+            || String(d.teamId || "").toLowerCase() === fav) return d
+      }
     }
     return null
   }
@@ -345,7 +364,6 @@ Panel {
   property int requestSerial: 0
   property var roundQueue: []
   property int nextDispatch: 0
-  property int outstanding: 0
   property var roundResults: ({})
   property var retryCounts: ({})
   property var pendingRetryIds: []
@@ -356,6 +374,19 @@ Panel {
   property string espnDefaultName: ""
   property int f1RetryCount: 0
   property int f1RetrySerial: 0
+
+  // Football fast polling refreshes only leagues containing a live followed
+  // match. Team pages are fetched sequentially so every selected favorite is
+  // represented without creating an unbounded process fan-out.
+  property bool scopedFootballRound: false
+  property var teamFetchQueue: []
+  property int teamFetchIndex: 0
+  property var teamRetryCounts: ({})
+  property int teamRetrySerial: 0
+  property string teamRetryId: ""
+  property bool teamFetchActive: false
+  property bool teamFetchIsRound: false
+  property bool teamFetchFailed: false
 
   // ---- Focus navigation ---------------------------------------------------
   property int focusSection: 0
@@ -389,45 +420,44 @@ Panel {
     return selectedList.concat(unselectedList)
   }
 
-  // teamMatches is maintained by refreshDerivedLists() (stable identity)
-  readonly property var featuredMatch: Model.featuredMatchForTeam(teamMatches.length > 0 ? teamMatches : allMatches)
+  // teamMatches is maintained by refreshDerivedLists() (stable identity). The
+  // visibility gate in MatchSpotlight already requires favorites-or-F1, so a
+  // bare `allMatches` fallback here would silently surface any league match.
+  readonly property var featuredMatch: teamMatches.length > 0 ? Model.featuredMatchForTeam(teamMatches) : null
   readonly property string selectedTeamName: selectedTeamIds.length > 0 ? root.teamNameFor(selectedTeamIds[0]) : selectedTeamLabel()
   readonly property string selectedLeagueNames: selectedLeagueNameList()
 
-  // Bar badge + summary
+  // Bar badge + summary — driven ONLY by followed teams. An unrelated league
+  // game must never claim the bar slot (or trigger fast polling); with no
+  // favorites selected the bar shows just the sport icon.
   readonly property bool favoriteTeamLive: {
-    var source = teamMatches.length > 0 ? teamMatches : allMatches
-    for (var i = 0; i < source.length; i++)
-      if (source[i].status === "live") return true
+    for (var i = 0; i < teamMatches.length; i++)
+      if (teamMatches[i] && teamMatches[i].status === "live") return true
     return false
   }
   readonly property string favoriteSummaryText: {
+    if (selectedTeamIds.length === 0) return ""
     if (favoriteTeamLive) {
-      var source = teamMatches.length > 0 ? teamMatches : allMatches
-      for (var i = 0; i < source.length; i++) {
-        var m = source[i]
-        if (m.status === "live") {
-          var h = (m.home.shortName || m.home.name).slice(0, 3).toUpperCase()
-          var a = (m.away.shortName || m.away.name).slice(0, 3).toUpperCase()
-          return h + " " + (m.scoreText || "0–0") + " " + a + " " + Model.interpolateLiveTime(m, root.nowMs, root.lastUpdated.getTime())
-        }
+      for (var i = 0; i < teamMatches.length; i++) {
+        var m = teamMatches[i]
+        if (!m || m.status !== "live") continue
+        var h = (m.home.shortName || m.home.name).slice(0, 3).toUpperCase()
+        var a = (m.away.shortName || m.away.name).slice(0, 3).toUpperCase()
+        // Anti-spoiler masks the bar ticker exactly like goal notifications:
+        // the bar is as bystander-visible as a toast, so an opted-out user
+        // gets the clock without the scoreline
+        var score = root.antiSpoiler ? "••••" : (m.scoreText || "0–0")
+        return h + " " + score + " " + a + " " + Model.interpolateLiveTime(m, root.nowMs, root.lastUpdated.getTime())
       }
     }
-    if (teamMatches.length === 0 && allMatches.length === 0) return ""
-    var first = teamMatches.length > 0 ? teamMatches[0] : allMatches[0]
+    if (teamMatches.length === 0) return ""
+    var first = teamMatches[0]
     var status = Model.matchStatusText(first)
-    var tLabel = first.home && (selectedTeamIds.indexOf(String(first.home.id)) !== -1) ? (first.home.shortName || first.home.name) : (first.away ? (first.away.shortName || first.away.name) : (selectedTeamName || (first.home ? first.home.name : "")))
+    var tLabel = first.home && Model.isFollowedTeam(first.home.id, selectedTeamIds) ? (first.home.shortName || first.home.name) : (first.away ? (first.away.shortName || first.away.name) : (selectedTeamName || (first.home ? first.home.name : "")))
     return tLabel + " · " + status + (first.scoreText && first.status !== "upcoming" ? " " + first.scoreText : "")
   }
 
-  readonly property var refreshIntervalOptions: [
-    { value: "5", label: "5 min" },
-    { value: "10", label: "10 min" },
-    { value: "15", label: "15 min" },
-    { value: "30", label: "30 min" },
-    { value: "45", label: "45 min" },
-    { value: "60", label: "60 min" }
-  ]
+  readonly property var refreshIntervalOptions: Model.refreshIntervalOptions()
 
   function switchSport(sportValue) {
     var next = String(sportValue || "").toLowerCase()
@@ -449,6 +479,7 @@ Panel {
     multiSportStandings = {}
     lastPages = []
     matchDetails = {}
+    lastSeenMatches = {}
     ensureStandingsSelection()
     forceRefresh()
   }
@@ -457,7 +488,6 @@ Panel {
     if (activeSport === "football") {
       var fb = savedState.football || {}
       selectedLeagueIds = Model.normalizeLeagueIds(fb.leagueIds)
-      if (selectedLeagueIds.length === 0) selectedLeagueIds = ["61"]
       selectedTeamIds = Model.normalizeTeamIds(fb.teamIds || (fb.teamId ? [fb.teamId] : []))
       selectedTeamId = String(selectedTeamIds.length > 0 ? selectedTeamIds[0] : (fb.teamId || ""))
       standingsLeagueId = String(fb.standingsLeagueId || selectedLeagueIds[0])
@@ -481,10 +511,14 @@ Panel {
       else if (sp.tab === "live") root.tabIndex = 1
       else root.tabIndex = 0
     }
+    // Re-derive the fixtures filter: a dropdown interaction breaks the
+    // property's initial binding, so a later state reload (external edit,
+    // re-open) would otherwise carry the previous sport's filter and render
+    // an empty Fixtures list despite fresh data
+    fixtureFilterId = activeSport === "f1" ? "all" : (selectedTeamIds.length > 0 ? "team" : "all")
   }
 
   function toggleSpoiler() {
-    console.log("omasports: toggleSpoiler called, stateLoaded=" + stateLoaded)
     antiSpoiler = !antiSpoiler
     if (antiSpoiler) {
       // Re-masking must not leave per-match reveals from the previous session
@@ -501,17 +535,37 @@ Panel {
     revealedMatchIds = next
   }
 
+  // Which F1 weekend cards have their sessions timetable unfolded
+  property var f1ExpandedIds: ({})
+
+  function toggleF1Expand(matchId) {
+    var key = String(matchId)
+    var next = {}
+    for (var k in f1ExpandedIds) next[k] = f1ExpandedIds[k]
+    if (next[key]) delete next[key]
+    else next[key] = true
+    f1ExpandedIds = next
+  }
+
   // ---- Navigation ---------------------------------------------------------
   // Focus sections are derived from what is actually visible: a collapsed
   // setup editor or a non-football sport must not own keyboard stops. Rows
   // (fixtures/live cards) trail the chrome sections and open with Enter.
   readonly property var focusSections: {
-    var s = ["tabs", "refresh"]
-    if (root.activeSport === "football" && root.setupExpanded) s.push("leagues")
-    if (root.setupExpanded) s.push("teams")
-    if (root.selectedTeamIds.length > 0) s.push("clear")
-    if (root.setupExpanded) s.push("interval")
-    if (root.standingsOptions.length > 1) s.push("standings")
+    // Keep tabs as the initial stop so ←/→ retains the documented tab switch;
+    // vertical navigation still exposes the sport selector immediately after.
+    var s = ["tabs", "sports"]
+    if (root.notificationToolAvailable) s.push("notifications")
+    s.push("spoiler", "refresh")
+    if (root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0)) s.push("setup")
+    if (root.activeSport === "football" && root.setupEditorVisible) s.push("leagues")
+    if (root.setupEditorVisible) s.push("teams")
+    if (root.setupEditorVisible && root.selectedTeamIds.length > 0) s.push("clear")
+    if (root.tabIndex === 0
+        && ((root.selectedTeamIds.length > 0 && root.featuredMatch !== null)
+            || (root.activeSport === "f1" && root.allMatches.length > 0))) s.push("spotlight")
+    s.push("interval")
+    if (root.tabIndex === 2 && root.standingsOptions.length > 1) s.push("standings")
     return s
   }
 
@@ -544,7 +598,20 @@ Panel {
   }
 
   function moveWithin(dx) {
-    if (focusSection === sectionIndex("tabs") && !anyPopupOpen()) {
+    if (anyPopupOpen()) {
+      moveFocus(dx)
+      return
+    }
+    if (focusSection === sectionIndex("sports")) {
+      var sportsList = Model.sports()
+      var current = 0
+      for (var i = 0; i < sportsList.length; i++) {
+        if (sportsList[i].value === activeSport) { current = i; break }
+      }
+      switchSport(sportsList[(current + dx + sportsList.length) % sportsList.length].value)
+      return
+    }
+    if (focusSection === sectionIndex("tabs")) {
       var next = (tabIndex + dx + tabOptions.length) % tabOptions.length
       tabIndex = next
       return
@@ -560,22 +627,58 @@ Panel {
   function activateFocus() {
     var base = root.focusSections.length
     if (focusSection >= base) {
-      // Row section: Enter opens the focused fixture/live card
+      // Row section: Enter activates the focused fixture/live card
       var r = focusSection - base
       var m = null
       if (root.tabIndex === 0) m = flatFixtureRows[r] || null
       else if (root.tabIndex === 1) m = liveList[r] || null
-      if (m) root.openMatch(m)
+      root.activateRow(m)
       return
     }
     var name = root.focusSections[focusSection]
-    if (name === "tabs") root.tabIndex = (root.tabIndex + 1) % root.tabOptions.length
+    if (name === "sports") {
+      var sportsList = Model.sports()
+      var current = 0
+      for (var i = 0; i < sportsList.length; i++) {
+        if (sportsList[i].value === root.activeSport) { current = i; break }
+      }
+      root.switchSport(sportsList[(current + 1) % sportsList.length].value)
+    } else if (name === "tabs") root.tabIndex = (root.tabIndex + 1) % root.tabOptions.length
+    else if (name === "notifications" && root.notificationToolAvailable) root.toggleNotifications()
+    else if (name === "spoiler") root.toggleSpoiler()
     else if (name === "refresh") root.refresh()
+    else if (name === "setup") root.setupExpanded = !root.setupExpanded
+    else if (name === "spotlight") root.activateSpotlight()
     else if (name === "leagues" && leaguePicker) leaguePicker.toggle()
     else if (name === "teams" && teamPicker) teamPicker.toggle()
     else if (name === "clear") root.clearSelectedTeam()
     else if (name === "interval") intervalPicker.toggle()
     else if (name === "standings" && standingsPicker) standingsPicker.toggle()
+  }
+
+  function activateSpotlight() {
+    var m = root.featuredMatch || (root.activeSport === "f1" ? root.allMatches[0] : null)
+    if (!m) return
+    var hidden = root.antiSpoiler && m.status === "finished"
+      && !(root.revealedMatchIds[String(m.id)] === true)
+    if (hidden) root.revealMatch(m.id)
+    else root.openMatch(m)
+  }
+
+  // Keyboard activation must mirror the row's click behavior: F1 weekend
+  // cards unfold their sessions instead of opening a browser
+  function activateRow(m) {
+    if (!m) return
+    if (m.sport === "f1") {
+      if (m.sessions && m.sessions.length > 0) root.toggleF1Expand(m.id)
+      return
+    }
+    // Enter must mirror the pointer path: anti-spoiler results are revealed
+    // first instead of unexpectedly launching an external browser.
+    var scoreHidden = root.antiSpoiler && m.status === "finished"
+      && !(root.revealedMatchIds[String(m.id)] === true)
+    if (scoreHidden) root.revealMatch(m.id)
+    else root.openMatch(m)
   }
 
   // ---- Lifecycle -----------------------------------------------------------
@@ -678,14 +781,15 @@ Panel {
     enableNotifications = savedState.notifications !== false
     restoreSportSelections()
     stateLoaded = true
-    console.log("omasports: state applied, sport=" + activeSport + " fbTeams=" + savedState.football.teamIds.length)
 
     if (leaguePicker) leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
-    if (!ownWrite) {
+    if (!ownWrite && (root.opened || root.backgroundUpdates)) {
       espnRetryCount = 0
       f1RetryCount = 0
       root.startRound()
+    } else {
+      root.scheduleNextPoll()
     }
   }
 
@@ -703,10 +807,12 @@ Panel {
       enableNotifications: enableNotifications
     })
     ignoredStateSignature = JSON.stringify(savedState)
+    persistenceError = ""
     stateFile.setText(JSON.stringify(savedState, null, 2) + "\n")
   }
 
   function toggleNotifications() {
+    if (!notificationToolAvailable) return
     enableNotifications = !enableNotifications
     savedState.notifications = enableNotifications
     persistState()
@@ -716,17 +822,34 @@ Panel {
   }
 
   function sendDesktopNotification(title, body, iconPath, urgency) {
-    if (!root.enableNotifications) return
+    if (!root.enableNotifications || !root.notificationToolAvailable) {
+      if (root.enableNotifications && !root.notificationToolAvailable && !root.notificationWarningShown) {
+        root.notificationWarningShown = true
+        console.warn("omasports: notify-send is unavailable; desktop notifications are disabled")
+      }
+      return
+    }
+    var next = Model.arrayFrom(notificationQueue)
+    next.push({ title: String(title || ""), body: String(body || ""), iconPath: String(iconPath || ""), urgency: String(urgency || "") })
+    notificationQueue = next
+    dispatchNextNotification()
+  }
+
+  function dispatchNextNotification() {
+    if (notifierProc.running || notificationQueue.length === 0 || !notificationToolAvailable) return
+    var next = Model.arrayFrom(notificationQueue)
+    var item = next.shift()
+    notificationQueue = next
     var cmd = ["notify-send", "-a", "OmaSports"]
-    if (iconPath && String(iconPath).trim()) {
-      var p = String(iconPath)
+    if (item.iconPath && item.iconPath.trim()) {
+      var p = item.iconPath
       if (p.indexOf("file://") === 0) p = p.slice(7)
       cmd.push("-i", p)
     }
-    if (urgency) cmd.push("-u", urgency)
+    if (item.urgency) cmd.push("-u", item.urgency)
     // "--" ends option parsing: provider-derived strings must never be
-    // mistaken for flags even when they start with a dash
-    cmd.push("--", title, body)
+    // mistaken for flags even when they start with a dash.
+    cmd.push("--", item.title, item.body)
     notifierProc.command = cmd
     notifierProc.running = true
   }
@@ -741,104 +864,45 @@ Panel {
   }
 
   function checkScoreNotifications() {
-    if (!root.enableNotifications || allMatches.length === 0) return
-
-    var ms = Model.arrayFrom(allMatches)
-    var favIds = Model.arrayFrom(root.selectedTeamIds)
-    var favSet = {}
-    for (var f = 0; f < favIds.length; f++) favSet[String(favIds[f]).toLowerCase()] = true
-
-    var now = root.nowMs
-    var nextSeen = {}
-
-    for (var i = 0; i < ms.length; i++) {
-      var m = ms[i]
-      if (!m || !m.id) continue
-
-      var hId = String(m.home && m.home.id || "").toLowerCase()
-      var aId = String(m.away && m.away.id || "").toLowerCase()
-      // Only followed teams notify (all events still notify on F1 weekends)
-      var isFav = favSet[hId] || favSet[aId] || root.activeSport === "f1"
-
-      var prev = lastSeenMatches[m.id]
-
-      if (prev && isFav) {
-        // 1. Kickoff / Started Live
-        if (m.status === "live" && prev.status === "upcoming") {
-          var startTitle = m.sport === "f1" ? ("🏁 F1: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("● LIVE: " + m.home.name + " vs " + m.away.name)
-          var startBody = m.sport === "f1" ? ("The session is underway in " + (m.locality || m.country || "live") + "!") : ("The match has kicked off! " + (m.leagueName ? "· " + m.leagueName : ""))
-          sendDesktopNotification(startTitle, startBody, crestIconPath(m.sport || root.activeSport, m.home), "normal")
-        }
-
-        // 2. Goal / Score change
-        if (m.status === "live") {
-          var hDiff = (m.homeScore || 0) - (prev.homeScore || 0)
-          var aDiff = (m.awayScore || 0) - (prev.awayScore || 0)
-
-          if (hDiff > 0) {
-            var gTitle1 = m.sport === "football" ? ("⚽ GOAL! " + m.home.name) : (Model.sportMeta(m.sport).icon + " " + m.home.name + " (+" + hDiff + ")")
-            // Anti-spoiler users opted out of seeing scores — announce the
-            // goal without the scoreline
-            var gBody1 = root.antiSpoiler
-              ? (m.home.name + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
-              : (m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : ""))
-            sendDesktopNotification(gTitle1, gBody1, crestIconPath(m.sport || root.activeSport, m.home), "normal")
-          }
-
-          if (aDiff > 0) {
-            var gTitle2 = m.sport === "football" ? ("⚽ GOAL! " + m.away.name) : (Model.sportMeta(m.sport).icon + " " + m.away.name + " (+" + aDiff + ")")
-            var gBody2 = root.antiSpoiler
-              ? (m.away.name + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
-              : (m.home.name + " " + (m.scoreText || (m.homeScore + " – " + m.awayScore)) + " " + m.away.name + (m.liveTime ? " (" + m.liveTime + ")" : ""))
-            sendDesktopNotification(gTitle2, gBody2, crestIconPath(m.sport || root.activeSport, m.away), "normal")
-          }
-        }
-
-        // 3. Match Imminent (15 min before kickoff)
-        if (m.status === "upcoming" && !prev.notifiedUpcoming) {
-          var msTime = Date.parse(m.time)
-          if (!isNaN(msTime)) {
-            var diffMins = Math.floor((msTime - now) / 60000)
-            if (diffMins > 0 && diffMins <= 15) {
-              var uTitle = m.sport === "f1" ? ("🏎️ F1 starting soon: " + (m.raceName || (m.home && m.home.name) || "Grand Prix")) : ("⏰ Starting in " + diffMins + "m: " + m.home.name + " vs " + m.away.name)
-              var uBody = (m.leagueName ? m.leagueName + " · " : "") + "Scheduled start at " + Qt.formatDateTime(new Date(msTime), "HH:mm")
-              sendDesktopNotification(uTitle, uBody, crestIconPath(m.sport || root.activeSport, m.home), "normal")
-              prev.notifiedUpcoming = true
-            }
-          }
-        }
-      }
-
-      nextSeen[m.id] = {
-        homeScore: m.homeScore || 0,
-        awayScore: m.awayScore || 0,
-        status: m.status || "upcoming",
-        notifiedUpcoming: prev ? (prev.notifiedUpcoming || false) : false,
-        seenAt: now
-      }
+    var result = Model.diffMatchNotifications(allMatches, lastSeenMatches, {
+      enabled: root.enableNotifications,
+      activeSport: root.activeSport,
+      favoriteIds: root.selectedTeamIds,
+      antiSpoiler: root.antiSpoiler,
+      nowMs: root.nowMs
+    })
+    var events = Model.arrayFrom(result.notifications)
+    for (var i = 0; i < events.length; i++) {
+      var event = events[i]
+      sendDesktopNotification(
+        event.title,
+        event.body,
+        crestIconPath(event.sport || root.activeSport, event.iconTeam),
+        event.urgency || "normal"
+      )
     }
+    lastSeenMatches = result.nextSeen
+  }
 
-    // Merge instead of replace: a provider hiccup that omits a match for one
-    // poll must not erase its history, or the kickoff/goal transition is lost
-    // forever when the match reappears. Entries not seen for 6h are pruned.
-    var merged = {}
-    var ttl = 6 * 3600 * 1000
-    for (var oldId in lastSeenMatches) {
-      if (nextSeen[oldId]) continue
-      var oldEntry = lastSeenMatches[oldId]
-      if (now - (oldEntry.seenAt || 0) < ttl) merged[oldId] = oldEntry
+  function normalizeFixtureFilter() {
+    if (activeSport === "f1" || selectedTeamIds.length === 0) {
+      fixtureFilterId = "all"
+      return
     }
-    for (var newId in nextSeen) merged[newId] = nextSeen[newId]
-    lastSeenMatches = merged
+    if (fixtureFilterId.indexOf("fav_") === 0
+        && !Model.isFollowedTeam(fixtureFilterId.slice(4), selectedTeamIds)) {
+      fixtureFilterId = "team"
+    }
   }
 
   function setSelectedLeagues(values) {
     var next = Model.normalizeLeagueIds(values)
+    errorMessage = ""
     selectedLeagueIds = next
     if (leaguePicker) leaguePicker.values = next
     ensureStandingsSelection()
     persistState()
-    if (root.opened || root.backgroundUpdates) root.refresh()
+    if (root.opened || root.backgroundUpdates) root.forceRefresh()
   }
 
   function toggleSelectedTeam(value) {
@@ -846,16 +910,16 @@ Panel {
     if (!id) return
     var arr = Model.arrayFrom(selectedTeamIds)
     var idx = arr.indexOf(id)
-    if (idx !== -1) {
-      arr.splice(idx, 1)
-    } else {
-      arr.push(id)
-    }
+    if (idx !== -1) arr.splice(idx, 1)
+    else arr.push(id)
+    errorMessage = ""
     selectedTeamIds = arr
     selectedTeamId = arr.length > 0 ? arr[0] : ""
     teamMatchesRaw = []
+    normalizeFixtureFilter()
     persistState()
     if (activeSport === "football" && arr.length > 0) root.fetchFootballTeamPage()
+    else if (activeSport === "football") stopTeamPageFetch()
   }
 
   function removeSelectedTeam(value) {
@@ -864,10 +928,14 @@ Panel {
     var idx = arr.indexOf(id)
     if (idx !== -1) {
       arr.splice(idx, 1)
+      errorMessage = ""
       selectedTeamIds = arr
       selectedTeamId = arr.length > 0 ? arr[0] : ""
       teamMatchesRaw = []
+      normalizeFixtureFilter()
       persistState()
+      if (activeSport === "football" && arr.length > 0) root.fetchFootballTeamPage()
+      else if (activeSport === "football") stopTeamPageFetch()
     }
   }
 
@@ -876,9 +944,18 @@ Panel {
   }
 
   function clearSelectedTeam() {
+    errorMessage = ""
     selectedTeamIds = []
     selectedTeamId = ""
     teamMatchesRaw = []
+    normalizeFixtureFilter()
+    if (activeSport === "football") {
+      if (root.loading) root.forceRefresh()
+      else {
+        requestSerial++
+        stopNetworkWorkers()
+      }
+    }
     persistState()
   }
 
@@ -972,10 +1049,23 @@ Panel {
   // handled=true suppresses late StdioCollector/exit callbacks; the serial
   // gates inside the resolve functions are the second line of defense.
   function stopNetworkWorkers() {
+    retryDelay.stop()
+    teamRetryDelay.stop()
+    teamFetchActive = false
+    teamFetchQueue = []
+    teamRetryId = ""
+    detailQueue = []
+    // Background helpers must also be killed on sport switch / IPC refresh:
+    // a stale curl writing PNGs after the round has been replaced pollutes the
+    // disk cache, and an in-flight notify-send from the previous sport queues a
+    // bogus goal alert for a match the user no longer follows.
     var procs = [workerScoreboard, workerStandings, workerF1Calendar, workerF1Drivers,
                  workerF1Constructors, workerTeam,
                  detailProcA, detailProcB, detailProcC,
-                 workerA, workerB, workerC, workerD]
+                 workerA, workerB, workerC, workerD,
+                 logoScanProc, logoEvictProc, logoCacheProc,
+                 notificationProbe, notifierProc,
+                 stateBackupProc, matchOpener]
     for (var i = 0; i < procs.length; i++) {
       var w = procs[i]
       w.handled = true
@@ -988,7 +1078,6 @@ Panel {
     var mock = Model.mockRound(activeSport, Date.now())
     allMatches = mock.matches
     if (mock.standings && Object.keys(mock.standings).length > 0) multiSportStandings = mock.standings
-    teamOptions = Model.teamOptionsForSport(activeSport, allMatches)
     lastUpdated = new Date()
     loadedFromCache = false
     ensureStandingsSelection()
@@ -1005,33 +1094,155 @@ Panel {
       workers[i].handled = false
     }
     retryDelay.stop()
-    roundQueue = selectedLeagueIds.slice(0, 12)
+    teamRetryDelay.stop()
     pendingRetryIds = []
     nextDispatch = 0
-    outstanding = roundQueue.length
     roundResults = {}
     retryCounts = {}
+    scopedFootballRound = root.fastPolling && selectedTeamIds.length > 0
 
-    if (outstanding === 0) {
+    if (scopedFootballRound) {
+      // A live followed match identifies the only league pages that need to
+      // be refreshed at 40-second cadence. Team pages below still cover live
+      // fixtures in competitions outside the selected league list.
+      var liveLeagueIds = []
+      for (var l = 0; l < teamMatches.length; l++) {
+        var liveMatch = teamMatches[l]
+        var liveLeagueId = String(liveMatch && liveMatch.status === "live" ? liveMatch.leagueId || "" : "")
+        if (liveLeagueId && liveLeagueIds.indexOf(liveLeagueId) === -1) liveLeagueIds.push(liveLeagueId)
+      }
+      roundQueue = liveLeagueIds.slice(0, 12)
+    } else {
+      roundQueue = Model.arrayFrom(selectedLeagueIds).slice(0, 12)
+    }
+
+    // An empty queue is valid for a scoped round when the live fixture is
+    // outside the selected leagues; the followed-team page still runs.
+    if (roundQueue.length === 0 && !scopedFootballRound && selectedTeamIds.length === 0) {
       loading = false
-      errorMessage = "Select at least one league to load matches."
+      errorMessage = "Select at least one league or favorite team to load matches."
+      scheduleNextPoll()
       return
     }
-    if (selectedTeamId !== "") fetchFootballTeamPage()
+
+    beginTeamPageFetch(selectedTeamIds, true)
     Qt.callLater(pumpFootball)
   }
 
+  function stopTeamPageFetch() {
+    teamRetryDelay.stop()
+    teamFetchActive = false
+    teamFetchQueue = []
+    teamRetryId = ""
+    workerTeam.handled = true
+    if (workerTeam.running) workerTeam.running = false
+  }
+
+  function beginTeamPageFetch(ids, isRound) {
+    if (workerTeam.running) workerTeam.running = false
+    workerTeam.handled = true
+    teamRetryDelay.stop()
+    teamFetchQueue = Model.normalizeTeamIds(ids)
+    teamFetchIndex = 0
+    teamRetryCounts = {}
+    teamRetryId = ""
+    teamRetrySerial = root.requestSerial
+    teamFetchIsRound = isRound === true
+    teamFetchFailed = false
+    teamFetchActive = teamFetchQueue.length > 0
+    if (teamFetchActive) Qt.callLater(fetchNextFootballTeamPage)
+    else if (teamFetchIsRound) Qt.callLater(root.pumpFootball)
+  }
+
+  // Kept as the public entry point used when a favorite changes. It now
+  // refreshes every selected football team rather than only the first one.
   function fetchFootballTeamPage() {
-    if (!selectedTeamId) return
+    if (selectedTeamIds.length === 0) return
+    // A selection change while a full round is in flight must invalidate the
+    // old league/team generation together; otherwise its late callback can
+    // repopulate the schedule with the previous favorite.
+    if (root.loading) {
+      root.forceRefresh()
+      return
+    }
+    errorMessage = ""
+    requestSerial++
+    stopNetworkWorkers()
+    beginTeamPageFetch(selectedTeamIds.length > 0 ? selectedTeamIds : [selectedTeamId], false)
+  }
+
+  function fetchNextFootballTeamPage() {
+    if (!teamFetchActive || workerTeam.running) return
+    if (teamFetchIndex >= teamFetchQueue.length) {
+      teamFetchActive = false
+      teamRetryId = ""
+      if (teamFetchIsRound) {
+        Qt.callLater(root.pumpFootball)
+      } else {
+        if (teamFetchFailed) errorMessage = "Favorite team schedule could not be loaded."
+        else if (errorMessage === "Favorite team schedule could not be loaded.") errorMessage = ""
+        startDetailFetch()
+        downloadMissingLogos()
+        checkScoreNotifications()
+        scheduleNextPoll()
+      }
+      return
+    }
+
+    var id = String(teamFetchQueue[teamFetchIndex] || "")
+    if (!id) {
+      teamFetchIndex++
+      Qt.callLater(fetchNextFootballTeamPage)
+      return
+    }
     workerTeam.handled = false
-    workerTeam.teamId = String(selectedTeamId)
+    workerTeam.teamId = id
     workerTeam.serial = root.requestSerial
     workerTeam.command = [
       "curl", "-LfsS", "--compressed", "--max-time", "12",
       "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/teams/" + encodeURIComponent(selectedTeamId)
+      "https://www.fotmob.com/teams/" + encodeURIComponent(id)
     ]
     workerTeam.running = true
+  }
+
+  function retryOrAdvanceTeamPage(id) {
+    var tries = teamRetryCounts[id] || 0
+    if (tries < 2) {
+      teamRetryCounts[id] = tries + 1
+      teamRetryId = id
+      teamRetrySerial = root.requestSerial
+      teamRetryDelay.restart()
+      return
+    }
+    teamFetchFailed = true
+    teamFetchIndex++
+    Qt.callLater(fetchNextFootballTeamPage)
+  }
+
+  function resolveTeamWorker(raw) {
+    if (workerTeam.serial !== root.requestSerial || !teamFetchActive || workerTeam.handled) return
+    workerTeam.handled = true
+    var id = String(workerTeam.teamId || "")
+    var payload = String(raw || "")
+    var valid = payload.trim() !== "" && Model.isTeamPagePayload(payload, id)
+    var parsed = []
+    if (valid) {
+      try { parsed = Model.parseTeamPage(payload, id) } catch (e) { valid = false }
+    }
+    if (!valid) {
+      retryOrAdvanceTeamPage(id)
+      return
+    }
+
+    if (parsed.length > 0) {
+      teamMatchesRaw = Model.mergeMatchUpdates(teamMatchesRaw, parsed)
+      allMatches = Model.mergeMatchUpdates(allMatches, parsed)
+      lastUpdated = new Date()
+    }
+    teamRetryCounts[id] = 0
+    teamFetchIndex++
+    Qt.callLater(fetchNextFootballTeamPage)
   }
 
   function startFootballWorker(w, leagueId) {
@@ -1049,7 +1260,7 @@ Panel {
   function pumpFootball() {
     if (!root.loading || activeSport !== "football") return
     var workers = [workerA, workerB, workerC, workerD]
-    var anyBusy = false
+    var anyBusy = teamFetchActive || workerTeam.running
     for (var i = 0; i < workers.length; i++) {
       var w = workers[i]
       if (w.running) {
@@ -1062,7 +1273,7 @@ Panel {
         nextDispatch++
       }
     }
-    if (!anyBusy && pendingRetryIds.length === 0) finishFootballLoading()
+    if (!anyBusy && nextDispatch >= roundQueue.length && pendingRetryIds.length === 0) finishFootballLoading()
   }
 
   function resolveFootballWorker(w, raw) {
@@ -1075,10 +1286,9 @@ Panel {
     }
     // A page that parses but yields no matches AND no standings is almost
     // always a bot-wall or schema drift — treat it like a failure so the
-    // retry path runs instead of silently showing an empty league
+    // retry path runs instead of silently showing an empty league.
     if (page && (page.matches.length > 0 || page.standings.length > 0)) {
       roundResults[id] = page
-      outstanding--
     } else {
       var tries = retryCounts[id] || 0
       if (tries < 2) {
@@ -1087,7 +1297,6 @@ Panel {
         retryDelay.restart()
       } else {
         failedLeagues.push(Model.leagueLabel(id))
-        outstanding--
       }
     }
     Qt.callLater(root.pumpFootball)
@@ -1096,18 +1305,47 @@ Panel {
   function finishFootballLoading() {
     loading = false
     var pages = []
-    var ids = Model.arrayFrom(selectedLeagueIds)
-    for (var i = 0; i < ids.length; i++) {
-      var res = roundResults[String(ids[i])]
-      if (res) pages.push(res)
+    var pageIds = scopedFootballRound ? Model.arrayFrom(roundQueue) : Model.arrayFrom(selectedLeagueIds)
+    var included = {}
+    for (var i = 0; i < pageIds.length; i++) {
+      var key = String(pageIds[i])
+      included[key] = true
+      if (roundResults[key]) pages.push(roundResults[key])
+    }
+    // A provider may resolve a league under a canonical id different from the
+    // requested id; do not silently discard that page.
+    for (var resultId in roundResults) {
+      if (!included[resultId]) pages.push(roundResults[resultId])
     }
 
-    if (pages.length > 0) {
-      allMatches = Model.mergePages(pages)
-      teamOptions = Model.teamOptionsForSport("football", allMatches)
+    var pageSnapshot
+    if (scopedFootballRound) {
+      pageSnapshot = Model.mergeLeaguePages(lastPages, pages)
+    } else {
+      // A failed league request must not erase its last good page, while a
+      // deliberately deselected league must disappear on the next full round.
+      pageSnapshot = Model.mergeLeaguePages([], pages)
+      var selectedPages = {}
+      var successfulPages = {}
+      for (var p = 0; p < pages.length; p++) {
+        if (pages[p] && pages[p].league) successfulPages[String(pages[p].league.id)] = true
+      }
+      var selectedIds = Model.arrayFrom(selectedLeagueIds)
+      for (var s = 0; s < selectedIds.length; s++) selectedPages[String(selectedIds[s])] = true
+      for (var old = 0; old < lastPages.length; old++) {
+        var oldPage = lastPages[old]
+        var oldId = String(oldPage && oldPage.league ? oldPage.league.id : "")
+        if (selectedPages[oldId] && !successfulPages[oldId])
+          pageSnapshot = Model.mergeLeaguePages(pageSnapshot, [oldPage])
+      }
+    }
+    if (pageSnapshot.length > 0 || teamMatchesRaw.length > 0) {
+      var mergedMatches = Model.mergePages(pageSnapshot)
+      if (teamMatchesRaw.length > 0) mergedMatches = Model.mergeMatchUpdates(mergedMatches, teamMatchesRaw)
+      if (mergedMatches.length > 0 || pageSnapshot.length > 0) allMatches = mergedMatches
       lastUpdated = new Date()
       loadedFromCache = false
-      lastPages = pages
+      if (pageSnapshot.length > 0) lastPages = pageSnapshot
     }
     ensureStandingsSelection()
     startDetailFetch()
@@ -1115,10 +1353,12 @@ Panel {
     checkScoreNotifications()
     scheduleNextPoll()
 
-    if (pages.length === 0 && !hasData) {
+    if (pages.length === 0 && !hasData && teamMatchesRaw.length === 0) {
       errorMessage = "Unable to load matches. Check your connection."
     } else if (failedLeagues.length > 0) {
       errorMessage = "Some leagues could not be loaded: " + failedLeagues.join(", ")
+    } else if (teamFetchFailed) {
+      errorMessage = "Favorite team schedule could not be loaded."
     }
   }
 
@@ -1148,27 +1388,36 @@ Panel {
   }
 
   function resolveEspnScoreboard(raw, sportCode, defaultName) {
-    if (String(raw || "").trim()) {
-      var matches = Model.parseEspnScoreboard(raw, sportCode, defaultName)
-      if (matches && matches.length > 0) {
-        allMatches = matches
+    var payload = String(raw || "")
+    if (payload.trim()) {
+      // A syntactically valid response counts as success even when the window
+      // legitimately holds zero games (off-season, pre-season): gating on
+      // non-empty output made every quiet day retry 3x and end in a bogus
+      // "check connection" error despite healthy responses.
+      var json = null
+      try { json = JSON.parse(payload) } catch (e) { json = null }
+      if (Model.isEspnScoreboardPayload(json)) {
+        allMatches = Model.parseEspnScoreboard(payload, sportCode, defaultName)
         lastUpdated = new Date()
         loadedFromCache = false
         workerScoreboard.gotData = true
       }
     }
-    checkEspnDone()
+    Qt.callLater(checkEspnDone)
   }
 
   function resolveEspnStandings(raw, sportCode) {
-    if (String(raw || "").trim()) {
-      var st = Model.parseEspnStandings(raw, sportCode)
-      if (st && Object.keys(st).length > 0) {
+    var payload = String(raw || "")
+    if (payload.trim()) {
+      var json2 = null
+      try { json2 = JSON.parse(payload) } catch (e) { json2 = null }
+      if (Model.isEspnStandingsPayload(json2)) {
+        var st = Model.parseEspnStandings(payload, sportCode)
         multiSportStandings = st
         workerStandings.gotData = true
       }
     }
-    checkEspnDone()
+    Qt.callLater(checkEspnDone)
   }
 
   function checkEspnDone() {
@@ -1229,13 +1478,18 @@ Panel {
   }
 
   function resolveF1Calendar(raw) {
-    var matches = Model.parseF1Calendar(String(raw || ""))
-    if (matches && matches.length > 0) {
+    var payload = String(raw || "")
+    // Valid JSON is success even if the table holds no rounds yet — same
+    // off-season contract as the ESPN resolvers above
+    var json = null
+    try { json = JSON.parse(payload) } catch (e) { json = null }
+    if (Model.isF1CalendarPayload(json)) {
+      var matches = Model.parseF1Calendar(payload)
       allMatches = matches
       lastUpdated = new Date()
       workerF1Calendar.gotData = true
     }
-    root.checkF1Done()
+    Qt.callLater(root.checkF1Done)
   }
 
   function resolveF1Drivers(raw) {
@@ -1247,7 +1501,7 @@ Panel {
       multiSportStandings = cur
       workerF1Drivers.gotData = true
     }
-    root.checkF1Done()
+    Qt.callLater(root.checkF1Done)
   }
 
   function resolveF1Constructors(raw) {
@@ -1259,7 +1513,7 @@ Panel {
       multiSportStandings = cur2
       workerF1Constructors.gotData = true
     }
-    root.checkF1Done()
+    Qt.callLater(root.checkF1Done)
   }
 
   function checkF1Done() {
@@ -1301,7 +1555,15 @@ Panel {
 
   Process {
     id: logoEvictProc
-    onExited: function(exitCode) { root.scanLogoCache() }
+    onExited: function(exitCode) {
+      // `find` returns non-zero when the cache directory is missing (fresh
+      // install). Skip the warning in that one case but still log other
+      // failures so a permission issue surfaces in the quickshell logs.
+      if (exitCode !== 0 && exitCode !== 1) {
+        console.warn("omasports: logo eviction exited with code", exitCode)
+      }
+      root.scanLogoCache()
+    }
   }
 
   Process {
@@ -1318,12 +1580,16 @@ Panel {
           }
         }
         root.knownLogoKeys = map
+        root.logoScanDone = true
+        // The first data round usually finishes before this listing does;
+        // replay the download pass now that the skip-set is authoritative
+        Qt.callLater(root.downloadMissingLogos)
       }
     }
   }
 
   function downloadMissingLogos() {
-    if (logoCacheProc.running) return
+    if (!root.logoScanDone || logoCacheProc.running) return
     var items = []
     var seen = {}
 
@@ -1337,7 +1603,7 @@ Panel {
       if (m.home && m.home.id) {
         var u1 = m.home.logo || (sp === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + m.home.id + ".png") : "")
         var k1 = Model.crestCacheKey(sp, m.home.id, m.home.abbr || "")
-        if (k1 !== "" && !seen[k1] && u1.indexOf("http") === 0) {
+        if (k1 !== "" && !seen[k1] && Model.isTrustedCrestUrl(u1, sp)) {
           seen[k1] = true
           items.push({ url: u1, key: k1 })
         }
@@ -1345,7 +1611,7 @@ Panel {
       if (m.away && m.away.id) {
         var u2 = m.away.logo || (sp === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + m.away.id + ".png") : "")
         var k2 = Model.crestCacheKey(sp, m.away.id, m.away.abbr || "")
-        if (k2 !== "" && !seen[k2] && u2.indexOf("http") === 0) {
+        if (k2 !== "" && !seen[k2] && Model.isTrustedCrestUrl(u2, sp)) {
           seen[k2] = true
           items.push({ url: u2, key: k2 })
         }
@@ -1360,7 +1626,7 @@ Panel {
         var sp2 = String(root.activeSport || "football").toLowerCase()
         var u3 = row.logo || (sp2 === "football" ? ("https://images.fotmob.com/image_resources/logo/teamlogo/" + row.id + ".png") : "")
         var k3 = Model.crestCacheKey(sp2, row.id, row.abbr || "")
-        if (k3 !== "" && !seen[k3] && u3.indexOf("http") === 0) {
+        if (k3 !== "" && !seen[k3] && Model.isTrustedCrestUrl(u3, sp2)) {
           seen[k3] = true
           items.push({ url: u3, key: k3 })
         }
@@ -1369,14 +1635,16 @@ Panel {
 
     if (items.length === 0) return
 
-    var cmd = ["curl", "-sL", "--parallel", "--parallel-max", "8", "--create-dirs", "--max-time", "30"]
+    // --fail keeps HTTP error bodies (404/rate-limit HTML) out of the cache —
+    // without it a poisoned ".png" gets marked known and never retried
+    var cmd = ["curl", "-sL", "--fail", "--parallel", "--parallel-max", "8", "--create-dirs", "--max-time", "30"]
     var count = 0
     var pending = []
     var cacheDir = logoCacheDir()
     for (var c = 0; c < items.length && count < 64; c++) {
       var it = items[c]
       // Skip crests already cached on disk (or fetched earlier this session)
-      if (!it.url || it.url.indexOf("http") !== 0) continue
+      if (!it.url) continue
       if (root.knownLogoKeys[it.key]) continue
       cmd.push("-o", cacheDir + it.key + ".png", it.url)
       pending.push(it.key)
@@ -1398,7 +1666,7 @@ Panel {
       var lid = String(live[i].id)
       if (!matchDetails[lid]) wanted.push(lid)
     }
-    var source = teamMatches
+    var source = teamMatchesRaw && teamMatchesRaw.length > 0 ? teamMatchesRaw : teamMatches
     for (var j = 0; j < source.length && wanted.length < 16; j++) {
       var tid = String(source[j].id)
       if (!matchDetails[tid] && wanted.indexOf(tid) === -1) wanted.push(tid)
@@ -1415,18 +1683,18 @@ Panel {
       if (proc.running || detailQueue.length === 0) continue
 
       var id = String(detailQueue[0])
-      var url = ""
-      for (var i = 0; i < allMatches.length; i++) {
-        if (String(allMatches[i].id) === id) {
-          url = String(allMatches[i].pageUrl || "")
+      var match = null
+      for (var m = 0; m < allMatches.length; m++) {
+        if (String(allMatches[m].id) === id) {
+          match = allMatches[m]
           break
         }
       }
+      var url = Model.matchDetailUrl(match)
       if (url === "") {
         detailQueue.shift()
         continue
       }
-      if (url.indexOf("http") !== 0) url = "https://www.fotmob.com" + url
 
       detailQueue.shift()
       proc.detailId = id
@@ -1457,15 +1725,31 @@ Panel {
           next[id] = parsed
           matchDetails = next
 
+          // A Full-Time detail must close out the live card in both the global
+          // fixture list and the followed-team schedule. Mutate the arrays in
+          // place, then re-assign ONCE — a per-row in-place edit followed by
+          // an immediate re-broadcast would tear the fixtures Repeater down
+          // for every detail that lands during a busy Saturday afternoon.
           if (parsed.statusLong === "Full-Time" || parsed.reason === "FT" || parsed.finished) {
-            var updated = false
-            for (var m = 0; m < allMatches.length; m++) {
-              if (String(allMatches[m].id) === id && allMatches[m].status === "live") {
-                allMatches[m].status = "finished"
-                updated = true
+            var allNext = Model.arrayFrom(allMatches)
+            var allTouched = false
+            for (var m = 0; m < allNext.length; m++) {
+              if (String(allNext[m].id) === id && allNext[m].status === "live") {
+                allNext[m] = Object.assign({}, allNext[m], { status: "finished" })
+                allTouched = true
               }
             }
-            if (updated) allMatches = Model.arrayFrom(allMatches)
+            var teamNext = Model.arrayFrom(teamMatchesRaw)
+            var teamTouched = false
+            for (var t = 0; t < teamNext.length; t++) {
+              if (String(teamNext[t].id) === id && teamNext[t].status === "live") {
+                teamNext[t] = Object.assign({}, teamNext[t], { status: "finished" })
+                teamTouched = true
+                break
+              }
+            }
+            if (allTouched) allMatches = allNext
+            if (teamTouched) teamMatchesRaw = teamNext
           }
         }
       } catch (e) { console.warn("omasports: detail parse failed for", id, e) }
@@ -1502,15 +1786,16 @@ Panel {
     if (match.round) parts.push(match.round)
     var d = matchDetails[String(match.id)]
     if (d && d.stadium) parts.push("📍 " + d.stadium + (d.city ? ", " + d.city : ""))
+    else if (match.venue) parts.push("📍 " + match.venue)
     if (d && d.referee) parts.push("Ref. " + d.referee)
     if (d && d.attendance) parts.push("👥 " + Number(d.attendance).toLocaleString())
     return parts.join("  ·  ")
   }
 
   function openMatch(match) {
-    if (!match || !match.pageUrl) return
-    var url = String(match.pageUrl)
-    if (url.indexOf("http") !== 0) url = "https://www.fotmob.com" + url
+    if (!match) return
+    var url = Model.matchExternalUrl(match)
+    if (!url) return
     matchOpener.command = ["xdg-open", url]
     matchOpener.running = true
   }
@@ -1538,17 +1823,23 @@ Panel {
   function statusLine() {
     if (loading && !hasData) return "󰥔 Loading " + activeSportMeta.label + "…"
     if (loading) return "󰥔 Updating scores…"
+    if (persistenceError !== "") return persistenceError
     if (errorMessage !== "") return errorMessage
-    if (!hasData) return "Select options above to track " + activeSportMeta.label + "."
+    if (!hasData) {
+      return fetchedOnce
+        ? "No matches in the next days."
+        : "Select options above to track " + activeSportMeta.label + "."
+    }
     var age = relativeAge()
-    if (fastPolling) return "● LIVE · auto-updating · updated " + age
+    // The "~40s auto-update" hint already lives right below — don't repeat it
+    if (fastPolling) return "● LIVE · updated " + age
     if (loadedFromCache) return "Cached · updated " + age
     return "Updated " + age
   }
 
   Component.onCompleted: {
-    console.log("omasports: panel instantiated")
     evictStaleLogos()
+    notificationProbe.running = true
     stateFile.reload()
   }
 
@@ -1560,10 +1851,27 @@ Panel {
     printErrors: false
     onLoaded: {
       var str = ""
-      try { str = typeof text === "function" ? text() : String(text || "") } catch (e) { str = "" }
+      try { str = typeof text === "function" ? text() : String(text || "") }
+      catch (e) {
+        // A read failure (permission, ENOENT for first run is normal — that
+        // path goes through onLoadFailed instead) must surface to the user
+        // instead of silently losing saved favorites.
+        console.warn("omasports: state file read failed", e)
+        root.persistenceError = "Could not read OmaSports settings — defaults applied."
+        str = ""
+      }
       root.applyState(str)
     }
-    onLoadFailed: root.applyState("")
+    onLoadFailed: function(error) {
+      console.warn("omasports: state file load failed", error)
+      root.applyState("")
+    }
+    onSaveFailed: function(error) {
+      root.ignoredStateSignature = ""
+      root.persistenceError = "Could not save OmaSports settings."
+      console.warn("omasports: state save failed", error)
+    }
+    onSaved: root.persistenceError = ""
     onFileChanged: reload()
   }
 
@@ -1571,10 +1879,15 @@ Panel {
   Process { id: stateBackupProc }
   Process {
     id: logoCacheProc
-    // Only a fully successful batch marks keys as known; partial failures
-    // retry on the next round
+    // Only a fully successful batch marks keys as known. A partial parallel
+    // failure triggers a rescan so files that did finish are retained.
     onExited: function(exitCode) {
-      if (exitCode !== 0 || root.pendingLogoKeys.length === 0) return
+      if (exitCode !== 0) {
+        root.pendingLogoKeys = []
+        root.scanLogoCache()
+        return
+      }
+      if (root.pendingLogoKeys.length === 0) return
       var map = {}
       for (var k in root.knownLogoKeys) map[k] = root.knownLogoKeys[k]
       for (var i = 0; i < root.pendingLogoKeys.length; i++) map[root.pendingLogoKeys[i]] = true
@@ -1582,219 +1895,98 @@ Panel {
       root.pendingLogoKeys = []
     }
   }
-  Process { id: notifierProc }
+  Process {
+    id: notifierProc
+    onExited: root.dispatchNextNotification()
+  }
+  Process {
+    id: notificationProbe
+    command: ["notify-send", "--version"]
+    onExited: function(exitCode) {
+      root.notificationToolAvailable = exitCode === 0
+      if (exitCode !== 0) root.notificationWarningShown = false
+    }
+  }
 
   // ---- Multi-sport Workers -------------------------------------------------
-  Process {
+  NetworkProcess {
     id: workerScoreboard
-    property bool handled: false
     property bool gotData: false
     property string sportCode: ""
     property string defaultName: ""
-    property int serial: 0
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (workerScoreboard.serial !== root.requestSerial) return
-        workerScoreboard.handled = true
-        root.resolveEspnScoreboard(String(text || ""), workerScoreboard.sportCode, workerScoreboard.defaultName)
-      }
-    }
-    onExited: function(exitCode) {
-      if (!workerScoreboard.handled && workerScoreboard.serial === root.requestSerial) {
-        workerScoreboard.handled = true
-        root.resolveEspnScoreboard("", workerScoreboard.sportCode, workerScoreboard.defaultName)
-      }
-    }
+    onOutput: function(payload) { root.resolveEspnScoreboard(payload, workerScoreboard.sportCode, workerScoreboard.defaultName) }
+    onFailed: root.resolveEspnScoreboard("", workerScoreboard.sportCode, workerScoreboard.defaultName)
   }
 
-  Process {
+  NetworkProcess {
     id: workerStandings
-    property bool handled: false
     property bool gotData: false
     property string sportCode: ""
-    property int serial: 0
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (workerStandings.serial !== root.requestSerial) return
-        workerStandings.handled = true
-        root.resolveEspnStandings(String(text || ""), workerStandings.sportCode)
-      }
-    }
-    onExited: function(exitCode) {
-      if (!workerStandings.handled && workerStandings.serial === root.requestSerial) {
-        workerStandings.handled = true
-        root.resolveEspnStandings("", workerStandings.sportCode)
-      }
-    }
+    onOutput: function(payload) { root.resolveEspnStandings(payload, workerStandings.sportCode) }
+    onFailed: root.resolveEspnStandings("", workerStandings.sportCode)
   }
 
-  Process {
+  NetworkProcess {
     id: workerF1Calendar
-    property bool handled: false
     property bool gotData: false
-    property int serial: 0
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (workerF1Calendar.serial !== root.requestSerial || workerF1Calendar.handled) return
-        workerF1Calendar.handled = true
-        root.resolveF1Calendar(String(text || ""))
-      }
-    }
-    onExited: function(exitCode) {
-      if (!workerF1Calendar.handled && workerF1Calendar.serial === root.requestSerial) {
-        workerF1Calendar.handled = true
-        root.resolveF1Calendar("")
-      }
-    }
+    onOutput: function(payload) { root.resolveF1Calendar(payload) }
+    onFailed: root.resolveF1Calendar("")
   }
 
-  Process {
+  NetworkProcess {
     id: workerF1Drivers
-    property bool handled: false
     property bool gotData: false
-    property int serial: 0
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (workerF1Drivers.serial !== root.requestSerial || workerF1Drivers.handled) return
-        workerF1Drivers.handled = true
-        root.resolveF1Drivers(String(text || ""))
-      }
-    }
-    onExited: function(exitCode) {
-      if (!workerF1Drivers.handled && workerF1Drivers.serial === root.requestSerial) {
-        workerF1Drivers.handled = true
-        root.resolveF1Drivers("")
-      }
-    }
+    onOutput: function(payload) { root.resolveF1Drivers(payload) }
+    onFailed: root.resolveF1Drivers("")
   }
 
-  Process {
+  NetworkProcess {
     id: workerF1Constructors
-    property bool handled: false
     property bool gotData: false
-    property int serial: 0
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (workerF1Constructors.serial !== root.requestSerial || workerF1Constructors.handled) return
-        workerF1Constructors.handled = true
-        root.resolveF1Constructors(String(text || ""))
-      }
-    }
-    onExited: function(exitCode) {
-      if (!workerF1Constructors.handled && workerF1Constructors.serial === root.requestSerial) {
-        workerF1Constructors.handled = true
-        root.resolveF1Constructors("")
-      }
-    }
+    onOutput: function(payload) { root.resolveF1Constructors(payload) }
+    onFailed: root.resolveF1Constructors("")
   }
 
   // Football Workers
-  Process {
+  NetworkProcess {
     id: workerTeam
-    property bool handled: false
     property string teamId: ""
-    property int serial: 0
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (workerTeam.serial !== root.requestSerial || workerTeam.handled) return
-        workerTeam.handled = true
-        if (!String(text || "").trim() || root.activeSport !== "football") return
-        try {
-          // Parse with the team captured at dispatch time — selectedTeamId may
-          // have changed while the request was in flight
-          var parsed = Model.parseTeamPage(text, workerTeam.teamId)
-          if (parsed && parsed.length > 0) {
-            teamMatchesRaw = parsed
-            var merged = Model.arrayFrom(allMatches)
-            var seen = {}
-            for (var i = 0; i < merged.length; i++) seen[merged[i].id] = true
-            for (var j = 0; j < parsed.length; j++) {
-              if (!seen[parsed[j].id]) {
-                seen[parsed[j].id] = true
-                merged.push(parsed[j])
-              }
-            }
-            allMatches = merged
-            lastUpdated = new Date()
-          }
-        } catch (e) { console.warn("omasports: team page parse failed:", e) }
-      }
-    }
-    onExited: function(exitCode) {
-      if (!workerTeam.handled) workerTeam.handled = true
-    }
+    onOutput: function(payload) { root.resolveTeamWorker(payload) }
+    onFailed: root.resolveTeamWorker("")
   }
 
-  Process {
+  NetworkProcess {
     id: workerA
-    property bool handled: false
     property string leagueId: ""
-    property int serial: 0
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.resolveFootballWorker(workerA, String(text || ""))
-    }
-    onExited: function(exitCode) {
-      if (!workerA.handled && workerA.serial === root.requestSerial) root.resolveFootballWorker(workerA, "")
-    }
+    onOutput: function(payload) { root.resolveFootballWorker(workerA, payload) }
+    onFailed: root.resolveFootballWorker(workerA, "")
   }
 
-  Process {
+  NetworkProcess {
     id: workerB
-    property bool handled: false
     property string leagueId: ""
-    property int serial: 0
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.resolveFootballWorker(workerB, String(text || ""))
-    }
-    onExited: function(exitCode) {
-      if (!workerB.handled && workerB.serial === root.requestSerial) root.resolveFootballWorker(workerB, "")
-    }
+    onOutput: function(payload) { root.resolveFootballWorker(workerB, payload) }
+    onFailed: root.resolveFootballWorker(workerB, "")
   }
 
-  Process {
+  NetworkProcess {
     id: workerC
-    property bool handled: false
     property string leagueId: ""
-    property int serial: 0
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.resolveFootballWorker(workerC, String(text || ""))
-    }
-    onExited: function(exitCode) {
-      if (!workerC.handled && workerC.serial === root.requestSerial) root.resolveFootballWorker(workerC, "")
-    }
+    onOutput: function(payload) { root.resolveFootballWorker(workerC, payload) }
+    onFailed: root.resolveFootballWorker(workerC, "")
   }
 
-  Process {
+  NetworkProcess {
     id: workerD
-    property bool handled: false
     property string leagueId: ""
-    property int serial: 0
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.resolveFootballWorker(workerD, String(text || ""))
-    }
-    onExited: function(exitCode) {
-      if (!workerD.handled && workerD.serial === root.requestSerial) root.resolveFootballWorker(workerD, "")
-    }
+    onOutput: function(payload) { root.resolveFootballWorker(workerD, payload) }
+    onFailed: root.resolveFootballWorker(workerD, "")
   }
 
   Timer {
@@ -1808,6 +2000,16 @@ Panel {
       roundQueue = roundQueue.concat(pendingRetryIds)
       pendingRetryIds = []
       root.pumpFootball()
+    }
+  }
+
+  Timer {
+    id: teamRetryDelay
+    interval: 2500
+    onTriggered: {
+      if (!root.teamFetchActive || root.teamRetrySerial !== root.requestSerial || root.teamRetryId === "") return
+      root.teamRetryId = ""
+      root.fetchNextFootballTeamPage()
     }
   }
 
@@ -1832,81 +2034,40 @@ Panel {
 
   // Detail enrichment runs on three parallel workers draining one shared queue
   // (~2 min worst-case serial chain before → ~40s now)
-  Process {
+  NetworkProcess {
     id: detailProcA
-    property int serial: 0
-    property bool handled: false
     property string detailId: ""
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (detailProcA.serial !== root.requestSerial || detailProcA.handled) return
-        detailProcA.handled = true
-        root.consumeDetail(detailProcA, String(text || ""))
-      }
-    }
-    onExited: function(exitCode) {
-      if (!detailProcA.handled && detailProcA.serial === root.requestSerial) {
-        detailProcA.handled = true
-        root.consumeDetail(detailProcA, "")
-      }
-    }
+    onOutput: function(payload) { root.consumeDetail(detailProcA, payload) }
+    onFailed: root.consumeDetail(detailProcA, "")
   }
 
-  Process {
+  NetworkProcess {
     id: detailProcB
-    property int serial: 0
-    property bool handled: false
     property string detailId: ""
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (detailProcB.serial !== root.requestSerial || detailProcB.handled) return
-        detailProcB.handled = true
-        root.consumeDetail(detailProcB, String(text || ""))
-      }
-    }
-    onExited: function(exitCode) {
-      if (!detailProcB.handled && detailProcB.serial === root.requestSerial) {
-        detailProcB.handled = true
-        root.consumeDetail(detailProcB, "")
-      }
-    }
+    onOutput: function(payload) { root.consumeDetail(detailProcB, payload) }
+    onFailed: root.consumeDetail(detailProcB, "")
   }
 
-  Process {
+  NetworkProcess {
     id: detailProcC
-    property int serial: 0
-    property bool handled: false
     property string detailId: ""
-
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (detailProcC.serial !== root.requestSerial || detailProcC.handled) return
-        detailProcC.handled = true
-        root.consumeDetail(detailProcC, String(text || ""))
-      }
-    }
-    onExited: function(exitCode) {
-      if (!detailProcC.handled && detailProcC.serial === root.requestSerial) {
-        detailProcC.handled = true
-        root.consumeDetail(detailProcC, "")
-      }
-    }
+    onOutput: function(payload) { root.consumeDetail(detailProcC, payload) }
+    onFailed: root.consumeDetail(detailProcC, "")
   }
 
   // Adaptive polling: while a followed match is live we poll every 40s so the
   // clock and score track reality; otherwise we fall back to the user interval.
-  readonly property int slowRefreshMs: Math.max(5, parseInt(root.savedState.refreshMinutes || 15, 10)) * 60 * 1000
+  // Clamp to [5,60] like every other writer: a malformed state file (or a v1
+  // save with refreshMinutes outside the dropdown range) must not produce a
+  // multi-hour poll interval with no UI affordance to reset it.
+  readonly property int slowRefreshMs: Math.max(5, Math.min(60, parseInt(root.savedState.refreshMinutes || 15, 10))) * 60 * 1000
   property bool fastPolling: false
 
   function hasLiveFollowedMatch() {
-    var source = teamMatches.length > 0 ? teamMatches : allMatches
-    for (var i = 0; i < source.length; i++)
-      if (source[i] && source[i].status === "live") return true
+    // Same contract as favoriteTeamLive: only followed-team games justify
+    // the ~40s adaptive polling cadence
+    for (var i = 0; i < teamMatches.length; i++)
+      if (teamMatches[i] && teamMatches[i].status === "live") return true
     return false
   }
 
@@ -1918,8 +2079,7 @@ Panel {
       return
     }
     var ms = fastPolling ? 40000 : root.slowRefreshMs
-    if (refreshTimer.interval !== ms) refreshTimer.interval = ms
-    refreshTimer.restart()
+    root.setRefreshTimerInterval(ms)
   }
 
   Timer {
@@ -1933,7 +2093,20 @@ Panel {
     }
   }
 
-  onBackgroundUpdatesChanged: scheduleNextPoll()
+  // Mutating `interval` on a running Timer can fire once at the old cadence
+  // before Qt honors the new value. stop()/start() is the documented way to
+  // apply a fresh interval cleanly (used by scheduleNextPoll above).
+  function setRefreshTimerInterval(ms) {
+    if (refreshTimer.interval === ms) return
+    refreshTimer.stop()
+    refreshTimer.interval = ms
+    if (root.opened || root.backgroundUpdates) refreshTimer.start()
+  }
+
+  onBackgroundUpdatesChanged: {
+    scheduleNextPoll()
+    if (root.backgroundUpdates && root.stateLoaded && !root.loading) root.refresh()
+  }
 
   IpcHandler {
     target: root.ipcTarget
@@ -1962,7 +2135,7 @@ Panel {
     centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(530))
-    contentHeight: panel.fittedContentHeight(sportsColumn.implicitHeight + Style.space(16))
+    contentHeight: panel.fittedContentHeight(Math.min(sportsColumn.implicitHeight + Style.space(16), root.maxPanelContentHeight))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -2042,7 +2215,7 @@ Panel {
                   Text {
                     width: parent.width
                     text: root.statusLine()
-                    color: root.errorMessage !== "" || root.dataStale
+                    color: root.errorMessage !== "" || root.persistenceError !== "" || root.dataStale
                       ? root.urgentColor
                       : root.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
@@ -2064,6 +2237,14 @@ Panel {
                   text: ""
                   iconText: root.enableNotifications ? "󰂚" : "󰂛"
                   selected: root.enableNotifications
+                  focusable: root.notificationToolAvailable
+                  enabled: root.notificationToolAvailable
+                  hasCursor: root.focusSection === root.sectionIndex("notifications") && root.notificationToolAvailable
+                  tooltipText: root.notificationToolAvailable
+                    ? (root.enableNotifications ? "Disable score notifications" : "Enable score notifications")
+                    : "Notifications unavailable (notify-send not found)"
+                  Accessible.role: Accessible.Button
+                  Accessible.name: notifyBtn.tooltipText
                   accent: Color.accent
                   foreground: root.fgColor
                   onClicked: root.toggleNotifications()
@@ -2075,6 +2256,11 @@ Panel {
                   text: ""
                   iconText: root.antiSpoiler ? "󰈉" : "󰈈"
                   selected: root.antiSpoiler
+                  focusable: true
+                  hasCursor: root.focusSection === root.sectionIndex("spoiler")
+                  tooltipText: root.antiSpoiler ? "Show final scores" : "Hide final scores"
+                  Accessible.role: Accessible.Button
+                  Accessible.name: spoilerBtn.tooltipText
                   accent: Color.accent
                   foreground: root.fgColor
                   onClicked: root.toggleSpoiler()
@@ -2087,6 +2273,9 @@ Panel {
                   iconSpinning: root.loading
                   focusable: true
                   hasCursor: root.focusSection === root.sectionIndex("refresh")
+                  tooltipText: root.loading ? "Updating scores" : "Refresh scores"
+                  Accessible.role: Accessible.Button
+                  Accessible.name: refreshButton.tooltipText
                   foreground: root.fgColor
                   onClicked: root.refresh()
                 }
@@ -2145,6 +2334,8 @@ Panel {
                     required property var modelData
                     required property int index
 
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.label + (root.activeSport === modelData.value ? " (selected)" : "")
                     width: (sportSelectorRow.width - (Model.sports().length - 1) * Style.space(3)) / Model.sports().length
                     implicitHeight: Style.space(26)
                     radius: Math.min(4, Style.cornerRadius)
@@ -2312,7 +2503,9 @@ Panel {
                       id: setupSecHeader
                       anchors.left: parent.left
                       anchors.verticalCenter: parent.verticalCenter
-                      text: (root.activeSport === "f1" ? "FAVORITE DRIVER & PREFERENCES" : ("FOLLOWED " + root.activeSportMeta.label.toUpperCase() + " & CLUBS"))
+                      text: (root.activeSport === "f1"
+                        ? "FAVORITE DRIVER & PREFERENCES"
+                        : ("FOLLOWED " + root.activeSportMeta.label.toUpperCase() + (root.activeSport === "football" ? " & CLUBS" : " TEAMS")))
                       foreground: root.fgColor
                     }
 
@@ -2323,6 +2516,11 @@ Panel {
                       text: root.setupExpanded ? "Done" : "Edit"
                       iconText: root.setupExpanded ? "󰅃" : "󰅀"
                       visible: root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0)
+                      focusable: true
+                      hasCursor: root.focusSection === root.sectionIndex("setup")
+                      tooltipText: root.setupExpanded ? "Finish editing favorites" : "Edit favorites and leagues"
+                      Accessible.role: Accessible.Button
+                      Accessible.name: setupToggleBtn.tooltipText
                       foreground: root.fgColor
                       onClicked: root.setupExpanded = !root.setupExpanded
                     }
@@ -2392,7 +2590,7 @@ Panel {
                   Column {
                     width: parent.width
                     spacing: Style.space(10)
-                    visible: root.setupExpanded || (root.activeSport === "football" && root.selectedLeagueIds.length === 0) || root.selectedTeamIds.length === 0
+                    visible: root.setupEditorVisible
 
                     // League Picker (Football only)
                     FocusScope {
@@ -2609,7 +2807,6 @@ Panel {
                 activeSport: root.activeSport
                 fgColor: root.fgColor
                 urgentColor: root.urgentColor
-                selectedTeamId: root.selectedTeamId
                 selectedTeamIds: root.selectedTeamIds
                 selectedTeamName: root.selectedTeamName
                 antiSpoiler: root.antiSpoiler
@@ -2619,6 +2816,7 @@ Panel {
                 matchSubline: root.matchSubline
                 openMatch: root.openMatch
                 revealMatch: root.revealMatch
+                rowFocused: root.focusSection === root.sectionIndex("spotlight")
               }
 
               // ---- Schedule Header with Filter -----------------------------
@@ -2663,7 +2861,8 @@ Panel {
 
               Text {
                 width: parent.width
-                visible: root.activeFixturesList.length === 0 && !root.loading && root.hasData
+                visible: root.activeFixturesList.length === 0 && !root.loading
+                  && (root.hasData || root.fetchedOnce) && root.errorMessage === ""
                 text: "No matches in the next days for this selection. Use the refresh button above or press R."
                 color: root.mutedColor(root.fgColor, 0.65)
                 font.family: Style.font.family
@@ -2798,11 +2997,14 @@ Panel {
                           fgColor: root.fgColor
                           urgentColor: root.urgentColor
                           selectedTeamId: root.selectedTeamId
+                          selectedTeamIds: root.selectedTeamIds
                           antiSpoiler: root.antiSpoiler
                           revealedMatchIds: root.revealedMatchIds
                           nowMs: root.nowMs
                           revealMatch: root.revealMatch
                           openMatch: root.openMatch
+                          expandedIds: root.f1ExpandedIds
+                          toggleExpand: root.toggleF1Expand
                           listVisible: root.opened && root.tabIndex === 0
                           rowFocused: root.focusSection - root.focusSections.length === groupDelegate.rowOffset + index
                         }
@@ -2855,7 +3057,7 @@ Panel {
 
                   Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.hasData
+                    text: (root.hasData || root.fetchedOnce)
                       ? "No live events in progress right now for " + root.activeSportMeta.label + "."
                       : "Load " + root.activeSportMeta.label + " schedule to see live scores."
                     color: root.mutedColor(root.fgColor, 0.65)
@@ -3091,6 +3293,7 @@ Panel {
                         activeSport: root.activeSport
                         standingsLeagueId: root.standingsLeagueId
                         selectedTeamId: root.selectedTeamId
+                        selectedTeamIds: root.selectedTeamIds
                         selectedTeamName: root.selectedTeamName
                         fgColor: root.fgColor
                         urgentColor: root.urgentColor
@@ -3118,6 +3321,27 @@ Panel {
                   }
                   Text {
                     text: root.activeSport === "f1" ? "Podium / P1" : "Playoffs / Europe"
+                    color: root.mutedColor(root.fgColor, 0.55)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+
+                Row {
+                  visible: root.standingsHasPlayin
+                  spacing: Style.space(5)
+                  Rectangle {
+                    width: Style.space(8)
+                    height: Style.space(8)
+                    radius: 2
+                    color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08)
+                    border.width: 1
+                    border.color: Util.alpha(Color.accent, 0.35)
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                  Text {
+                    text: root.activeSport === "f1" ? "Podium places" : "Play-in"
                     color: root.mutedColor(root.fgColor, 0.55)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption

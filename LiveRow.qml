@@ -8,6 +8,7 @@ Item {
   id: root
 
   required property var modelData
+  required property int index
 
   property string activeSport: "football"
   property string activeSportIcon: "⚽"
@@ -42,7 +43,7 @@ Item {
     width: parent.width
     implicitHeight: liveCol.implicitHeight + Style.space(22)
     radius: Math.min(8, Style.cornerRadius)
-    Accessible.role: Accessible.ListItem
+    Accessible.role: Accessible.Button
     Accessible.name: {
       var h = (root.modelData.home && (root.modelData.home.name || root.modelData.home.shortName)) || ""
       var a = (root.modelData.away && (root.modelData.away.name || root.modelData.away.shortName)) || ""
@@ -276,9 +277,18 @@ Item {
           anchors.top: parent.top
           anchors.bottom: parent.bottom
           width: {
-            var lt = String(root.syncedLiveTime)
-            var m = parseInt(lt, 10)
-            if (!isNaN(m)) return Math.min(parent.width, Math.max(6, (m / 90) * parent.width))
+            // Strip the invisible LRM/RLM marks FotMob wraps its clocks in —
+            // parseInt() rejects them, which used to pin football at the
+            // generic 60% fallback forever
+            var lt = String(root.syncedLiveTime).replace(/[\u200e\u200f\s]/g, "")
+            var m = lt.match(/^(\d{1,3})(?:\+(\d{1,2}))?[\u2019\u2032']?$/)
+            if (m) {
+              var minute = parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) : 0)
+              return Math.min(parent.width, Math.max(6, (Math.min(minute, 90) / 90) * parent.width))
+            }
+            // Baseball innings: "Top 5th", "Bot 9th", "Middle 6th" → n/9
+            var inn = lt.match(/(?:top|bot|middle|end)\D*?(\d)/i)
+            if (inn) return Math.min(parent.width * 0.97, parent.width * (parseInt(inn[1], 10) / 9))
             if (lt.indexOf("HT") !== -1) return parent.width * 0.50
             if (lt.indexOf("Q1") !== -1 || lt.indexOf("1st") !== -1) return parent.width * 0.25
             if (lt.indexOf("Q2") !== -1 || lt.indexOf("2nd") !== -1) return parent.width * 0.50
@@ -288,6 +298,40 @@ Item {
           }
           radius: 1.5
           color: root.urgentColor
+        }
+      }
+
+      // Period-by-period lines (NBA/NFL quarters, NHL periods, MLB innings) —
+      // already captured by the parser; hidden for sports without them
+      Column {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(1)
+        visible: root.activeSport !== "football"
+          && Boolean(root.modelData.linescores)
+          && Boolean(root.modelData.linescores.home)
+          && Boolean(root.modelData.linescores.away)
+          && root.modelData.linescores.home.length > 0
+          && root.modelData.linescores.away.length > 0
+
+        Repeater {
+          model: ["home", "away"]
+
+          delegate: Text {
+            required property var modelData
+
+            readonly property var ls: (root.modelData.linescores && root.modelData.linescores[modelData]) || []
+
+            text: {
+              var out = []
+              for (var i = 0; i < ls.length; i++) out.push(ls[i] === undefined ? "–" : String(ls[i]))
+              return out.join("   ")
+            }
+            color: modelData === "home" ? root.mutedColor(root.fgColor, 0.8) : root.mutedColor(root.fgColor, 0.5)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 2
+            anchors.horizontalCenter: parent.horizontalCenter
+          }
         }
       }
 
@@ -340,6 +384,6 @@ Item {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: root.openMatch(root.modelData)
+    onClicked: if (root.openMatch) root.openMatch(root.modelData)
   }
 }

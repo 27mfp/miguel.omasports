@@ -73,10 +73,7 @@ BarWidget {
     active: true
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
-    onLoaded: {
-      root.injectPanel()
-      Qt.callLater(root.injectPanel)
-    }
+    onLoaded: root.injectPanel()
   }
 
   BarIconButton {
