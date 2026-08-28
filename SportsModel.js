@@ -5,6 +5,30 @@
 // Supports: Football (FotMob), NBA, F1, NFL, MLB, NHL (ESPN / Jolpica)
 // ============================================================================
 
+// How long an idle match stays in the notification history past its last poll.
+// Six hours covers a full match lifecycle (kickoff → 2h game → 4h buffer for
+// late post-game alerts) without retaining unbounded ids in memory.
+var NOTIFICATION_TTL_MS = 6 * 3600 * 1000
+
+// Polling intervals offered by the UI picker. The dropdown, the clamp logic
+// (parseState / setRefreshMinutes) and the polling timer all derive from this
+// single list so a new value only needs to be added once.
+function refreshIntervalOptions() {
+  return [
+    { value: "5", label: "5 min" },
+    { value: "10", label: "10 min" },
+    { value: "15", label: "15 min" },
+    { value: "30", label: "30 min" },
+    { value: "45", label: "45 min" },
+    { value: "60", label: "60 min" }
+  ]
+}
+
+function parseMatchTimeMs(match) {
+  var t = Date.parse(match && match.time || "")
+  return isNaN(t) ? NaN : t
+}
+
 var supportedSports = [
   { value: "football", label: "Football", icon: "⚽", description: "100+ Leagues & Cups" },
   { value: "nba", label: "NBA", icon: "🏀", description: "National Basketball Assn" },
@@ -493,12 +517,13 @@ function arrayFrom(value) {
 
 function normalizeLeagueIds(value) {
   var result = []
-  var seen = {}
   var source = arrayFrom(value)
   for (var i = 0; i < source.length && result.length < 12; i++) {
     var raw = String(source[i] || "").trim()
-    if (!raw || seen[raw]) continue
-    seen[raw] = true
+    // Use an array membership check rather than an object lookup: persisted
+    // values are user-editable and names such as "__proto__" must not affect
+    // the deduplication map through Object.prototype.
+    if (!raw || result.indexOf(raw) !== -1) continue
     result.push(raw)
   }
   return result
@@ -506,15 +531,20 @@ function normalizeLeagueIds(value) {
 
 function normalizeTeamIds(value) {
   var result = []
-  var seen = {}
   var source = arrayFrom(value)
   for (var i = 0; i < source.length && result.length < 24; i++) {
     var raw = String(source[i] || "").trim()
-    if (!raw || seen[raw]) continue
-    seen[raw] = true
+    if (!raw || result.indexOf(raw) !== -1) continue
     result.push(raw)
   }
   return result
+}
+
+function normalizeTab(value) {
+  var tab = String(value || "fixtures").toLowerCase()
+  if (tab === "live") return "live"
+  if (tab === "standings" || tab === "table") return "standings"
+  return "fixtures"
 }
 
 // Single source of truth for crest cache file names. Both the panel's
@@ -561,7 +591,7 @@ function parseState(raw) {
   } catch (e) {
     return defaults
   }
-  if (!parsed || typeof parsed !== "object") return defaults
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaults
 
   var sport = String(parsed.sport || "football").toLowerCase()
   var validSport = false
@@ -584,7 +614,7 @@ function parseState(raw) {
       teamId: String(obj.teamId || (tids.length > 0 ? tids[0] : "")),
       teamName: String(obj.teamName || ""),
       standingsGroup: String(obj.standingsGroup || def.standingsGroup),
-      tab: String(obj.tab || "fixtures")
+      tab: normalizeTab(obj.tab)
     }
   }
 
@@ -597,7 +627,7 @@ function parseState(raw) {
       teamId: String(fb.teamId || (fbTeamIds.length > 0 ? fbTeamIds[0] : "") || parsed.teamId || ""),
       teamName: String(fb.teamName || parsed.teamName || ""),
       standingsLeagueId: String(fb.standingsLeagueId || parsed.standingsLeagueId || fbLeagues[0]),
-      tab: String(fb.tab || "fixtures")
+      tab: normalizeTab(fb.tab)
     },
     nba: parseSubSport("nba", defaults.nba),
     f1: parseSubSport("f1", defaults.f1),
@@ -616,13 +646,16 @@ function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, f
   state.antiSpoiler = antiSpoiler === true
   state.notifications = notifications !== false
   state.refreshMinutes = Math.max(5, Math.min(60, parseInt(refreshMinutes, 10) || 15))
+  var leagues = normalizeLeagueIds(fbLeagues)
+  if (leagues.length === 0) leagues = ["47"]
   var tids = normalizeTeamIds(fbTeamIds)
   state.football = {
-    leagueIds: normalizeLeagueIds(fbLeagues),
+    leagueIds: leagues,
     teamIds: tids,
     teamId: String(tids.length > 0 ? tids[0] : ""),
     teamName: String(fbTeamName || ""),
-    standingsLeagueId: String(fbStandingsId || (fbLeagues && fbLeagues[0]) || "47")
+    standingsLeagueId: String(fbStandingsId || leagues[0]),
+    tab: "fixtures"
   }
   if (sportSettings && typeof sportSettings === "object") {
     if (sportSettings.nba) state.nba = sportSettings.nba
@@ -637,6 +670,35 @@ function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, f
 // ============================================================================
 // ESPN SCOREBOARD & STANDINGS PARSERS (NBA, NFL, MLB, NHL)
 // ============================================================================
+
+function isEspnScoreboardPayload(value) {
+  var json = value
+  if (typeof value === "string") {
+    try { json = JSON.parse(value) } catch (e) { return false }
+  }
+  return !!(json && typeof json === "object" && !Array.isArray(json)
+    && json.code === undefined && json.error === undefined && json.errors === undefined
+    && Array.isArray(json.events))
+}
+
+function isEspnStandingsPayload(value) {
+  var json = value
+  if (typeof value === "string") {
+    try { json = JSON.parse(value) } catch (e) { return false }
+  }
+  return !!(json && typeof json === "object" && !Array.isArray(json)
+    && json.code === undefined && json.error === undefined && json.errors === undefined
+    && Array.isArray(json.children))
+}
+
+function isF1CalendarPayload(value) {
+  var json = value
+  if (typeof value === "string") {
+    try { json = JSON.parse(value) } catch (e) { return false }
+  }
+  return !!(json && json.error === undefined && json.errors === undefined
+    && json.MRData && json.MRData.RaceTable && Array.isArray(json.MRData.RaceTable.Races))
+}
 
 function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
   var json = null
@@ -683,7 +745,7 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
     var status = "upcoming"
     if (stateStr === "in") status = "live"
     else if (stateStr === "post") status = "finished"
-    else if (stType.name && String(stType.name).indexOf("CANCEL") !== -1) status = "cancelled"
+    else if (stType.name && String(stType.name).toUpperCase().indexOf("CANCEL") !== -1) status = "cancelled"
 
     var scoreText = ""
     if (status !== "upcoming") {
@@ -712,6 +774,7 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
       sport: sportName,
       leagueId: sportName,
       leagueName: leagueTitle,
+      venue: String((comp.venue && comp.venue.fullName) || ""),
       round: (comp.season && comp.season.slug) || "",
       home: home,
       away: away,
@@ -1069,9 +1132,70 @@ function parseScore(status) {
 function cleanPageUrl(raw) {
   var url = String(raw || "").trim()
   if (!url) return ""
-  if (url.indexOf("http") === 0) return url
-  if (url.charAt(0) === "/") return url
-  return "/" + url
+  if (/^https:\/\//i.test(url)) return url
+  // Keep non-HTTPS absolute URLs out of the parsed value. They are not
+  // useful for provider detail pages and must never reach curl/xdg-open.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return ""
+  if (url.charAt(0) === "/" && url.charAt(1) !== "/") return url
+  return "/" + url.replace(/^\/+/, "")
+}
+
+function trustedHost(host, allowedHosts) {
+  var value = String(host || "").toLowerCase().replace(/\.$/, "")
+  var hosts = arrayFrom(allowedHosts)
+  for (var i = 0; i < hosts.length; i++) {
+    var allowed = String(hosts[i] || "").toLowerCase().replace(/\.$/, "")
+    if (value === allowed || value.slice(-(allowed.length + 1)) === "." + allowed) return true
+  }
+  return false
+}
+
+function trustedHttpsUrl(raw, allowedHosts) {
+  var url = String(raw || "").trim()
+  // Reject credentials, ports, non-HTTPS schemes, control characters, and
+  // malformed hostnames before handing a provider URL to a local process.
+  if (!/^https:\/\/[^\s/?#]+(?:[/?#]|$)/i.test(url) || /[\u0000-\u001f\u007f]/.test(url)) return ""
+  var match = url.match(/^https:\/\/([^\s/@?#]+)(?:[/?#].*)?$/i)
+  if (!match || !trustedHost(match[1], allowedHosts)) return ""
+  return url
+}
+
+function isTrustedCrestUrl(raw, sport) {
+  var s = String(sport || "football").toLowerCase()
+  var hosts = s === "football" ? ["fotmob.com"] : ["espncdn.com", "espn.com"]
+  return trustedHttpsUrl(raw, hosts) !== ""
+}
+
+function matchExternalUrl(match) {
+  if (!match) return ""
+  var sport = String(match.sport || "football").toLowerCase()
+  var raw = String(match.pageUrl || "").trim()
+  var base = "https://www.espn.com/" + sport
+  var hosts = ["espn.com"]
+  if (sport === "football") {
+    base = "https://www.fotmob.com"
+    hosts = ["fotmob.com"]
+  } else if (sport === "f1") {
+    base = "https://www.formula1.com"
+    hosts = ["formula1.com", "wikipedia.org"]
+  }
+  // Relative paths are common in FotMob and ESPN payloads; resolve them
+  // against the sport's known base so a click opens the actual article, not
+  // a useless bare-host root. F1 has no fixed base — only fully-qualified
+  // Wikipedia or formula1.com links reach this branch.
+  if (raw.charAt(0) === "/" && raw.charAt(1) !== "/") {
+    if (sport === "football" || sport === "nba" || sport === "nfl" || sport === "mlb" || sport === "nhl") {
+      return base + raw
+    }
+  }
+  return trustedHttpsUrl(raw, hosts) || base
+}
+
+function matchDetailUrl(match) {
+  if (!match || String(match.sport || "football").toLowerCase() !== "football") return ""
+  var raw = String(match.pageUrl || "").trim()
+  if (raw.charAt(0) === "/" && raw.charAt(1) !== "/") return "https://www.fotmob.com" + raw
+  return trustedHttpsUrl(raw, ["fotmob.com"])
 }
 
 function parseMatch(raw, league) {
@@ -1149,13 +1273,16 @@ function parseDetails(html) {
 
 function parseStandings(props) {
   var table = props && props.table ? props.table : []
-  var rows = []
-  if (Array.isArray(table) && table.length > 0 && table[0].data && table[0].data.table) {
-    rows = table[0].data.table.all || []
-  } else if (table && table.data && table.data.table) {
-    rows = table.data.table.all || []
+  var tableBlock = null
+  if (Array.isArray(table)) {
+    tableBlock = table.length > 0 ? table[0] : null
+  } else if (table && typeof table === "object") {
+    tableBlock = table
   }
-  var legend = (props && props.table && props.table[0] && props.table[0].data && props.table[0].data.legend) || []
+  var tableData = tableBlock && tableBlock.data ? tableBlock.data : {}
+  var tableValues = tableData.table || {}
+  var rows = arrayFrom(tableValues.all)
+  var legend = arrayFrom(tableData.legend)
   var result = []
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i]
@@ -1185,7 +1312,7 @@ function zoneFromLegend(legend, idx) {
     if (!entry || !entry.indices) continue
     var indices = arrayFrom(entry.indices)
     for (var j = 0; j < indices.length; j++) {
-      if (indices[j] === idx) {
+      if (Number(indices[j]) === idx) {
         var key = String(entry.title || "").toLowerCase()
         if (key.indexOf("champions league") !== -1 || key.indexOf("promotion") !== -1 || key.indexOf("qualification") !== -1 || key.indexOf("playoff") !== -1)
           return "europe"
@@ -1219,19 +1346,23 @@ function parseLeaguePage(html, requestedId) {
   return { league: league, matches: matches, standings: parseStandings(props) }
 }
 
-function parseTeamPage(html, requestedTeamId) {
+function findTeamPageData(html, requestedTeamId) {
   var props = extractPageProps(html)
   var fallback = props.fallback || {}
-  var teamKey = "team-" + requestedTeamId
-  var teamData = fallback[teamKey] || null
-  if (!teamData) {
-    for (var k in fallback) {
-      if (k.indexOf("team-") === 0 && fallback[k] && fallback[k].fixtures) {
-        teamData = fallback[k]
-        break
-      }
-    }
-  }
+  var teamKey = "team-" + String(requestedTeamId || "")
+  // The fallback map can contain several team payloads. Never substitute the
+  // first available team when the requested key is absent: that would show a
+  // different club's schedule after a provider schema change.
+  return fallback[teamKey] || null
+}
+
+function isTeamPagePayload(html, requestedTeamId) {
+  var teamData = findTeamPageData(html, requestedTeamId)
+  return !!(teamData && teamData.fixtures && teamData.fixtures.allFixtures)
+}
+
+function parseTeamPage(html, requestedTeamId) {
+  var teamData = findTeamPageData(html, requestedTeamId)
   if (!teamData || !teamData.fixtures || !teamData.fixtures.allFixtures) return []
   var rawFixtures = arrayFrom(teamData.fixtures.allFixtures.fixtures)
   var matches = []
@@ -1263,6 +1394,55 @@ function mergePages(pages) {
     }
   }
   return matches
+}
+
+// Replace existing matches by id while preserving the current ordering. Team
+// pages and scoped live refreshes contain newer score/status data than the
+// previous full round; append only genuinely new fixtures.
+function mergeMatchUpdates(existing, updates) {
+  var result = arrayFrom(existing).slice()
+  var indexes = {}
+  for (var i = 0; i < result.length; i++) {
+    if (result[i] && result[i].id) indexes[String(result[i].id)] = i
+  }
+  var source = arrayFrom(updates)
+  for (var j = 0; j < source.length; j++) {
+    var match = source[j]
+    if (!match || !match.id) continue
+    var key = String(match.id)
+    if (indexes[key] === undefined) {
+      indexes[key] = result.length
+      result.push(match)
+    } else {
+      result[indexes[key]] = match
+    }
+  }
+  return result
+}
+
+// Merge page snapshots by their resolved league id. Unlike mergePages this
+// intentionally replaces a stale page instead of letting the first copy win.
+function mergeLeaguePages(existing, updates) {
+  var result = arrayFrom(existing).slice()
+  var indexes = {}
+  for (var i = 0; i < result.length; i++) {
+    var oldPage = result[i]
+    if (oldPage && oldPage.league && oldPage.league.id)
+      indexes[String(oldPage.league.id)] = i
+  }
+  var source = arrayFrom(updates)
+  for (var j = 0; j < source.length; j++) {
+    var page = source[j]
+    if (!page || !page.league || !page.league.id) continue
+    var key = String(page.league.id)
+    if (indexes[key] === undefined) {
+      indexes[key] = result.length
+      result.push(page)
+    } else {
+      result[indexes[key]] = page
+    }
+  }
+  return result
 }
 
 // ============================================================================
@@ -1550,6 +1730,29 @@ function teamOptionsForSport(sport, matches) {
   return list
 }
 
+function isFollowedTeam(teamId, teamIds) {
+  var id = String(teamId || "").trim().toLowerCase()
+  if (!id) return false
+  var ids = (typeof teamIds === "string" || typeof teamIds === "number") ? [teamIds] : arrayFrom(teamIds)
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i] || "").trim().toLowerCase() === id) return true
+  }
+  return false
+}
+
+function isNumericIdentifier(value) {
+  return /^\d+$/.test(String(value || "").trim())
+}
+
+function compareMatchTimes(a, b) {
+  var ta = parseMatchTimeMs(a)
+  var tb = parseMatchTimeMs(b)
+  if (isNaN(ta) && isNaN(tb)) return 0
+  if (isNaN(ta)) return 1
+  if (isNaN(tb)) return -1
+  return ta - tb
+}
+
 function matchesForTeam(matches, teamIdOrIds, sport) {
   var s = String(sport || "football").toLowerCase()
   if (s === "f1") {
@@ -1559,7 +1762,7 @@ function matchesForTeam(matches, teamIdOrIds, sport) {
   var ids = []
   for (var k = 0; k < rawIds.length; k++) {
     var str = String(rawIds[k] || "").trim().toLowerCase()
-    if (str) ids.push(str)
+    if (str && ids.indexOf(str) === -1) ids.push(str)
   }
   if (ids.length === 0) return []
 
@@ -1571,15 +1774,21 @@ function matchesForTeam(matches, teamIdOrIds, sport) {
     if (!m || seen[m.id]) continue
     var homeId = String(m.home && m.home.id || "").toLowerCase()
     var awayId = String(m.away && m.away.id || "").toLowerCase()
-    var homeName = String(m.home && m.home.name || "").toLowerCase()
-    var awayName = String(m.away && m.away.name || "").toLowerCase()
-    var homeShort = String(m.home && m.home.shortName || "").toLowerCase()
-    var awayShort = String(m.away && m.away.shortName || "").toLowerCase()
+    var homeName = String(m.home && m.home.name || "").trim().toLowerCase()
+    var awayName = String(m.away && m.away.name || "").trim().toLowerCase()
+    var homeShort = String(m.home && m.home.shortName || "").trim().toLowerCase()
+    var awayShort = String(m.away && m.away.shortName || "").trim().toLowerCase()
 
     var matchFound = false
     for (var j = 0; j < ids.length; j++) {
       var id = ids[j]
-      if (homeId === id || awayId === id || homeName.indexOf(id) !== -1 || awayName.indexOf(id) !== -1 || homeShort.indexOf(id) !== -1 || awayShort.indexOf(id) !== -1) {
+      // Provider ids are authoritative. Do not use substring matching for
+      // numeric ids: team id "7" must not match a team named "76ers".
+      if (homeId === id || awayId === id) {
+        matchFound = true
+        break
+      }
+      if (!isNumericIdentifier(id) && (homeName === id || awayName === id || homeShort === id || awayShort === id)) {
         matchFound = true
         break
       }
@@ -1589,13 +1798,7 @@ function matchesForTeam(matches, teamIdOrIds, sport) {
       result.push(m)
     }
   }
-  result.sort(function(a, b) {
-    var ta = Date.parse(a.time || "")
-    var tb = Date.parse(b.time || "")
-    if (isNaN(ta)) return 1
-    if (isNaN(tb)) return -1
-    return ta - tb
-  })
+  result.sort(compareMatchTimes)
   return result
 }
 
@@ -1608,13 +1811,7 @@ function matchesForLeague(matches, leagueId) {
     var m = source[i]
     if (m && String(m.leagueId) === id) result.push(m)
   }
-  result.sort(function(a, b) {
-    var ta = Date.parse(a.time || "")
-    var tb = Date.parse(b.time || "")
-    if (isNaN(ta)) return 1
-    if (isNaN(tb)) return -1
-    return ta - tb
-  })
+  result.sort(compareMatchTimes)
   return result
 }
 
@@ -1634,7 +1831,7 @@ function featuredMatchForTeam(teamMatches) {
   for (var j = 0; j < source.length; j++) {
     var m = source[j]
     if (!m || m.status !== "upcoming") continue
-    var t = Date.parse(m.time || "")
+    var t = parseMatchTimeMs(m)
     if (isNaN(t) || t < now) continue
     if (t < bestUpcomingTime) {
       bestUpcomingTime = t
@@ -1649,7 +1846,7 @@ function featuredMatchForTeam(teamMatches) {
   for (var k = 0; k < source.length; k++) {
     var fm = source[k]
     if (!fm || fm.status !== "finished") continue
-    var ft = Date.parse(fm.time || "")
+    var ft = parseMatchTimeMs(fm)
     if (isNaN(ft)) continue
     if (ft > bestFinishedTime) {
       bestFinishedTime = ft
@@ -1657,6 +1854,31 @@ function featuredMatchForTeam(teamMatches) {
     }
   }
   return bestFinished || source[0]
+}
+
+function teamIdForMatch(match, teamIds) {
+  if (!match) return ""
+  var ids = (typeof teamIds === "string" || typeof teamIds === "number") ? [teamIds] : arrayFrom(teamIds)
+  for (var i = 0; i < ids.length; i++) {
+    var id = String(ids[i] || "").trim()
+    var normalized = id.toLowerCase()
+    if (id && (String(match.home && match.home.id || "").toLowerCase() === normalized
+        || String(match.away && match.away.id || "").toLowerCase() === normalized)) return id
+  }
+  return ""
+}
+
+function teamOutcomeForTeams(match, teamIds) {
+  return teamOutcome(match, teamIdForMatch(match, teamIds))
+}
+
+function isStandingsRowFavorite(row, teamIds, selectedTeamName) {
+  if (!row) return false
+  if (isFollowedTeam(row.id, teamIds) || isFollowedTeam(row.teamId, teamIds)) return true
+  var name = String(selectedTeamName || "").trim().toLowerCase()
+  if (!name) return false
+  return String(row.name || "").trim().toLowerCase() === name
+    || String(row.shortName || "").trim().toLowerCase() === name
 }
 
 function teamOutcome(match, teamId) {
@@ -1675,7 +1897,7 @@ function teamOutcome(match, teamId) {
   return as > hs ? "win" : "loss"
 }
 
-function groupMatches(matches, referenceDate, dateKeyFn) {
+function groupMatches(matches) {
   var source = arrayFrom(matches)
   if (source.length === 0) return []
 
@@ -1691,6 +1913,17 @@ function groupMatches(matches, referenceDate, dateKeyFn) {
     else recent.push(m)
   }
 
+  live.sort(compareMatchTimes)
+  upcoming.sort(compareMatchTimes)
+  recent.sort(function(a, b) {
+    var aTime = parseMatchTimeMs(a)
+    var bTime = parseMatchTimeMs(b)
+    if (isNaN(aTime) && isNaN(bTime)) return 0
+    if (isNaN(aTime)) return 1
+    if (isNaN(bTime)) return -1
+    return bTime - aTime
+  })
+
   var groups = []
   if (live.length > 0) {
     groups.push({ key: "live", label: "Live Matches", matches: live })
@@ -1699,14 +1932,13 @@ function groupMatches(matches, referenceDate, dateKeyFn) {
     groups.push({ key: "upcoming", label: "Upcoming Fixtures", matches: upcoming })
   }
   if (recent.length > 0) {
-    recent.reverse()
     groups.push({ key: "recent", label: "Recent Results", matches: recent.slice(0, 10) })
   }
   return groups
 }
 
 function formatMatchDate(timeStr) {
-  var t = Date.parse(timeStr || "")
+  var t = parseMatchTimeMs({ time: timeStr })
   if (isNaN(t)) return "TBD"
   var d = new Date(t)
   var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -1771,6 +2003,11 @@ function sportMeta(sport) {
 function shortTournamentName(name) {
   var s = String(name || "").trim()
   if (!s) return ""
+  // ESPN league display names are long; the date column only fits siglas
+  if (s.indexOf("National Basketball Association") !== -1) return "NBA"
+  if (s.indexOf("National Football League") !== -1 && s.indexOf("Conference") === -1) return "NFL"
+  if (s.indexOf("Major League Baseball") !== -1) return "MLB"
+  if (s.indexOf("National Hockey League") !== -1) return "NHL"
   if (s.indexOf("Champions League Qualification") !== -1) return "UCL Qual."
   if (s.indexOf("Champions League") !== -1) return "Champions Lg"
   if (s.indexOf("Europa League Qualification") !== -1) return "UEL Qual."
@@ -1798,7 +2035,7 @@ function liveMatches(matches, detailsMap) {
     if (d && (d.statusLong === "Full-Time" || d.reason === "FT" || d.finished === true)) continue
     result.push(m)
   }
-  result.sort(function(a, b) { return Date.parse(a.time || "") - Date.parse(b.time || "") })
+  result.sort(compareMatchTimes)
   return result
 }
 
@@ -1851,9 +2088,9 @@ function buildPersistedState(cur, saved, ui) {
     ui.antiSpoiler,
     ui.enableNotifications
   )
-  // statePayload rebuilds football without a tab; restore it so the written
-  // shape round-trips exactly through parseState (signature check in applyState)
-  payload.football.tab = cur === "football" ? String(ui.tabName || "fixtures") : String(fb.tab || "fixtures")
+  // Keep statePayload's positional API stable; add the active football tab at
+  // the persistence boundary where the UI-specific field belongs.
+  payload.football.tab = cur === "football" ? normalizeTab(ui.tabName) : normalizeTab(fb.tab)
   return payload
 }
 
@@ -1862,18 +2099,86 @@ function buildPersistedState(cur, saved, ui) {
 // changes. Refreshes produce fresh arrays even when nothing visible changed,
 // so callers compare fingerprints and keep the old array when equal.
 
+function sameTeamData(a, b) {
+  if (!a || !b) return a === b
+  return String(a.id || "") === String(b.id || "")
+    && String(a.name || "") === String(b.name || "")
+    && String(a.shortName || "") === String(b.shortName || "")
+    && String(a.abbr || "") === String(b.abbr || "")
+    && String(a.record || "") === String(b.record || "")
+    && String(a.logo || "") === String(b.logo || "")
+}
+
+function sameSessions(a, b) {
+  var first = arrayFrom(a)
+  var second = arrayFrom(b)
+  if (first.length !== second.length) return false
+  for (var i = 0; i < first.length; i++) {
+    if (!first[i] || !second[i]) return false
+    if (String(first[i].name || "") !== String(second[i].name || "")
+        || String(first[i].shortName || "") !== String(second[i].shortName || "")
+        || String(first[i].time || "") !== String(second[i].time || "")) return false
+  }
+  return true
+}
+
 function sameMatches(a, b) {
+  if (a === b) return true
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+  // Linescores (NBA/NFL quarters, NHL periods, MLB innings) are intentionally
+  // excluded from the fingerprint. Total score already drives the visible delta
+  // and including period-level updates would force a Repeater teardown for
+  // every poll — which is how the live tab flickers every 3-4 seconds.
+  // Add `linescores` here only if you also fix the Repeater churn.
+  for (var i = 0; i < a.length; i++) {
+    var x = a[i]
+    var y = b[i]
+    if (!x || !y) return false
+    if (String(x.id) !== String(y.id)
+        || String(x.status || "") !== String(y.status || "")
+        || Number(x.homeScore || 0) !== Number(y.homeScore || 0)
+        || Number(x.awayScore || 0) !== Number(y.awayScore || 0)
+        || String(x.scoreText || "") !== String(y.scoreText || "")
+        || String(x.liveTime || "") !== String(y.liveTime || "")
+        || String(x.time || "") !== String(y.time || "")
+        || String(x.leagueId || "") !== String(y.leagueId || "")
+        || String(x.leagueName || "") !== String(y.leagueName || "")
+        || String(x.round || "") !== String(y.round || "")
+        || String(x.venue || "") !== String(y.venue || "")
+        || String(x.pageUrl || "") !== String(y.pageUrl || "")
+        || String(x.raceName || "") !== String(y.raceName || "")
+        || String(x.circuitName || "") !== String(y.circuitName || "")
+        || String(x.countryFlag || "") !== String(y.countryFlag || "")
+        || !sameTeamData(x.home, y.home)
+        || !sameTeamData(x.away, y.away)
+        || !sameSessions(x.sessions, y.sessions)) return false
+  }
+  return true
+}
+
+function sameRows(a, b) {
   if (a === b) return true
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
   for (var i = 0; i < a.length; i++) {
     var x = a[i]
     var y = b[i]
     if (!x || !y) return false
-    if (String(x.id) !== String(y.id)) return false
-    if ((x.status || "") !== (y.status || "")) return false
-    if ((x.homeScore || 0) !== (y.homeScore || 0)) return false
-    if ((x.awayScore || 0) !== (y.awayScore || 0)) return false
-    if ((x.liveTime || "") !== (y.liveTime || "")) return false
+    if (String(x.pos || "") !== String(y.pos || "")
+        || String(x.id || "") !== String(y.id || "")
+        || String(x.name || "") !== String(y.name || "")
+        || String(x.shortName || "") !== String(y.shortName || "")
+        || String(x.abbr || "") !== String(y.abbr || "")
+        || String(x.logo || "") !== String(y.logo || "")
+        || String(x.flag || "") !== String(y.flag || "")
+        || String(x.teamId || "") !== String(y.teamId || "")
+        || String(x.teamName || "") !== String(y.teamName || "")
+        || String(x.pts || "") !== String(y.pts || "")
+        || String(x.gd || "") !== String(y.gd || "")
+        || Number(x.played || 0) !== Number(y.played || 0)
+        || Number(x.wins || 0) !== Number(y.wins || 0)
+        || Number(x.draws || 0) !== Number(y.draws || 0)
+        || Number(x.losses || 0) !== Number(y.losses || 0)
+        || String(x.zone || "") !== String(y.zone || "")) return false
   }
   return true
 }
@@ -1889,4 +2194,160 @@ function sameGroups(a, b) {
     if (!sameMatches(x.matches || [], y.matches || [])) return false
   }
   return true
+}
+
+function notificationClock(timeMs) {
+  var date = new Date(timeMs)
+  return ("0" + date.getHours()).slice(-2) + ":" + ("0" + date.getMinutes()).slice(-2)
+}
+
+// Union of two history maps. Entries present in `next` always win; entries
+// only in `prev` are kept only if their `seenAt` is within `ttl` of `now`,
+// so stale ids cannot accumulate forever. Uses hasOwnProperty to avoid
+// prototype pollution from keys like "__proto__" in user-edited state files.
+function mergeSeenMap(prev, next, now, ttl) {
+  var merged = {}
+  for (var prevId in next) {
+    if (Object.prototype.hasOwnProperty.call(next, prevId)) merged[prevId] = next[prevId]
+  }
+  for (var oldId in prev) {
+    if (Object.prototype.hasOwnProperty.call(prev, oldId) && !Object.prototype.hasOwnProperty.call(merged, oldId)) {
+      var oldEntry = prev[oldId]
+      if (oldEntry && now - Number(oldEntry.seenAt || 0) < ttl) merged[oldId] = oldEntry
+    }
+  }
+  return merged
+}
+
+function notificationTeamName(team) {
+  return String(team && (team.name || team.shortName) || "Team")
+}
+
+// Compare a newly fetched round with the previous in-memory snapshot. The
+// result contains display-ready notifications and a new history map, keeping
+// all transition logic independent from QML and straightforward to test.
+function diffMatchNotifications(matches, previous, options) {
+  var opts = options || {}
+  var oldSeen = previous && typeof previous === "object" ? previous : {}
+  var source = arrayFrom(matches)
+  var now = Number(opts.nowMs)
+  if (!isFinite(now)) now = Date.now()
+  if (opts.enabled === false) return { notifications: [], nextSeen: oldSeen }
+  if (source.length === 0) {
+    return { notifications: [], nextSeen: mergeSeenMap(oldSeen, {}, now, NOTIFICATION_TTL_MS) }
+  }
+
+  var activeSport = String(opts.activeSport || "").toLowerCase()
+  var favoriteIds = arrayFrom(opts.favoriteIds)
+  var nextSeen = {}
+  var notifications = []
+
+  for (var i = 0; i < source.length; i++) {
+    var m = source[i]
+    if (!m || !m.id) continue
+    var id = String(m.id)
+    var hasPrevious = Object.prototype.hasOwnProperty.call(oldSeen, id)
+    var candidate = hasPrevious && oldSeen[id] && typeof oldSeen[id] === "object" ? oldSeen[id] : null
+    var prev = candidate && now - Number(candidate.seenAt || 0) < NOTIFICATION_TTL_MS ? candidate : null
+    var homeId = String(m.home && m.home.id || "").toLowerCase()
+    var awayId = String(m.away && m.away.id || "").toLowerCase()
+    var isFavorite = activeSport === "f1"
+      || isFollowedTeam(homeId, favoriteIds)
+      || isFollowedTeam(awayId, favoriteIds)
+    var homeName = notificationTeamName(m.home)
+    var awayName = notificationTeamName(m.away)
+    var sport = String(m.sport || activeSport || "football").toLowerCase()
+    var icon = sportMeta(sport).icon
+    var previousHomeScore = Number(prev && prev.homeScore || 0)
+    var previousAwayScore = Number(prev && prev.awayScore || 0)
+    var homeScore = Number(m.homeScore || 0)
+    var awayScore = Number(m.awayScore || 0)
+    var upcomingNotified = !!(prev && prev.notifiedUpcoming)
+
+    // Never notify on first sight: the first poll establishes a baseline.
+    if (prev && isFavorite) {
+      if (m.status === "live" && prev.status === "upcoming") {
+        notifications.push({
+          kind: "started",
+          matchId: id,
+          sport: sport,
+          iconTeam: m.home || {},
+          title: sport === "f1" ? ("🏁 F1: " + (m.raceName || homeName || "Grand Prix")) : ("● LIVE: " + homeName + " vs " + awayName),
+          body: sport === "f1"
+            ? ("The session is underway in " + (m.locality || m.country || "live") + "!")
+            : ("The match has kicked off!" + (m.leagueName ? " · " + m.leagueName : "")),
+          urgency: "normal"
+        })
+      }
+
+      if (m.status === "live") {
+        var homeDelta = homeScore - previousHomeScore
+        var awayDelta = awayScore - previousAwayScore
+        if (homeDelta > 0) {
+          notifications.push({
+            kind: "score",
+            matchId: id,
+            sport: sport,
+            side: "home",
+            delta: homeDelta,
+            iconTeam: m.home || {},
+            title: sport === "football" ? ("⚽ GOAL! " + homeName) : (icon + " " + homeName + " (+" + homeDelta + ")"),
+            body: opts.antiSpoiler
+              ? (homeName + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+              : (homeName + " " + (m.scoreText || (homeScore + " – " + awayScore)) + " " + awayName + (m.liveTime ? " (" + m.liveTime + ")" : "")),
+            urgency: "normal"
+          })
+        }
+        if (awayDelta > 0) {
+          notifications.push({
+            kind: "score",
+            matchId: id,
+            sport: sport,
+            side: "away",
+            delta: awayDelta,
+            iconTeam: m.away || {},
+            title: sport === "football" ? ("⚽ GOAL! " + awayName) : (icon + " " + awayName + " (+" + awayDelta + ")"),
+            body: opts.antiSpoiler
+              ? (awayName + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+              : (homeName + " " + (m.scoreText || (homeScore + " – " + awayScore)) + " " + awayName + (m.liveTime ? " (" + m.liveTime + ")" : "")),
+            urgency: "normal"
+          })
+        }
+      }
+
+      if (m.status === "upcoming" && !upcomingNotified) {
+        var kickoffMs = parseMatchTimeMs(m)
+        if (!isNaN(kickoffMs)) {
+          var diffMins = Math.floor((kickoffMs - now) / 60000)
+          if (diffMins > 0 && diffMins <= 15) {
+            notifications.push({
+              kind: "upcoming",
+              matchId: id,
+              sport: sport,
+              minutes: diffMins,
+              iconTeam: m.home || {},
+              title: sport === "f1"
+                ? ("🏎️ F1 starting soon: " + (m.raceName || homeName || "Grand Prix"))
+                : ("⏰ Starting in " + diffMins + "m: " + homeName + " vs " + awayName),
+              body: (m.leagueName ? m.leagueName + " · " : "") + "Scheduled start at " + notificationClock(kickoffMs),
+              urgency: "normal"
+            })
+            upcomingNotified = true
+          }
+        }
+      }
+    }
+
+    nextSeen[id] = {
+      homeScore: homeScore,
+      awayScore: awayScore,
+      status: String(m.status || "upcoming"),
+      notifiedUpcoming: upcomingNotified,
+      seenAt: now
+    }
+  }
+
+  // Keep history through transient provider omissions, but do not retain
+  // unbounded match ids forever.
+  return { notifications: notifications, nextSeen: mergeSeenMap(oldSeen, nextSeen, now, NOTIFICATION_TTL_MS) }
 }

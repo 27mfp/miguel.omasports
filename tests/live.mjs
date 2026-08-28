@@ -78,7 +78,7 @@ if (which === "football" || which === "all") {
   await test("grouping buckets real league matches (live/upcoming/recent)", () => {
     const html = curl("https://www.fotmob.com/leagues/47", { compressed: true, ua: UA })
     const page = Model.parseLeaguePage(html, "47")
-    const groups = Model.groupMatches(page.matches, new Date(), () => "")
+    const groups = Model.groupMatches(page.matches)
     const total = groups.reduce((n, g) => n + g.matches.length, 0)
     assert.equal(total, page.matches.length, "grouping lost matches")
     assert.ok(groups.some(g => g.key === "upcoming"), "no upcoming group in-season")

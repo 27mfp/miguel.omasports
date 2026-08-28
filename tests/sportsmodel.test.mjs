@@ -10,18 +10,25 @@ const exported = [
   "nflTeams", "f1Drivers", "popularFootballClubs",
   "defaultState", "formatCountdown", "arrayFrom", "normalizeLeagueIds",
   "normalizeTeamIds", "crestCacheKey", "espnDateRange", "formatKickoff",
+  "normalizeTab", "isEspnScoreboardPayload", "isEspnStandingsPayload", "isF1CalendarPayload",
   "parseState", "statePayload", "parseEspnScoreboard", "parseEspnStandings",
   "f1CountryFlag", "f1DriverFlag", "parseF1Calendar", "parseF1DriverStandings",
   "parseF1ConstructorStandings", "parseScore", "parseMatch", "parseDetails",
-  "parseStandings", "zoneFromLegend", "mergePages", "teamOptionsForSport",
-  "matchesForTeam", "matchesForLeague", "featuredMatchForTeam", "teamOutcome",
-  "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel",
+  "parseStandings", "zoneFromLegend", "mergePages", "mergeMatchUpdates", "mergeLeaguePages", "isTeamPagePayload", "teamOptionsForSport",
+  "matchesForTeam", "matchesForLeague", "featuredMatchForTeam", "teamIdForMatch", "teamOutcome", "teamOutcomeForTeams", "isFollowedTeam", "isStandingsRowFavorite",
+  "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel", "isTrustedCrestUrl", "matchExternalUrl", "matchDetailUrl",
   "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime",
-  "sameMatches", "sameGroups", "buildPersistedState", "parseLeaguePage",
-  "mockRound"
+  "sameMatches", "sameRows", "sameGroups", "diffMatchNotifications", "buildPersistedState", "parseLeaguePage", "parseTeamPage",
+  "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
+
+// Catch a renamed or removed export at module-load time, before downstream
+// tests fail with confusing "Model.foo is not a function" errors.
+for (const name of exported) {
+  assert.ok(name in Model, "missing export from SportsModel.js: " + name)
+}
 
 let passed = 0
 function test(name, fn) {
@@ -105,6 +112,15 @@ test("parseState clamps refreshMinutes and validates sport", () => {
   assert.equal(st.refreshMinutes, 60)
   assert.equal(Model.parseState(JSON.stringify({ refreshMinutes: 1 })).refreshMinutes, 5)
 })
+test("parseState normalizes invalid tab names and rejects JSON arrays", () => {
+  const st = Model.parseState(JSON.stringify({
+    football: { leagueIds: ["47"], tab: "unknown" },
+    nba: { tab: "table" }
+  }))
+  assert.equal(st.football.tab, "fixtures")
+  assert.equal(st.nba.tab, "standings")
+  assert.equal(Model.parseState("[]").football.leagueIds[0], "47")
+})
 test("parseState preserves per-sport tab and migrates v1 favorites", () => {
   const st = Model.parseState(JSON.stringify({
     leagueIds: ["47", "61"],
@@ -166,6 +182,16 @@ test("parseLeaguePage returns null for bot-wall / consent HTML", () => {
   assert.equal(Model.parseLeaguePage("<html><body>Just a moment...</body></html>", "47"), null)
   assert.equal(Model.parseLeaguePage("", "47"), null)
 })
+test("provider payload validators reject syntactically valid error objects", () => {
+  assert.ok(Model.isEspnScoreboardPayload({ events: [], leagues: [] }))
+  assert.ok(!Model.isEspnScoreboardPayload({ code: 500, message: "upstream error" }))
+  assert.ok(!Model.isEspnScoreboardPayload({ code: 500, events: [] }))
+  assert.ok(Model.isEspnStandingsPayload({ children: [] }))
+  assert.ok(!Model.isEspnStandingsPayload({ code: 500 }))
+  assert.ok(Model.isF1CalendarPayload({ MRData: { RaceTable: { Races: [] } } }))
+  assert.ok(!Model.isF1CalendarPayload({ error: "rate limited" }))
+  assert.ok(!Model.isF1CalendarPayload({ errors: [], MRData: { RaceTable: { Races: [] } } }))
+})
 test("sameMatches / sameGroups detect real changes only", () => {
   const a = [{ id: "1", status: "live", homeScore: 1, awayScore: 0, liveTime: "34" }]
   assert.ok(Model.sameMatches(a, a))
@@ -175,6 +201,22 @@ test("sameMatches / sameGroups detect real changes only", () => {
   const g = [{ key: "live", label: "Live Matches", matches: a }]
   assert.ok(Model.sameGroups(g, [{ key: "live", label: "Live Matches", matches: [...a] }]))
   assert.ok(!Model.sameGroups(g, [{ key: "live", label: "Live Matches", matches: [] }]))
+})
+test("identity comparisons notice presentation changes, not only scores", () => {
+  const row = [{ id: "1", name: "Old", pos: "1", pts: "3", gd: "1" }]
+  assert.ok(Model.sameRows(row, [{ ...row[0] }]))
+  assert.ok(!Model.sameRows(row, [{ ...row[0], name: "Renamed" }]))
+  const match = [{ id: "1", status: "upcoming", homeScore: 0, awayScore: 0, scoreText: "", time: "2026-01-01T00:00:00Z", home: { id: "1", name: "Old" }, away: { id: "2", name: "Away" } }]
+  assert.ok(!Model.sameMatches(match, [{ ...match[0], home: { id: "1", name: "Renamed" }, away: match[0].away }]))
+})
+test("team page payload detection distinguishes bot walls from valid empty pages", () => {
+  const json = { props: { pageProps: { fallback: { "team-1": { fixtures: { allFixtures: { fixtures: [] } } } } } } }
+  const html = '<script id="__NEXT_DATA__" type="application/json">' + JSON.stringify(json) + "</script>"
+  assert.ok(Model.isTeamPagePayload(html, "1"))
+  assert.deepEqual(Model.parseTeamPage(html, "1"), [])
+  assert.ok(!Model.isTeamPagePayload("<html>blocked</html>", "1"))
+  const wrongTeam = '<script id="__NEXT_DATA__" type="application/json">' + JSON.stringify({ props: { pageProps: { fallback: { "team-2": json.props.pageProps.fallback["team-1"] } } } }) + "</script>"
+  assert.ok(!Model.isTeamPagePayload(wrongTeam, "1"))
 })
 
 // ---------------------------------------------------------------- ESPN parsers
@@ -358,6 +400,18 @@ test("zoneFromLegend maps champions and relegation zones", () => {
   assert.equal(Model.zoneFromLegend(legend, 1), "europe")
   assert.equal(Model.zoneFromLegend(legend, 17), "relegation")
   assert.equal(Model.zoneFromLegend(legend, 10), "")
+  assert.equal(Model.zoneFromLegend([{ title: "Relegation", indices: ["17"] }], 17), "relegation")
+})
+test("parseStandings preserves legends for object-shaped table payloads", () => {
+  const props = {
+    table: {
+      data: {
+        table: { all: [{ id: "1", name: "Leader", shortName: "Leader", idx: 1, played: 1, wins: 1, pts: 3 }] },
+        legend: [{ title: "Champions League", indices: [0] }]
+      }
+    }
+  }
+  assert.equal(Model.parseStandings(props)[0].zone, "europe")
 })
 
 // ---------------------------------------------------------------- matching
@@ -372,6 +426,25 @@ test("matchesForTeam finds fixtures by team id and ignores other ids", () => {
   assert.equal(forBenfica.length, 2)
   assert.equal(Model.matchesForTeam(sampleMatches, "unknown", "football").length, 0)
   assert.equal(Model.matchesForTeam(sampleMatches, "whatever", "f1").length, 3) // f1 returns all
+})
+test("matchesForTeam does not substring-match numeric ids in team names", () => {
+  const sixers = {
+    id: "sixers-game",
+    status: "finished",
+    time: "2026-01-02T10:00:00Z",
+    home: { id: "76", name: "Philadelphia 76ers", shortName: "76ers" },
+    away: { id: "99", name: "Boston Celtics", shortName: "Celtics" }
+  }
+  assert.equal(Model.matchesForTeam([sixers], "7", "nba").length, 0)
+  assert.equal(Model.matchesForTeam([sixers], "76", "nba").length, 1)
+  assert.equal(Model.matchesForTeam([sixers], "76ers", "nba").length, 1)
+})
+test("favorite helpers support multiple followed teams", () => {
+  assert.ok(Model.isFollowedTeam("9772", ["9773", "9772"]))
+  assert.ok(Model.isFollowedTeam("9772", "9772"))
+  assert.equal(Model.teamIdForMatch(sampleMatches[2], ["9773", "9772"]), "9772")
+  assert.equal(Model.teamOutcomeForTeams(sampleMatches[2], ["9773", "9772"]), "win")
+  assert.ok(Model.isStandingsRowFavorite({ id: "ctor", teamId: "mclaren", name: "Lando Norris" }, ["mclaren"], ""))
 })
 test("matchesForLeague filters and sorts chronologically", () => {
   const pl = Model.matchesForLeague(sampleMatches, "47")
@@ -391,7 +464,7 @@ test("teamOutcome computes win/draw/loss for a team", () => {
 })
 test("groupMatches buckets live/upcoming/recent and caps recent at 10", () => {
   const many = Array.from({ length: 15 }, (_, i) => ({ ...sampleMatches[2], id: "r" + i, time: new Date(Date.parse("2026-01-01T10:00:00Z") + i * 3600000).toISOString() }))
-  const groups = Model.groupMatches([...sampleMatches.slice(0, 2), ...many], new Date())
+  const groups = Model.groupMatches([...sampleMatches.slice(0, 2), ...many])
   assert.deepEqual(groups.map(g => g.key), ["live", "upcoming", "recent"])
   assert.equal(groups[2].matches.length, 10)
   assert.equal(groups[2].matches[0].id, "r14") // most recent first
@@ -401,9 +474,26 @@ test("liveMatches filters out full-time details and sorts by time", () => {
   assert.equal(live.length, 0)
   assert.equal(Model.liveMatches(sampleMatches, {}).length, 1)
 })
+test("liveMatches places invalid timestamps after valid ones", () => {
+  const valid = { ...sampleMatches[1], id: "valid" }
+  const invalid = { ...sampleMatches[1], id: "invalid", time: "not-a-date" }
+  assert.deepEqual(Model.liveMatches([invalid, valid], {} ).map(m => m.id), ["valid", "invalid"])
+})
 test("mergePages dedupes by match id", () => {
   const merged = Model.mergePages([{ matches: sampleMatches }, { matches: [sampleMatches[0]] }])
   assert.equal(merged.length, 3)
+})
+test("merge helpers replace stale matches and league pages", () => {
+  const updated = { ...sampleMatches[1], homeScore: 4, scoreText: "4–0" }
+  const matches = Model.mergeMatchUpdates(sampleMatches, [updated])
+  assert.equal(matches.length, 3)
+  assert.equal(matches.find(m => m.id === "b").homeScore, 4)
+  const oldPage = { league: { id: "47" }, matches: [sampleMatches[1]], standings: [] }
+  const newPage = { league: { id: "47" }, matches: [updated], standings: [{ pos: "1" }] }
+  const pages = Model.mergeLeaguePages([oldPage], [newPage])
+  assert.equal(pages.length, 1)
+  assert.equal(pages[0].matches[0].homeScore, 4)
+  assert.equal(pages[0].standings.length, 1)
 })
 test("matchStatusText and shortTournamentName", () => {
   assert.equal(Model.matchStatusText({ status: "finished" }), "FT")
@@ -411,6 +501,97 @@ test("matchStatusText and shortTournamentName", () => {
   assert.equal(Model.matchStatusText({ status: "live", liveTime: "45'" }), "45'")
   assert.equal(Model.shortTournamentName("UEFA Champions League"), "Champions Lg")
   assert.equal(Model.shortTournamentName("Primeira Liga"), "Liga Portugal")
+})
+test("external and detail URLs reject untrusted schemes and hosts", () => {
+  const football = { sport: "football", pageUrl: "/matches/benfica/1" }
+  assert.equal(Model.matchExternalUrl(football), "https://www.fotmob.com/matches/benfica/1")
+  assert.equal(Model.matchDetailUrl(football), "https://www.fotmob.com/matches/benfica/1")
+  assert.equal(Model.matchExternalUrl({ sport: "football", pageUrl: "https://evil.example/x" }), "https://www.fotmob.com")
+  assert.equal(Model.matchDetailUrl({ sport: "football", pageUrl: "https://evil.example/x" }), "")
+  assert.equal(Model.matchExternalUrl({ sport: "football", pageUrl: "javascript:alert(1)" }), "https://www.fotmob.com")
+  assert.equal(Model.matchDetailUrl({ sport: "football", pageUrl: "https://user@www.fotmob.com/x" }), "")
+  assert.equal(Model.matchExternalUrl({ sport: "nba", pageUrl: "http://www.espn.com/nba" }), "https://www.espn.com/nba")
+  assert.equal(Model.matchExternalUrl({ sport: "nba", pageUrl: "https://www.espn.com/nba" }), "https://www.espn.com/nba")
+  // ESPN relative paths must resolve against the sport-scoped base; F1 falls
+  // back to its known hosts only because there is no fixed F1 base.
+  assert.equal(Model.matchExternalUrl({ sport: "nba", pageUrl: "/nba/team/_/id/13/lakers" }), "https://www.espn.com/nba/nba/team/_/id/13/lakers")
+  assert.equal(Model.matchExternalUrl({ sport: "nfl", pageUrl: "/nfl/team/_/id/2/bills" }), "https://www.espn.com/nfl/nfl/team/_/id/2/bills")
+  assert.equal(Model.matchExternalUrl({ sport: "f1", pageUrl: "/article/foo" }), "https://www.formula1.com")
+  assert.equal(Model.matchExternalUrl({ sport: "f1", pageUrl: "https://en.wikipedia.org/wiki/Race" }), "https://en.wikipedia.org/wiki/Race")
+  assert.ok(Model.isTrustedCrestUrl("https://images.fotmob.com/image_resources/logo/teamlogo/9772.png", "football"))
+  assert.ok(Model.isTrustedCrestUrl("https://a.espncdn.com/i/teamlogos/nba/500/lal.png", "nba"))
+  assert.ok(!Model.isTrustedCrestUrl("https://evil.example/logo.png", "nba"))
+})
+test("parseMatchTimeMs centralizes invalid-timestamp handling", () => {
+  assert.equal(Model.parseMatchTimeMs({ time: "2026-08-22T19:00:00Z" }), Date.parse("2026-08-22T19:00:00Z"))
+  assert.ok(isNaN(Model.parseMatchTimeMs({ time: "not-a-date" })))
+  assert.ok(isNaN(Model.parseMatchTimeMs({})))
+  assert.ok(isNaN(Model.parseMatchTimeMs(null)))
+})
+test("refreshIntervalOptions is the single source of truth", () => {
+  const opts = Model.refreshIntervalOptions()
+  assert.equal(opts.length, 6)
+  for (const o of opts) {
+    const n = parseInt(o.value, 10)
+    assert.ok(n >= 5 && n <= 60, "refresh interval out of [5,60]: " + o.value)
+  }
+})
+test("mergeSeenMap drops stale entries and prefers the new snapshot", () => {
+  const now = Date.parse("2026-08-22T19:30:00Z")
+  const ttl = Model.NOTIFICATION_TTL_MS
+  const stale = { old: { seenAt: now - 7 * 3600000, status: "finished" } }
+  const fresh = { fresh: { seenAt: now - 60000, status: "live" } }
+  const merged = Model.mergeSeenMap(stale, fresh, now, ttl)
+  assert.ok(!merged.old)
+  assert.deepEqual(merged.fresh, fresh.fresh)
+  // Stale entries inside the TTL window are kept; outside they are dropped.
+  const justOld = { old: { seenAt: now - 3600000, status: "finished" } }
+  assert.ok(Model.mergeSeenMap(justOld, {}, now, ttl).old)
+})
+test("notification diff establishes a baseline without notifying", () => {
+  const now = Date.parse("2026-08-22T19:30:00Z")
+  const upcoming = { id: "notify-1", sport: "football", status: "upcoming", time: "2026-08-22T19:40:00Z", leagueName: "Primeira Liga", home: { id: "9772", name: "Benfica" }, away: { id: "9773", name: "FC Porto" } }
+  const result = Model.diffMatchNotifications([upcoming], {}, { activeSport: "football", favoriteIds: ["9772"], nowMs: now })
+  assert.equal(result.notifications.length, 0)
+  assert.equal(result.nextSeen["notify-1"].notifiedUpcoming, false)
+})
+test("notification diff emits kickoff, score and spoiler-safe messages", () => {
+  const now = Date.parse("2026-08-22T19:30:00Z")
+  const previous = {
+    "notify-2": { homeScore: 0, awayScore: 0, status: "upcoming", notifiedUpcoming: false, seenAt: now - 60000 }
+  }
+  const live = { id: "notify-2", sport: "football", status: "live", time: "2026-08-22T19:00:00Z", leagueName: "Primeira Liga", liveTime: "31'", homeScore: 1, awayScore: 0, scoreText: "1–0", home: { id: "9772", name: "Benfica" }, away: { id: "9773", name: "FC Porto" } }
+  const result = Model.diffMatchNotifications([live], previous, { activeSport: "football", favoriteIds: ["9772"], antiSpoiler: true, nowMs: now })
+  assert.deepEqual(result.notifications.map(n => n.kind), ["started", "score"])
+  assert.match(result.notifications[1].body, /^Benfica scored/)
+  assert.ok(!result.notifications[1].body.includes("1–0"))
+  assert.equal(previous["notify-2"].status, "upcoming")
+})
+test("notification history stays frozen while disabled", () => {
+  const previous = { game: { status: "upcoming", homeScore: 0, awayScore: 0, seenAt: 0 } }
+  const result = Model.diffMatchNotifications([], previous, { enabled: false, nowMs: Date.now() })
+  assert.strictEqual(result.nextSeen, previous)
+})
+test("notification diff emits one upcoming warning, handles F1, and prunes old history", () => {
+  const now = Date.parse("2026-08-22T19:30:00Z")
+  const oldId = "old"
+  const previous = {
+    old: { homeScore: 0, awayScore: 0, status: "finished", seenAt: now - 7 * 3600000 },
+    "notify-3": { homeScore: 0, awayScore: 0, status: "upcoming", notifiedUpcoming: false, seenAt: now - 60000 },
+    "notify-f1": { homeScore: 0, awayScore: 0, status: "upcoming", notifiedUpcoming: false, seenAt: now - 60000 }
+  }
+  const upcoming = { id: "notify-3", sport: "football", status: "upcoming", time: "2026-08-22T19:40:00Z", leagueName: "Premier League", home: { id: "9825", name: "Arsenal" }, away: { id: "9826", name: "Crystal Palace" } }
+  const f1 = { id: "notify-f1", sport: "f1", status: "live", time: "2026-08-22T19:00:00Z", raceName: "Mock Grand Prix", locality: "Lisboa", home: { id: "f1-gp", name: "Mock Grand Prix" }, away: { id: "f1-circuit", name: "Circuit" } }
+  const first = Model.diffMatchNotifications([upcoming, f1], previous, { activeSport: "f1", favoriteIds: [], nowMs: now })
+  assert.equal(first.notifications.filter(n => n.kind === "upcoming").length, 1)
+  assert.equal(first.notifications.filter(n => n.kind === "started").length, 1)
+  assert.ok(!first.nextSeen[oldId])
+  const second = Model.diffMatchNotifications([upcoming], first.nextSeen, { activeSport: "football", favoriteIds: ["9825"], nowMs: now + 60000 })
+  assert.equal(second.notifications.length, 0)
+  const stale = { stale: { status: "upcoming", homeScore: 0, awayScore: 0, notifiedUpcoming: false, seenAt: now - 7 * 3600000 } }
+  const reappeared = { ...upcoming, id: "stale", time: "2026-08-22T19:40:00Z", home: { id: "9825", name: "Arsenal" }, away: { id: "9826", name: "Crystal Palace" } }
+  const baseline = Model.diffMatchNotifications([reappeared], stale, { activeSport: "football", favoriteIds: ["9825"], nowMs: now })
+  assert.equal(baseline.notifications.length, 0)
 })
 test("interpolateLiveTime ticks the clock forward with a stoppage cap", () => {
   const now = Date.now()

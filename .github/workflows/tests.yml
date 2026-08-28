@@ -23,7 +23,6 @@ jobs:
 
   qml-syntax:
     runs-on: ubuntu-latest
-    continue-on-error: true # environmental warnings from qs.* modules must not block CI
     steps:
       - uses: actions/checkout@v4
 
@@ -34,11 +33,16 @@ jobs:
 
       - name: QML syntax check
         run: |
+          set -euo pipefail
           LINT=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qmllint)
-          out=$("$LINT" ./*.qml 2>&1) || true
-          if printf '%s\n' "$out" | grep -qE '^Error'; then
-            printf '%s\n' "$out"
+          out_file=$(mktemp)
+          set +e
+          "$LINT" ./*.qml >"$out_file" 2>&1
+          lint_status=$?
+          set -e
+          cat "$out_file"
+          if [ "$lint_status" -ne 0 ] || grep -qE '^Error([: ]|$)' "$out_file"; then
             echo "::error::qmllint reported syntax errors"
             exit 1
           fi
-          echo "QML syntax OK (environmental qs.* warnings suppressed)"
+          echo "QML syntax check passed (unresolved qs.* imports are environment warnings)"

@@ -1,5 +1,5 @@
 {
- "capturedAt": 1787439918561,
+ "capturedAt": 1787446612885,
  "goldens": {
   "fotmob-league-47.golden.json": {
    "league": {
@@ -59,7 +59,7 @@
      "scoreText": "2–0",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T11:30:00.000Z",
+     "time": "2026-08-22T11:30:00Z",
      "pageUrl": "/matches/hull-city-vs-manchester-united/2yngir#5795364"
     },
     {
@@ -86,7 +86,7 @@
      "scoreText": "2–0",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T14:00:00.000Z",
+     "time": "2026-08-22T14:00:00Z",
      "pageUrl": "/matches/everton-vs-crystal-palace/2tttz7#5795365"
     },
     {
@@ -113,7 +113,7 @@
      "scoreText": "2–1",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T14:00:00.000Z",
+     "time": "2026-08-22T14:00:00Z",
      "pageUrl": "/matches/sunderland-vs-ipswich-town/2sif4z#5795366"
     },
     {
@@ -140,7 +140,7 @@
      "scoreText": "0–1",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T14:00:00.000Z",
+     "time": "2026-08-22T14:00:00Z",
      "pageUrl": "/matches/leeds-united-vs-nottingham-forest/2vqauu#5795367"
     },
     {
@@ -167,7 +167,7 @@
      "scoreText": "3–0",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T16:30:00.000Z",
+     "time": "2026-08-22T16:30:00Z",
      "pageUrl": "/matches/tottenham-hotspur-vs-brentford/2u5c8b#5795368"
     },
     {
@@ -194,7 +194,7 @@
      "scoreText": "",
      "statusReason": "",
      "liveTime": "",
-     "time": "2026-08-23T13:00:00Z",
+     "time": "2026-08-23T13:00:00.000Z",
      "pageUrl": "/matches/brighton-hove-albion-vs-aston-villa/3gku1s#5795369"
     },
     {
@@ -221,7 +221,7 @@
      "scoreText": "",
      "statusReason": "",
      "liveTime": "",
-     "time": "2026-08-23T13:00:00Z",
+     "time": "2026-08-23T13:00:00.000Z",
      "pageUrl": "/matches/manchester-city-vs-afc-bournemouth/2feiv3#5795370"
     },
     {
@@ -248,7 +248,7 @@
      "scoreText": "",
      "statusReason": "",
      "liveTime": "",
-     "time": "2026-08-23T15:30:00Z",
+     "time": "2026-08-23T15:30:00.000Z",
      "pageUrl": "/matches/liverpool-vs-newcastle-united/2ygyxm#5795371"
     },
     {
@@ -11069,7 +11069,7 @@
      "scoreText": "2–2",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T14:30:00.000Z",
+     "time": "2026-08-22T14:30:00Z",
      "pageUrl": "/matches/academico-viseu-vs-maritimo/16uv1n#5887603"
     },
     {
@@ -11096,7 +11096,7 @@
      "scoreText": "0–2",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T17:00:00.000Z",
+     "time": "2026-08-22T17:00:00Z",
      "pageUrl": "/matches/rio-ave-vs-estoril/2186q0#5887601"
     },
     {
@@ -11123,7 +11123,7 @@
      "scoreText": "3–1",
      "statusReason": "FT",
      "liveTime": "",
-     "time": "2026-08-22T19:30:00.000Z",
+     "time": "2026-08-22T19:30:00Z",
      "pageUrl": "/matches/sporting-cp-vs-alverca/35rjl6#5887607"
     },
     {
@@ -11150,7 +11150,7 @@
      "scoreText": "",
      "statusReason": "",
      "liveTime": "",
-     "time": "2026-08-23T14:30:00Z",
+     "time": "2026-08-23T14:30:00.000Z",
      "pageUrl": "/matches/vitoria-de-guimaraes-vs-nacional/2p2zvf#5887608"
     },
     {
@@ -11177,7 +11177,7 @@
      "scoreText": "",
      "statusReason": "",
      "liveTime": "",
-     "time": "2026-08-23T17:00:00Z",
+     "time": "2026-08-23T17:00:00.000Z",
      "pageUrl": "/matches/santa-clara-vs-famalicao/31vkz#5887606"
     },
     {
@@ -11204,7 +11204,7 @@
      "scoreText": "",
      "statusReason": "",
      "liveTime": "",
-     "time": "2026-08-23T19:30:00Z",
+     "time": "2026-08-23T19:30:00.000Z",
      "pageUrl": "/matches/fc-porto-vs-arouca/6gzs1k8#5887605"
     },
     {
@@ -20763,93 +20763,133 @@
   },
   "espn-nfl-scoreboard.golden.json": [
    {
-    "id": "401873290",
+    "id": "401873289",
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Paycor Stadium",
     "round": "",
     "home": {
-     "id": "14",
-     "name": "Los Angeles Rams",
-     "shortName": "Rams",
-     "abbr": "LAR",
-     "record": "2-0",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
+     "id": "4",
+     "name": "Cincinnati Bengals",
+     "shortName": "Bengals",
+     "abbr": "CIN",
+     "record": "1-0",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
     },
     "away": {
-     "id": "18",
-     "name": "New Orleans Saints",
-     "shortName": "Saints",
-     "abbr": "NO",
-     "record": "0-2",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
+     "id": "3",
+     "name": "Chicago Bears",
+     "shortName": "Bears",
+     "abbr": "CHI",
+     "record": "1-0",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
     },
-    "status": "finished",
-    "homeScore": 34,
-    "awayScore": 0,
-    "scoreText": "34–0",
+    "status": "live",
+    "homeScore": 17,
+    "awayScore": 9,
+    "scoreText": "17–9",
     "linescores": {
      "home": [
       3,
-      17,
-      7,
-      7
+      14,
+      0
      ],
      "away": [
-      0,
-      0,
-      0,
+      3,
+      6,
       0
      ]
     },
-    "statusReason": "Final",
-    "liveTime": "",
-    "time": "2026-08-22T20:00Z",
+    "statusReason": "14:55 - 3rd",
+    "liveTime": "14:55 - 3rd",
+    "time": "2026-08-22T23:00Z",
     "pageUrl": "https://www.espn.com/nfl"
    },
    {
-    "id": "401873292",
+    "id": "401873293",
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Gillette Stadium",
     "round": "",
     "home": {
-     "id": "15",
-     "name": "Miami Dolphins",
-     "shortName": "Dolphins",
-     "abbr": "MIA",
-     "record": "0-2",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
+     "id": "17",
+     "name": "New England Patriots",
+     "shortName": "Patriots",
+     "abbr": "NE",
+     "record": "0-0-1",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
     },
     "away": {
-     "id": "19",
-     "name": "New York Giants",
-     "shortName": "Giants",
-     "abbr": "NYG",
-     "record": "1-1",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
+     "id": "21",
+     "name": "Philadelphia Eagles",
+     "shortName": "Eagles",
+     "abbr": "PHI",
+     "record": "0-1",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
     },
-    "status": "finished",
-    "homeScore": 3,
-    "awayScore": 26,
-    "scoreText": "3–26",
+    "status": "live",
+    "homeScore": 10,
+    "awayScore": 14,
+    "scoreText": "10–14",
     "linescores": {
      "home": [
       0,
-      3,
+      10,
+      0
+     ],
+     "away": [
+      0,
+      14,
+      0
+     ]
+    },
+    "statusReason": "11:54 - 3rd",
+    "liveTime": "11:54 - 3rd",
+    "time": "2026-08-22T23:00Z",
+    "pageUrl": "https://www.espn.com/nfl"
+   },
+   {
+    "id": "401873296",
+    "sport": "nfl",
+    "leagueId": "nfl",
+    "leagueName": "National Football League",
+    "venue": "Raymond James Stadium",
+    "round": "",
+    "home": {
+     "id": "27",
+     "name": "Tampa Bay Buccaneers",
+     "shortName": "Buccaneers",
+     "abbr": "TB",
+     "record": "1-0",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
+    },
+    "away": {
+     "id": "12",
+     "name": "Kansas City Chiefs",
+     "shortName": "Chiefs",
+     "abbr": "KC",
+     "record": "0-1",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
+    },
+    "status": "live",
+    "homeScore": 0,
+    "awayScore": 6,
+    "scoreText": "0–6",
+    "linescores": {
+     "home": [
       0,
       0
      ],
      "away": [
-      7,
-      13,
-      3,
-      3
+      0,
+      6
      ]
     },
-    "statusReason": "Final",
-    "liveTime": "",
-    "time": "2026-08-22T20:00Z",
+    "statusReason": "0:18 - 2nd",
+    "liveTime": "0:18 - 2nd",
+    "time": "2026-08-22T23:30Z",
     "pageUrl": "https://www.espn.com/nfl"
    },
    {
@@ -20857,6 +20897,7 @@
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Ford Field",
     "round": "",
     "home": {
      "id": "8",
@@ -20902,6 +20943,7 @@
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Huntington Bank Field",
     "round": "",
     "home": {
      "id": "5",
@@ -20947,6 +20989,7 @@
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Lucas Oil Stadium",
     "round": "",
     "home": {
      "id": "11",
@@ -20992,6 +21035,7 @@
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "U.S. Bank Stadium",
     "round": "",
     "home": {
      "id": "16",
@@ -21033,108 +21077,95 @@
     "pageUrl": "https://www.espn.com/nfl"
    },
    {
-    "id": "401873289",
+    "id": "401873290",
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "SoFi Stadium",
     "round": "",
     "home": {
-     "id": "4",
-     "name": "Cincinnati Bengals",
-     "shortName": "Bengals",
-     "abbr": "CIN",
-     "record": "1-0",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
+     "id": "14",
+     "name": "Los Angeles Rams",
+     "shortName": "Rams",
+     "abbr": "LAR",
+     "record": "2-0",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
     },
     "away": {
-     "id": "3",
-     "name": "Chicago Bears",
-     "shortName": "Bears",
-     "abbr": "CHI",
-     "record": "1-0",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
+     "id": "18",
+     "name": "New Orleans Saints",
+     "shortName": "Saints",
+     "abbr": "NO",
+     "record": "0-2",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
+    "status": "finished",
+    "homeScore": 34,
     "awayScore": 0,
-    "scoreText": "",
+    "scoreText": "34–0",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      3,
+      17,
+      7,
+      7
+     ],
+     "away": [
+      0,
+      0,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:00 PM EDT",
+    "statusReason": "Final",
     "liveTime": "",
-    "time": "2026-08-22T23:00Z",
+    "time": "2026-08-22T20:00Z",
     "pageUrl": "https://www.espn.com/nfl"
    },
    {
-    "id": "401873293",
+    "id": "401873292",
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Hard Rock Stadium",
     "round": "",
     "home": {
-     "id": "17",
-     "name": "New England Patriots",
-     "shortName": "Patriots",
-     "abbr": "NE",
-     "record": "0-0-1",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
+     "id": "15",
+     "name": "Miami Dolphins",
+     "shortName": "Dolphins",
+     "abbr": "MIA",
+     "record": "0-2",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
     },
     "away": {
-     "id": "21",
-     "name": "Philadelphia Eagles",
-     "shortName": "Eagles",
-     "abbr": "PHI",
-     "record": "0-1",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
+     "id": "19",
+     "name": "New York Giants",
+     "shortName": "Giants",
+     "abbr": "NYG",
+     "record": "1-1",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "status": "finished",
+    "homeScore": 3,
+    "awayScore": 26,
+    "scoreText": "3–26",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      3,
+      0,
+      0
+     ],
+     "away": [
+      7,
+      13,
+      3,
+      3
+     ]
     },
-    "statusReason": "8/22 - 7:00 PM EDT",
+    "statusReason": "Final",
     "liveTime": "",
-    "time": "2026-08-22T23:00Z",
-    "pageUrl": "https://www.espn.com/nfl"
-   },
-   {
-    "id": "401873296",
-    "sport": "nfl",
-    "leagueId": "nfl",
-    "leagueName": "National Football League",
-    "round": "",
-    "home": {
-     "id": "27",
-     "name": "Tampa Bay Buccaneers",
-     "shortName": "Buccaneers",
-     "abbr": "TB",
-     "record": "1-0",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
-    },
-    "away": {
-     "id": "12",
-     "name": "Kansas City Chiefs",
-     "shortName": "Chiefs",
-     "abbr": "KC",
-     "record": "0-1",
-     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
-    },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
-    "linescores": {
-     "home": [],
-     "away": []
-    },
-    "statusReason": "8/22 - 7:30 PM EDT",
-    "liveTime": "",
-    "time": "2026-08-22T23:30Z",
+    "time": "2026-08-22T20:00Z",
     "pageUrl": "https://www.espn.com/nfl"
    },
    {
@@ -21142,6 +21173,7 @@
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "State Farm Stadium",
     "round": "",
     "home": {
      "id": "22",
@@ -21177,6 +21209,7 @@
     "sport": "nfl",
     "leagueId": "nfl",
     "leagueName": "National Football League",
+    "venue": "Nissan Stadium",
     "round": "",
     "home": {
      "id": "10",
@@ -21700,6 +21733,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Yankee Stadium",
     "round": "",
     "home": {
      "id": "10",
@@ -21755,6 +21789,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "American Family Field",
     "round": "",
     "home": {
      "id": "8",
@@ -21809,6 +21844,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "loanDepot park",
     "round": "",
     "home": {
      "id": "28",
@@ -21863,13 +21899,14 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Citizens Bank Park",
     "round": "",
     "home": {
      "id": "22",
      "name": "Philadelphia Phillies",
      "shortName": "Phillies",
      "abbr": "PHI",
-     "record": "71-58",
+     "record": "72-58",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/phi.png"
     },
     "away": {
@@ -21877,27 +21914,38 @@
      "name": "St. Louis Cardinals",
      "shortName": "Cardinals",
      "abbr": "STL",
-     "record": "66-64",
+     "record": "66-65",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/stl.png"
     },
-    "status": "live",
-    "homeScore": 3,
-    "awayScore": 0,
-    "scoreText": "3–0",
+    "status": "finished",
+    "homeScore": 12,
+    "awayScore": 3,
+    "scoreText": "12–3",
     "linescores": {
      "home": [
       3,
       0,
-      0
+      4,
+      0,
+      0,
+      4,
+      0,
+      1
      ],
      "away": [
       0,
       0,
-      0
+      0,
+      0,
+      0,
+      1,
+      0,
+      1,
+      1
      ]
     },
-    "statusReason": "Bot 3rd",
-    "liveTime": "Bot 3rd",
+    "statusReason": "Final",
+    "liveTime": "",
     "time": "2026-08-22T22:05Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -21906,6 +21954,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Oriole Park at Camden Yards",
     "round": "",
     "home": {
      "id": "1",
@@ -21923,16 +21972,32 @@
      "record": "76-52",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/tb.png"
     },
-    "status": "upcoming",
+    "status": "live",
     "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "awayScore": 2,
+    "scoreText": "0–2",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "away": [
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:05 PM EDT",
-    "liveTime": "",
+    "statusReason": "Bot 7th",
+    "liveTime": "Bot 7th",
     "time": "2026-08-22T23:05Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -21941,6 +22006,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Globe Life Field",
     "round": "",
     "home": {
      "id": "13",
@@ -21958,16 +22024,33 @@
      "record": "51-78",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/laa.png"
     },
-    "status": "upcoming",
+    "status": "live",
     "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "awayScore": 2,
+    "scoreText": "0–2",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "away": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:05 PM EDT",
-    "liveTime": "",
+    "statusReason": "Top 8th",
+    "liveTime": "Top 8th",
     "time": "2026-08-22T23:05Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -21976,6 +22059,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Daikin Park",
     "round": "",
     "home": {
      "id": "18",
@@ -21993,16 +22077,30 @@
      "record": "49-80",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/ath.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "status": "live",
+    "homeScore": 1,
+    "awayScore": 1,
+    "scoreText": "1–1",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "away": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:10 PM EDT",
-    "liveTime": "",
+    "statusReason": "Bot 6th",
+    "liveTime": "Bot 6th",
     "time": "2026-08-22T23:10Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22011,6 +22109,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rate Field",
     "round": "",
     "home": {
      "id": "4",
@@ -22028,16 +22127,28 @@
      "record": "58-71",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/nym.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "status": "live",
+    "homeScore": 3,
+    "awayScore": 7,
+    "scoreText": "3–7",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      1,
+      2,
+      0,
+      0
+     ],
+     "away": [
+      1,
+      0,
+      3,
+      0,
+      3
+     ]
     },
-    "statusReason": "8/22 - 7:10 PM EDT",
-    "liveTime": "",
+    "statusReason": "Bot 5th",
+    "liveTime": "Bot 5th",
     "time": "2026-08-22T23:10Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22046,6 +22157,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Fenway Park",
     "round": "",
     "home": {
      "id": "2",
@@ -22063,16 +22175,30 @@
      "record": "52-76",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/sf.png"
     },
-    "status": "upcoming",
+    "status": "live",
     "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "awayScore": 2,
+    "scoreText": "0–2",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "away": [
+      1,
+      0,
+      1,
+      0,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:15 PM EDT",
-    "liveTime": "",
+    "statusReason": "Bot 6th",
+    "liveTime": "Bot 6th",
     "time": "2026-08-22T23:15Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22081,6 +22207,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Kauffman Stadium",
     "round": "",
     "home": {
      "id": "7",
@@ -22098,16 +22225,32 @@
      "record": "61-67",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/det.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "status": "live",
+    "homeScore": 3,
+    "awayScore": 1,
+    "scoreText": "3–1",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0
+     ],
+     "away": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:15 PM EDT",
-    "liveTime": "",
+    "statusReason": "Bot 7th",
+    "liveTime": "Bot 7th",
     "time": "2026-08-22T23:15Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22116,6 +22259,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "T-Mobile Park",
     "round": "",
     "home": {
      "id": "12",
@@ -22133,16 +22277,29 @@
      "record": "74-55",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/chc.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "status": "live",
+    "homeScore": 2,
+    "awayScore": 4,
+    "scoreText": "2–4",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      1,
+      0,
+      0,
+      0,
+      1
+     ],
+     "away": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      3
+     ]
     },
-    "statusReason": "8/22 - 7:15 PM EDT",
-    "liveTime": "",
+    "statusReason": "Mid 6th",
+    "liveTime": "Mid 6th",
     "time": "2026-08-22T23:15Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22151,6 +22308,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Dodger Stadium",
     "round": "",
     "home": {
      "id": "19",
@@ -22168,16 +22326,28 @@
      "record": "63-67",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/pit.png"
     },
-    "status": "upcoming",
-    "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "status": "live",
+    "homeScore": 4,
+    "awayScore": 3,
+    "scoreText": "4–3",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      0,
+      2,
+      2
+     ],
+     "away": [
+      3,
+      0,
+      0,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 7:15 PM EDT",
-    "liveTime": "",
+    "statusReason": "End 5th",
+    "liveTime": "End 5th",
     "time": "2026-08-22T23:15Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22186,6 +22356,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Coors Field",
     "round": "",
     "home": {
      "id": "27",
@@ -22203,16 +22374,24 @@
      "record": "63-66",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/cle.png"
     },
-    "status": "upcoming",
+    "status": "live",
     "homeScore": 0,
     "awayScore": 0,
-    "scoreText": "",
+    "scoreText": "0–0",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0,
+      0
+     ],
+     "away": [
+      0,
+      0,
+      0
+     ]
     },
-    "statusReason": "8/22 - 8:10 PM EDT",
-    "liveTime": "",
+    "statusReason": "End 3rd",
+    "liveTime": "End 3rd",
     "time": "2026-08-23T00:10Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22221,6 +22400,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Chase Field",
     "round": "",
     "home": {
      "id": "29",
@@ -22238,16 +22418,23 @@
      "record": "61-68",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/cin.png"
     },
-    "status": "upcoming",
+    "status": "live",
     "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "awayScore": 3,
+    "scoreText": "0–3",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0,
+      0
+     ],
+     "away": [
+      1,
+      0,
+      2
+     ]
     },
-    "statusReason": "8/22 - 8:10 PM EDT",
-    "liveTime": "",
+    "statusReason": "Top 3rd",
+    "liveTime": "Top 3rd",
     "time": "2026-08-23T00:10Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22256,6 +22443,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Petco Park",
     "round": "",
     "home": {
      "id": "25",
@@ -22273,16 +22461,20 @@
      "record": "63-66",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/min.png"
     },
-    "status": "upcoming",
+    "status": "live",
     "homeScore": 0,
-    "awayScore": 0,
-    "scoreText": "",
+    "awayScore": 1,
+    "scoreText": "0–1",
     "linescores": {
-     "home": [],
-     "away": []
+     "home": [
+      0
+     ],
+     "away": [
+      1
+     ]
     },
-    "statusReason": "8/22 - 8:40 PM EDT",
-    "liveTime": "",
+    "statusReason": "Bot 1st",
+    "liveTime": "Bot 1st",
     "time": "2026-08-23T00:40Z",
     "pageUrl": "https://www.espn.com/mlb"
    },
@@ -22291,13 +22483,14 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Citizens Bank Park",
     "round": "",
     "home": {
      "id": "22",
      "name": "Philadelphia Phillies",
      "shortName": "Phillies",
      "abbr": "PHI",
-     "record": "71-58",
+     "record": "72-58",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/phi.png"
     },
     "away": {
@@ -22305,7 +22498,7 @@
      "name": "St. Louis Cardinals",
      "shortName": "Cardinals",
      "abbr": "STL",
-     "record": "66-64",
+     "record": "66-65",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/stl.png"
     },
     "status": "upcoming",
@@ -22326,6 +22519,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Oriole Park at Camden Yards",
     "round": "",
     "home": {
      "id": "1",
@@ -22361,6 +22555,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Yankee Stadium",
     "round": "",
     "home": {
      "id": "10",
@@ -22396,6 +22591,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "loanDepot park",
     "round": "",
     "home": {
      "id": "28",
@@ -22431,6 +22627,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Daikin Park",
     "round": "",
     "home": {
      "id": "18",
@@ -22466,6 +22663,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Kauffman Stadium",
     "round": "",
     "home": {
      "id": "7",
@@ -22501,6 +22699,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rate Field",
     "round": "",
     "home": {
      "id": "4",
@@ -22536,6 +22735,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Globe Life Field",
     "round": "",
     "home": {
      "id": "13",
@@ -22571,6 +22771,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Coors Field",
     "round": "",
     "home": {
      "id": "27",
@@ -22606,6 +22807,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Fenway Park",
     "round": "",
     "home": {
      "id": "2",
@@ -22641,6 +22843,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "T-Mobile Park",
     "round": "",
     "home": {
      "id": "12",
@@ -22676,6 +22879,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Petco Park",
     "round": "",
     "home": {
      "id": "25",
@@ -22711,6 +22915,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Dodger Stadium",
     "round": "",
     "home": {
      "id": "19",
@@ -22746,6 +22951,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Chase Field",
     "round": "",
     "home": {
      "id": "29",
@@ -22781,6 +22987,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Journey Bank Ballpark at Historic Bowman Field",
     "round": "",
     "home": {
      "id": "8",
@@ -22816,6 +23023,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "loanDepot park",
     "round": "",
     "home": {
      "id": "28",
@@ -22851,6 +23059,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Comerica Park",
     "round": "",
     "home": {
      "id": "6",
@@ -22886,6 +23095,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Nationals Park",
     "round": "",
     "home": {
      "id": "20",
@@ -22921,6 +23131,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rate Field",
     "round": "",
     "home": {
      "id": "4",
@@ -22956,6 +23167,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Angel Stadium",
     "round": "",
     "home": {
      "id": "3",
@@ -22991,6 +23203,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Chase Field",
     "round": "",
     "home": {
      "id": "29",
@@ -23026,6 +23239,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Sutter Health Park",
     "round": "",
     "home": {
      "id": "11",
@@ -23061,6 +23275,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "T-Mobile Park",
     "round": "",
     "home": {
      "id": "12",
@@ -23075,7 +23290,7 @@
      "name": "Philadelphia Phillies",
      "shortName": "Phillies",
      "abbr": "PHI",
-     "record": "71-58",
+     "record": "72-58",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/phi.png"
     },
     "status": "upcoming",
@@ -23096,6 +23311,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Petco Park",
     "round": "",
     "home": {
      "id": "25",
@@ -23131,6 +23347,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Oracle Park",
     "round": "",
     "home": {
      "id": "26",
@@ -23166,6 +23383,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "loanDepot park",
     "round": "",
     "home": {
      "id": "28",
@@ -23201,6 +23419,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Comerica Park",
     "round": "",
     "home": {
      "id": "6",
@@ -23236,6 +23455,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Nationals Park",
     "round": "",
     "home": {
      "id": "20",
@@ -23271,6 +23491,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Yankee Stadium",
     "round": "",
     "home": {
      "id": "10",
@@ -23306,6 +23527,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rogers Centre",
     "round": "",
     "home": {
      "id": "14",
@@ -23341,6 +23563,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Citi Field",
     "round": "",
     "home": {
      "id": "21",
@@ -23376,6 +23599,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Truist Park",
     "round": "",
     "home": {
      "id": "15",
@@ -23411,6 +23635,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rate Field",
     "round": "",
     "home": {
      "id": "4",
@@ -23446,13 +23671,14 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Busch Stadium",
     "round": "",
     "home": {
      "id": "24",
      "name": "St. Louis Cardinals",
      "shortName": "Cardinals",
      "abbr": "STL",
-     "record": "66-64",
+     "record": "66-65",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/stl.png"
     },
     "away": {
@@ -23481,6 +23707,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Angel Stadium",
     "round": "",
     "home": {
      "id": "3",
@@ -23516,6 +23743,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Chase Field",
     "round": "",
     "home": {
      "id": "29",
@@ -23551,6 +23779,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Sutter Health Park",
     "round": "",
     "home": {
      "id": "11",
@@ -23586,6 +23815,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "T-Mobile Park",
     "round": "",
     "home": {
      "id": "12",
@@ -23600,7 +23830,7 @@
      "name": "Philadelphia Phillies",
      "shortName": "Phillies",
      "abbr": "PHI",
-     "record": "71-58",
+     "record": "72-58",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/phi.png"
     },
     "status": "upcoming",
@@ -23621,6 +23851,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Petco Park",
     "round": "",
     "home": {
      "id": "25",
@@ -23656,6 +23887,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Oracle Park",
     "round": "",
     "home": {
      "id": "26",
@@ -23691,6 +23923,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Comerica Park",
     "round": "",
     "home": {
      "id": "6",
@@ -23726,6 +23959,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Chase Field",
     "round": "",
     "home": {
      "id": "29",
@@ -23761,6 +23995,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Oracle Park",
     "round": "",
     "home": {
      "id": "26",
@@ -23796,6 +24031,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Angel Stadium",
     "round": "",
     "home": {
      "id": "3",
@@ -23831,6 +24067,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "T-Mobile Park",
     "round": "",
     "home": {
      "id": "12",
@@ -23845,7 +24082,7 @@
      "name": "Philadelphia Phillies",
      "shortName": "Phillies",
      "abbr": "PHI",
-     "record": "71-58",
+     "record": "72-58",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/phi.png"
     },
     "status": "upcoming",
@@ -23866,6 +24103,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Petco Park",
     "round": "",
     "home": {
      "id": "25",
@@ -23901,6 +24139,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "loanDepot park",
     "round": "",
     "home": {
      "id": "28",
@@ -23936,6 +24175,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Nationals Park",
     "round": "",
     "home": {
      "id": "20",
@@ -23971,6 +24211,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Yankee Stadium",
     "round": "",
     "home": {
      "id": "10",
@@ -24006,6 +24247,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rogers Centre",
     "round": "",
     "home": {
      "id": "14",
@@ -24041,6 +24283,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Citi Field",
     "round": "",
     "home": {
      "id": "21",
@@ -24076,6 +24319,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Truist Park",
     "round": "",
     "home": {
      "id": "15",
@@ -24111,6 +24355,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Rate Field",
     "round": "",
     "home": {
      "id": "4",
@@ -24146,13 +24391,14 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Busch Stadium",
     "round": "",
     "home": {
      "id": "24",
      "name": "St. Louis Cardinals",
      "shortName": "Cardinals",
      "abbr": "STL",
-     "record": "66-64",
+     "record": "66-65",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/stl.png"
     },
     "away": {
@@ -24181,6 +24427,7 @@
     "sport": "mlb",
     "leagueId": "mlb",
     "leagueName": "Major League Baseball",
+    "venue": "Sutter Health Park",
     "round": "",
     "home": {
      "id": "11",
@@ -24508,12 +24755,12 @@
      "shortName": "Phillies",
      "abbr": "PHI",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/phi.png",
-     "played": 129,
-     "wins": 71,
+     "played": 130,
+     "wins": 72,
      "draws": 0,
      "losses": 58,
-     "gd": "+0.1",
-     "pts": "6.5",
+     "gd": "+0.2",
+     "pts": "7.0",
      "zone": "europe"
     },
     {
@@ -24568,12 +24815,12 @@
      "shortName": "Cardinals",
      "abbr": "STL",
      "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/stl.png",
-     "played": 130,
+     "played": 131,
      "wins": 66,
      "draws": 0,
-     "losses": 64,
+     "losses": 65,
      "gd": "0.0",
-     "pts": "1.0",
+     "pts": "0.5",
      "zone": ""
     },
     {
