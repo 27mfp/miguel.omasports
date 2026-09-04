@@ -3,12 +3,11 @@ import qs.Commons
 import "SportsModel.js" as Model
 import "Theme.qml" as Theme
 
-Theme { id: theme }
-
 // One league table row; the layout adapts per sport (football, US sports,
 // F1 drivers/constructors). Theme/state inputs are injected by Panel.qml.
 Item {
   id: root
+  Theme { id: theme }
 
   required property var modelData
   required property int index
@@ -26,9 +25,6 @@ Item {
   width: parent.width
   implicitHeight: Style.space(26)
 
-  function theme.mutedColor(c, a) {
-    return theme.mutedColor(c, a)
-  }
   height: implicitHeight
 
   Rectangle {

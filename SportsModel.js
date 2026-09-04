@@ -10,6 +10,37 @@
 // late post-game alerts) without retaining unbounded ids in memory.
 var NOTIFICATION_TTL_MS = 6 * 3600 * 1000
 
+// Polling and retry policy (centralized for one-edit maintenance).
+// These were previously inlined across Panel.qml and the QML retry helpers;
+// consolidating them here lets QML read them via `Model.MAX_ROUND_RETRIES`
+// and friends so a new value only needs to be added once.
+var MAX_ROUND_RETRIES = 2
+var RETRY_DELAY_MS = 2500
+var MIN_REFRESH_MINUTES = 5
+var MAX_REFRESH_MINUTES = 60
+var REFRESH_OPTIONS = [5, 10, 15, 30, 45, 60]
+
+// HOME directory fallback used by every path that writes to the user's
+// cache/state file. Quickshell.env is only defined inside the QML runtime;
+// under Node (e.g. the test suite) we degrade to process.env so the same
+// helper is safe to call from anywhere a consumer might import SportsModel.
+function safeHome() {
+  var home = ""
+  try {
+    if (typeof Quickshell !== "undefined" && Quickshell && typeof Quickshell.env === "function") {
+      home = String(Quickshell.env("HOME") || "")
+    }
+  } catch (e) { /* Quickshell not bound — fall through */ }
+  if (!home && typeof process !== "undefined" && process && process.env) {
+    home = String(process.env.HOME || "")
+  }
+  return home || "/var/tmp"
+}
+
+function clampRefreshMinutes(value) {
+  return Math.max(MIN_REFRESH_MINUTES, Math.min(MAX_REFRESH_MINUTES, parseInt(value, 10) || 15))
+}
+
 // Polling intervals offered by the UI picker. The dropdown, the clamp logic
 // (parseState / setRefreshMinutes) and the polling timer all derive from this
 // single list so a new value only needs to be added once.
@@ -663,7 +694,7 @@ function parseState(raw) {
     nhl: parseSubSport("nhl", defaults.nhl),
     antiSpoiler: parsed.antiSpoiler === true,
     notifications: parsed.notifications !== false,
-    refreshMinutes: Math.max(5, Math.min(60, parseInt(parsed.refreshMinutes, 10) || 15))
+    refreshMinutes: clampRefreshMinutes(parsed.refreshMinutes)
   }
 }
 
@@ -672,7 +703,7 @@ function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, f
   state.sport = String(sport || "football")
   state.antiSpoiler = antiSpoiler === true
   state.notifications = notifications !== false
-  state.refreshMinutes = Math.max(5, Math.min(60, parseInt(refreshMinutes, 10) || 15))
+  state.refreshMinutes = clampRefreshMinutes(refreshMinutes)
   var leagues = normalizeLeagueIds(fbLeagues)
   if (leagues.length === 0) leagues = ["47"]
   var tids = normalizeTeamIds(fbTeamIds)
@@ -1782,9 +1813,6 @@ function compareMatchTimes(a, b) {
 
 function matchesForTeam(matches, teamIdOrIds, sport) {
   var s = String(sport || "football").toLowerCase()
-  if (s === "f1") {
-    return arrayFrom(matches)
-  }
   var rawIds = Array.isArray(teamIdOrIds) ? teamIdOrIds : [teamIdOrIds]
   var ids = []
   for (var k = 0; k < rawIds.length; k++) {
@@ -1805,6 +1833,10 @@ function matchesForTeam(matches, teamIdOrIds, sport) {
     var awayName = String(m.away && m.away.name || "").trim().toLowerCase()
     var homeShort = String(m.home && m.home.shortName || "").trim().toLowerCase()
     var awayShort = String(m.away && m.away.shortName || "").trim().toLowerCase()
+    // F1 races may carry driver/constructor ids on the match payload itself
+    // (per-race participation), in addition to the home/away placeholders.
+    var driverId = String(m.driverId || "").toLowerCase()
+    var constructorId = String(m.constructorId || "").toLowerCase()
 
     var matchFound = false
     for (var j = 0; j < ids.length; j++) {
@@ -1816,6 +1848,13 @@ function matchesForTeam(matches, teamIdOrIds, sport) {
         break
       }
       if (!isNumericIdentifier(id) && (homeName === id || awayName === id || homeShort === id || awayShort === id)) {
+        matchFound = true
+        break
+      }
+      // F1: a favorite is a driver or constructor id, which only lives on
+      // race payloads (not on home/away placeholders). Without this branch
+      // every followed driver would see zero races.
+      if (s === "f1" && (driverId === id || constructorId === id)) {
         matchFound = true
         break
       }
@@ -2001,9 +2040,12 @@ function interpolateLiveTime(match, nowMs, fetchedAtMs) {
   if (!isFinite(age) || age <= 0) return lt
   var drift = Math.floor(age)
   if (drift <= 0) return lt
-  // Never show more than +4 minutes beyond what the provider reported —
-  // beyond that a refetch is overdue and guessing is worse than honesty
-  return "\u200e" + String(base + Math.min(drift, 4)) + "\u2019\u200e"
+  // Never show more than +8 minutes beyond what the provider reported —
+  // beyond that a refetch is overdue and guessing is worse than honesty.
+  // The buffer used to be 4, which let the broadcast clock visibly stall on
+  // long stoppage windows (injuries, VAR, goal-mouth scrambles) even when
+  // the provider clock was simply late.
+  return "\u200e" + String(base + Math.min(drift, 8)) + "\u2019\u200e"
 }
 
 function leagueLabel(id) {
@@ -2090,9 +2132,12 @@ function buildPersistedState(cur, saved, ui) {
     var spk = sportsList[s]
     var prevSp = saved[spk] || {}
     if (cur === spk) {
+      var curIds = arrayFrom(ui.selectedTeamIds)
       sportSettings[spk] = {
-        teamIds: ui.selectedTeamIds,
-        teamId: ui.selectedTeamId,
+        teamIds: curIds,
+        // Panel does not pass selectedTeamId; derive it so JSON.stringify
+        // (and therefore ignoredStateSignature) matches parseState's output.
+        teamId: String(ui.selectedTeamId || (curIds.length > 0 ? curIds[0] : "")),
         teamName: ui.selectedTeamName,
         standingsGroup: ui.standingsLeagueId,
         tab: ui.tabName

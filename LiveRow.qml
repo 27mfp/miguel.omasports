@@ -3,12 +3,11 @@ import qs.Commons
 import "SportsModel.js" as Model
 import "Theme.qml" as Theme
 
-Theme { id: theme }
-
 // Broadcast-style live match card with pulsing clock pill, scorecard layout
 // and game progression bar. Theme/state inputs are injected by Panel.qml.
 Item {
   id: root
+  Theme { id: theme }
 
   required property var modelData
   required property int index
@@ -36,10 +35,6 @@ Item {
 
   width: parent.width
   implicitHeight: liveCard.implicitHeight
-
-  function theme.mutedColor(c, a) {
-    return theme.mutedColor(c, a)
-  }
 
   Rectangle {
     id: liveCard
@@ -144,7 +139,7 @@ Item {
               width: Style.space(5)
               height: width
               radius: width / 2
-              color: "#ffffff"
+              color: theme.onUrgent(root.urgentColor)
               anchors.verticalCenter: parent.verticalCenter
 
               SequentialAnimation on opacity {
@@ -157,7 +152,7 @@ Item {
 
             Text {
               text: root.syncedLiveTime
-              color: "#ffffff"
+              color: theme.onUrgent(root.urgentColor)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true

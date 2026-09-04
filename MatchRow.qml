@@ -3,13 +3,12 @@ import qs.Commons
 import "SportsModel.js" as Model
 import "Theme.qml" as Theme
 
-Theme { id: theme }
-
 // One fixture/result row: a team-vs-team card, or an expandable F1 Grand Prix
 // weekend entry with its sessions timetable. Theme/state inputs are injected
 // by Panel.qml.
 Item {
   id: root
+  Theme { id: theme }
 
   required property var modelData
   required property int index
@@ -48,10 +47,6 @@ Item {
 
   width: parent.width
   implicitHeight: matchCard.implicitHeight
-
-  function theme.mutedColor(c, a) {
-    return theme.mutedColor(c, a)
-  }
 
   Rectangle {
     id: matchCard
@@ -183,7 +178,7 @@ Item {
               id: f1StatusText
               anchors.centerIn: parent
               text: root.isFinished ? "Official" : (root.isLive ? "RACE DAY" : Model.formatKickoff(modelData.time))
-              color: root.isLive ? "#ffffff" : (root.isFinished ? theme.mutedColor(root.fgColor, 0.65) : Color.accent)
+              color: root.isLive ? theme.onUrgent(root.urgentColor) : (root.isFinished ? theme.mutedColor(root.fgColor, 0.65) : Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true

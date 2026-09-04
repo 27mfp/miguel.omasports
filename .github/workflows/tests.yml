@@ -41,8 +41,16 @@ jobs:
           lint_status=$?
           set -e
           cat "$out_file"
-          if [ "$lint_status" -ne 0 ] || grep -qE '^Error([: ]|$)' "$out_file"; then
+          if [ "$lint_status" -ne 0 ] || grep -qE '^Error([: ]|$)|\[syntax\]' "$out_file"; then
             echo "::error::qmllint reported syntax errors"
             exit 1
           fi
           echo "QML syntax check passed (unresolved qs.* imports are environment warnings)"
+
+      - name: Guard against dead self-recursive functions
+        run: |
+          set -e
+          if grep -nE 'function theme\.mutedColor\(c, a\) \{[[:space:]]*return theme\.mutedColor' *.qml; then
+            echo "::error::dead self-recursive theme.mutedColor declarations found"
+            exit 1
+          fi

@@ -79,7 +79,7 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
 
 ---
 
-## 📦 Installation
+## Install
 
 ### From Git (Recommended)
 
@@ -102,9 +102,15 @@ omarchy-shell shell rescanPlugins
 omarchy plugin enable miguel.omasports --section center
 ```
 
+### Remove
+
+```sh
+omarchy plugin remove miguel.omasports
+```
+
 ---
 
-## ⚙ Configuration & Customization
+## Configure
 
 - **Sport Selector**: Switch active sport in one click (`⚽`, `🏀`, `🏎`, `🏈`, `⚾`, `🏒`).
 - **Show Live Ticker on Bar**: Display live scores on the bar chip (`settings.showBarTicker`).
@@ -116,7 +122,7 @@ Configuration is automatically saved to `~/.config/omarchy/sports-favorites.json
 
 ---
 
-## 🌍 Supported Sports & Competitions
+## Supported Sports
 
 | Sport | Icon | Leagues & Tournaments | Data Provider |
 |---|:---:|---|---|
@@ -129,7 +135,7 @@ Configuration is automatically saved to `~/.config/omarchy/sports-favorites.json
 
 ---
 
-## 🧪 Development & Testing
+## Development
 
 The data engine (`SportsModel.js`) is pure JavaScript with no QML dependencies, so the parsers are covered by a Node test suite:
 
@@ -148,6 +154,8 @@ node tests/capture-fixtures.mjs   # refresh frozen payloads + goldens (needs net
 node tests/offline.mjs            # replay parsers vs fixtures + goldens (offline)
 ```
 
+(`tests/live.mjs` and `tests/capture-fixtures.mjs` are not run in CI; they require network access and manual acceptance of new provider data — run them locally before releases.)
+
 Run `offline.mjs` before every commit that touches `SportsModel.js`; re-run the capture script only when you want to accept new provider data.
 
 ### Runtime requirements
@@ -164,6 +172,8 @@ A deterministic built-in simulation for UI development — no network at all:
 ```bash
 OMASPORTS_MOCK=1 quickshell -c <config>   # or set OMASPORTS_MOCK=1 however you launch the panel
 ```
+
+> `OMASPORTS_MOCK` is read once at panel construction — toggle the env then rescan the plugin.
 
 Every sport gets a scripted timeline anchored to panel launch: a live match already in progress, a kickoff 12 minutes in (exercises pre-match notifications), a recent result, and future fixtures. The football match scores a scripted goal mid-session to exercise goal notifications, clocks tick through HT → 2nd half → FT, and F1 shows a race-day weekend with sessions. Standings render too.
 
@@ -187,6 +197,6 @@ qmllint *.qml
 
 ---
 
-## 📄 License
+## License
 
 Distributed under the [MIT License](LICENSE).

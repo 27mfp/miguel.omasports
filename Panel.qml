@@ -184,7 +184,8 @@ Panel {
     var live = Model.liveMatches(allMatches, matchDetails)
     if (!Model.sameMatches(liveList, live)) liveList = live
 
-    // Followed-team schedule (multi-competition)
+    // Followed-team schedule (multi-competition). F1 uses the full calendar
+    // once a driver/constructor is followed: every favourite contests every GP.
     var tm
     if (activeSport === "f1") tm = selectedTeamIds.length > 0 ? allMatches : []
     else if (teamMatchesRaw && teamMatchesRaw.length > 0) tm = teamMatchesRaw
@@ -263,6 +264,7 @@ Panel {
   // keep the bar ticker honest without waking the shell every second)
   property double nowMs: Date.now()
   Timer {
+    id: clockTicker
     interval: root.opened ? 1000 : 60000
     running: true
     repeat: true
@@ -736,7 +738,7 @@ Panel {
   }
 
   function stateFilePath() {
-    return Quickshell.env("HOME") + "/.config/omarchy/sports-favorites.json"
+    return Model.safeHome() + "/.config/omarchy/sports-favorites.json"
   }
 
   function applyState(raw) {
@@ -831,7 +833,13 @@ Panel {
     if (item.iconPath && item.iconPath.trim()) {
       var p = item.iconPath
       if (p.indexOf("file://") === 0) p = p.slice(7)
-      cmd.push("-i", p)
+      // A path that does not live under the configured cache directory must
+      // not be handed to notify-send as `-i`. Otherwise a crafted team id
+      // that survives crestCacheKey() could point notify-send at an
+      // arbitrary file under the user's home (defense in depth alongside
+      // crestCacheKey's bytes whitelist).
+      var cacheRoot = logoCacheDir()
+      if (p.indexOf(cacheRoot) === 0) cmd.push("-i", p)
     }
     if (item.urgency) cmd.push("-u", item.urgency)
     // "--" ends option parsing: provider-derived strings must never be
@@ -842,7 +850,7 @@ Panel {
   }
 
   function logoCacheDir() {
-    return Quickshell.env("HOME") + "/.cache/omarchy-omasports/logos/"
+    return Model.safeHome() + "/.cache/omarchy-omasports/logos/"
   }
 
   function crestIconPath(sport, team) {
@@ -944,7 +952,7 @@ Panel {
   }
 
   function setRefreshMinutes(value) {
-    var minutes = Math.max(5, Math.min(60, parseInt(value, 10) || 15))
+    var minutes = Model.clampRefreshMinutes(value)
     savedState.refreshMinutes = minutes
     persistState()
     scheduleNextPoll()
@@ -971,7 +979,7 @@ Panel {
   }
 
   function refreshIntervalLabel() {
-    var minutes = Math.max(5, parseInt(savedState.refreshMinutes || 15, 10))
+    var minutes = Model.clampRefreshMinutes(savedState.refreshMinutes)
     for (var i = 0; i < refreshIntervalOptions.length; i++)
       if (parseInt(refreshIntervalOptions[i].value, 10) === minutes) return refreshIntervalOptions[i].label
     return minutes + " min"
@@ -1192,7 +1200,7 @@ Panel {
 
   function retryOrAdvanceTeamPage(id) {
     var tries = teamRetryCounts[id] || 0
-    if (tries < 2) {
+    if (tries < Model.MAX_ROUND_RETRIES) {
       teamRetryCounts[id] = tries + 1
       teamRetryId = id
       teamRetrySerial = root.requestSerial
@@ -1275,7 +1283,7 @@ Panel {
       roundResults[id] = page
     } else {
       var tries = retryCounts[id] || 0
-      if (tries < 2) {
+      if (tries < Model.MAX_ROUND_RETRIES) {
         retryCounts[id] = tries + 1
         pendingRetryIds.push(id)
         retryDelay.restart()
@@ -1410,7 +1418,7 @@ Panel {
     // (scores ok, standings dead or vice versa) must not pass silently
     var sbOk = workerScoreboard.gotData
     var stOk = workerStandings.gotData
-    if ((!sbOk || !stOk) && espnRetryCount < 2) {
+    if ((!sbOk || !stOk) && espnRetryCount < Model.MAX_ROUND_RETRIES) {
       espnRetryCount++
       espnRetrySerial = requestSerial
       espnRetryDelay.restart()
@@ -1504,7 +1512,7 @@ Panel {
     if (workerF1Calendar.running || workerF1Drivers.running || workerF1Constructors.running) return
     // The calendar is the critical payload; standings tables degrade gracefully
     var calOk = workerF1Calendar.gotData
-    if (!calOk && f1RetryCount < 2) {
+    if (!calOk && f1RetryCount < Model.MAX_ROUND_RETRIES) {
       f1RetryCount++
       f1RetrySerial = requestSerial
       f1RetryDelay.restart()
@@ -1758,7 +1766,7 @@ Panel {
   }
 
   function tableHeaderColor() {
-    return theme.mutedColor(root.fgColor, 0.45)
+    return theme.mutedColor(root.fgColor, 0.6)
   }
 
   function matchSubline(match) {
@@ -1823,6 +1831,18 @@ Panel {
     stateFile.reload()
   }
 
+  // Symmetric cleanup on teardown so a panel destroyed mid-session (plugin
+  // disable, shell reload) does not leak curl workers, retries, or pending
+  // notify-send commands queued from a sport the user no longer follows.
+  // Without this, in-flight workers keep writing to the on-disk crest cache
+  // and dispatching desktop notifications after the panel is gone.
+  Component.onDestruction: {
+    stopNetworkWorkers()
+    refreshTimer.stop()
+    clockTicker.stop()
+    notificationQueue = []
+  }
+
   FileView {
     id: stateFile
     path: root.stateFilePath()
@@ -1856,7 +1876,15 @@ Panel {
   }
 
   Process { id: matchOpener }
-  Process { id: stateBackupProc }
+  Process {
+    id: stateBackupProc
+    onExited: function(code) {
+      // `cp` failing silently would erase the user's corrupt backup before
+      // the next persist overwrites the original. Surface non-zero exits so
+      // a permission / ENOSPC issue is visible in the quickshell log.
+      if (code !== 0) console.warn("omasports: state backup failed", code)
+    }
+  }
   Process {
     id: logoCacheProc
     // Only a fully successful batch marks keys as known. A partial parallel
@@ -1971,6 +1999,7 @@ Panel {
 
   RetryTimer {
     id: retryDelay
+    interval: Model.RETRY_DELAY_MS
     predicate: function() {
       return root.loading && pendingRetryIds.length > 0
     }
@@ -1983,6 +2012,7 @@ Panel {
 
   RetryTimer {
     id: teamRetryDelay
+    interval: Model.RETRY_DELAY_MS
     predicate: function() {
       return root.teamFetchActive
         && root.teamRetrySerial === root.requestSerial
@@ -1997,6 +2027,7 @@ Panel {
   // Retry dead rounds for ESPN sports (same contract as the football retry)
   RetryTimer {
     id: espnRetryDelay
+    interval: Model.RETRY_DELAY_MS
     predicate: function() {
       return root.loading
         && root.activeSport === root.espnSportCode
@@ -2009,6 +2040,7 @@ Panel {
 
   RetryTimer {
     id: f1RetryDelay
+    interval: Model.RETRY_DELAY_MS
     predicate: function() {
       return root.loading
         && root.activeSport === "f1"
@@ -2047,7 +2079,7 @@ Panel {
   // Clamp to [5,60] like every other writer: a malformed state file (or a v1
   // save with refreshMinutes outside the dropdown range) must not produce a
   // multi-hour poll interval with no UI affordance to reset it.
-  readonly property int slowRefreshMs: Math.max(5, Math.min(60, parseInt(root.savedState.refreshMinutes || 15, 10))) * 60 * 1000
+  readonly property int slowRefreshMs: Model.clampRefreshMinutes(root.savedState.refreshMinutes) * 60 * 1000
   property bool fastPolling: false
 
   function hasLiveFollowedMatch() {
@@ -2095,6 +2127,17 @@ Panel {
   // signals), so the handler was dead code that future contributors would
   // trust. Toggling the setting requires restarting the shell.
 
+  // Cap shell IPC that would otherwise spawn a curl storm (`omarchy-shell
+  // miguel.omasports refresh` in a tight loop). Open/close/route stay
+  // ungated — they have no network side effects.
+  property var lastIpcAt: 0
+  function ipcThrottle() {
+    var now = Date.now()
+    if (now - lastIpcAt < 250) return false
+    lastIpcAt = now
+    return true
+  }
+
   IpcHandler {
     target: root.ipcTarget
 
@@ -2103,9 +2146,9 @@ Panel {
     function show(): void { root.openFromHotkey() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function refresh(): void { root.refresh() }
-    function toggleSpoiler(): void { root.toggleSpoiler() }
-    function sport(name: string): void { root.switchSport(name) }
+    function refresh(): void { if (root.ipcThrottle()) root.refresh() }
+    function toggleSpoiler(): void { if (root.ipcThrottle()) root.toggleSpoiler() }
+    function sport(name: string): void { if (root.ipcThrottle()) root.switchSport(name) }
     function route(tabName: string): void {
       if (tabName === "fixtures" || tabName === "team") root.tabIndex = 0
       else if (tabName === "live") root.tabIndex = 1
@@ -2161,7 +2204,7 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            opacity: root.loading && root.hasData ? 0.65 : 1.0
+            opacity: (root.loading && root.hasData && !root.anyPopupOpen()) ? 0.65 : 1.0
             Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
             // ---- Header Row ------------------------------------------------
@@ -2245,7 +2288,7 @@ Panel {
                   selected: root.antiSpoiler
                   focusable: true
                   hasCursor: root.focusSection === root.sectionIndex("spoiler")
-                  tooltipText: root.antiSpoiler ? "Show final scores" : "Hide final scores"
+                  tooltipText: (root.antiSpoiler ? "Show final scores" : "Hide final scores") + " (S)"
                   Accessible.role: Accessible.Button
                   Accessible.name: spoilerBtn.tooltipText
                   accent: Color.accent
@@ -2260,7 +2303,7 @@ Panel {
                   iconSpinning: root.loading
                   focusable: true
                   hasCursor: root.focusSection === root.sectionIndex("refresh")
-                  tooltipText: root.loading ? "Updating scores" : "Refresh scores"
+                  tooltipText: (root.loading ? "Updating scores" : "Refresh scores") + " (R)"
                   Accessible.role: Accessible.Button
                   Accessible.name: refreshButton.tooltipText
                   foreground: root.fgColor
@@ -2302,9 +2345,9 @@ Panel {
               width: parent.width
               implicitHeight: sportSelectorRow.implicitHeight + Style.space(6)
               radius: theme.subtleRadius(6)
-              color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.035)
+              color: theme.mutedColor(root.fgColor, 0.035)
               border.width: 1
-              border.color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+              border.color: theme.mutedColor(root.fgColor, 0.08)
 
               Row {
                 id: sportSelectorRow
@@ -2328,11 +2371,11 @@ Panel {
                     radius: theme.subtleRadius(4)
                     color: root.activeSport === modelData.value
                       ? Util.alpha(Color.accent, 0.20)
-                      : (sportMouse.containsMouse ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06) : "transparent")
+                      : (sportMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.06) : "transparent")
                     border.width: 1
                     border.color: root.activeSport === modelData.value
                       ? Color.accent
-                      : (sportMouse.containsMouse ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.10) : "transparent")
+                      : (sportMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.10) : "transparent")
 
                     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
@@ -2470,9 +2513,9 @@ Panel {
                 width: parent.width
                 implicitHeight: setupCol.implicitHeight + Style.space(16)
                 radius: Style.cornerRadius
-                color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.02)
+                color: theme.mutedColor(root.fgColor, 0.02)
                 border.width: 1
-                border.color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+                border.color: theme.mutedColor(root.fgColor, 0.08)
 
                 Column {
                   id: setupCol
@@ -2525,11 +2568,11 @@ Panel {
                       radius: theme.subtleRadius(4)
                       color: summaryMouse.containsMouse
                         ? Style.hoverFillFor(root.fgColor, Color.accent)
-                        : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.05)
+                        : theme.mutedColor(root.fgColor, 0.05)
                       border.width: 1
                       border.color: summaryMouse.containsMouse
                         ? Color.accent
-                        : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.10)
+                        : theme.mutedColor(root.fgColor, 0.10)
 
                       Row {
                         id: summaryPillRow
@@ -2622,11 +2665,11 @@ Panel {
                           radius: theme.subtleRadius(4)
                           color: chipMouse.containsMouse
                             ? Style.hoverFillFor(root.fgColor, root.urgentColor)
-                            : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06)
+                            : theme.mutedColor(root.fgColor, 0.06)
                           border.width: 1
                           border.color: chipMouse.containsMouse
                             ? root.urgentColor
-                            : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.14)
+                            : theme.mutedColor(root.fgColor, 0.14)
 
                           Row {
                             id: chipRow
@@ -2803,6 +2846,7 @@ Panel {
                 matchSubline: root.matchSubline
                 openMatch: root.openMatch
                 revealMatch: root.revealMatch
+                listVisible: root.opened && root.tabIndex === 0
                 rowFocused: root.focusSection === root.sectionIndex("spotlight")
               }
 
@@ -2912,7 +2956,7 @@ Panel {
                     width: parent.width
                     implicitHeight: Style.space(40)
                     radius: theme.subtleRadius(6)
-                    color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.05)
+                    color: theme.mutedColor(root.fgColor, 0.05)
 
                     SequentialAnimation on opacity {
                       running: root.loading && !root.hasData
@@ -2969,7 +3013,7 @@ Panel {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         height: 1
-                        color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+                        color: theme.mutedColor(root.fgColor, 0.08)
                       }
                     }
 
@@ -3021,9 +3065,9 @@ Panel {
                 implicitHeight: noLiveCol.implicitHeight + Style.space(24)
                 visible: root.liveCount === 0
                 radius: Style.cornerRadius
-                color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.03)
+                color: theme.mutedColor(root.fgColor, 0.03)
                 border.width: 1
-                border.color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+                border.color: theme.mutedColor(root.fgColor, 0.08)
 
                 Column {
                   id: noLiveCol
@@ -3183,9 +3227,9 @@ Panel {
                 implicitHeight: tableCardCol.implicitHeight + Style.space(16)
                 visible: root.standingsRows.length > 0
                 radius: Style.cornerRadius
-                color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.02)
+                color: theme.mutedColor(root.fgColor, 0.02)
                 border.width: 1
-                border.color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+                border.color: theme.mutedColor(root.fgColor, 0.08)
 
                 Column {
                   id: tableCardCol
@@ -3265,7 +3309,7 @@ Panel {
                   Rectangle {
                     width: parent.width
                     height: 1
-                    color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+                    color: theme.mutedColor(root.fgColor, 0.08)
                   }
 
                   // Table Rows

@@ -3,12 +3,11 @@ import qs.Commons
 import "SportsModel.js" as Model
 import "Theme.qml" as Theme
 
-Theme { id: theme }
-
 // Hero card highlighting the featured match of a followed team, or the next
 // Grand Prix weekend when the active sport is F1. Injected by Panel.qml.
 Item {
   id: root
+  Theme { id: theme }
 
   property var featuredMatch: null
   property var fallbackMatch: null
@@ -26,13 +25,12 @@ Item {
   property var openMatch: null // function(match)
   property var revealMatch: null // function(matchId)
   property bool rowFocused: false
+  // False while the spotlight is hidden (off-screen tabs) — infinite animations
+  // must not drive scene-graph updates for content the user cannot see.
+  property bool listVisible: true
 
   width: parent.width
   implicitHeight: spotlightSurface.implicitHeight
-
-  function theme.mutedColor(c, a) {
-    return theme.mutedColor(c, a)
-  }
 
   readonly property var match: featuredMatch || fallbackMatch
   readonly property bool isLive: match && match.status === "live"
@@ -156,11 +154,11 @@ Item {
               width: Style.space(5)
               height: width
               radius: width / 2
-              color: "#ffffff"
+              color: theme.onUrgent(root.urgentColor)
               anchors.verticalCenter: parent.verticalCenter
 
               SequentialAnimation on opacity {
-                running: root.isLive
+                running: root.listVisible && root.isLive
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.2; duration: 500 }
                 NumberAnimation { to: 1.0; duration: 500 }
@@ -173,7 +171,9 @@ Item {
                 : (root.match && root.match.status === "finished"
                    ? (root.scoreHidden ? "FT · REVEAL 󰈈" : ("FT" + (root.outcome ? " · " + root.outcome.toUpperCase() : "")))
                    : (root.match ? Qt.formatDateTime(new Date(Date.parse(root.match.time || "")), "ddd d MMM · HH:mm") : ""))
-              color: (root.isLive || (!root.scoreHidden && (root.outcome === "win" || root.outcome === "loss"))) ? "#ffffff" : root.fgColor
+              color: (root.isLive || (!root.scoreHidden && (root.outcome === "win" || root.outcome === "loss")))
+                ? theme.onAccent(root.isLive || root.outcome === "loss" ? root.urgentColor : Color.accent)
+                : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true

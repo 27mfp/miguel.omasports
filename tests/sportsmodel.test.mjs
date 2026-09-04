@@ -19,7 +19,8 @@ const exported = [
   "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel", "isTrustedCrestUrl", "matchExternalUrl", "matchDetailUrl",
   "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime",
   "sameMatches", "sameRows", "sameGroups", "diffMatchNotifications", "buildPersistedState", "parseLeaguePage", "parseTeamPage",
-  "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS", "dictSet", "dictDelete"
+  "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS", "dictSet", "dictDelete",
+  "safeHome", "clampRefreshMinutes", "MAX_ROUND_RETRIES", "RETRY_DELAY_MS", "MIN_REFRESH_MINUTES", "MAX_REFRESH_MINUTES", "REFRESH_OPTIONS"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -46,6 +47,22 @@ test("formatCountdown formats days/hours/minutes", () => {
   assert.equal(Model.formatCountdown(new Date(now + 3 * 86400000 + 2 * 3600000).toISOString(), now), "3d 2h")
   assert.equal(Model.formatCountdown(new Date(now - 60000).toISOString(), now), "Starting soon")
   assert.equal(Model.formatCountdown("not-a-date", now), "")
+})
+test("polling constants and clampRefreshMinutes", () => {
+  assert.equal(Model.MAX_ROUND_RETRIES, 2)
+  assert.equal(Model.RETRY_DELAY_MS, 2500)
+  assert.equal(Model.MIN_REFRESH_MINUTES, 5)
+  assert.equal(Model.MAX_REFRESH_MINUTES, 60)
+  assert.deepEqual(Model.REFRESH_OPTIONS, [5, 10, 15, 30, 45, 60])
+  assert.equal(Model.clampRefreshMinutes(999), 60)
+  assert.equal(Model.clampRefreshMinutes(1), 5)
+  assert.equal(Model.clampRefreshMinutes("15"), 15)
+  assert.equal(Model.clampRefreshMinutes("nope"), 15)
+})
+test("safeHome falls back when HOME is unset", () => {
+  const home = Model.safeHome()
+  assert.equal(home, process.env.HOME || "/var/tmp")
+  assert.ok(home.length > 0)
 })
 test("arrayFrom rejects strings and nulls, copies arrays", () => {
   assert.deepEqual(Model.arrayFrom("abc"), [])
@@ -156,7 +173,6 @@ test("persistState shape round-trips exactly (applyState signature check)", () =
     tabName: "standings",
     selectedLeagueIds: ["61"],
     selectedTeamIds: ["13"],
-    selectedTeamId: "13",
     selectedTeamName: "Los Angeles Lakers",
     standingsLeagueId: "Western Conference",
     antiSpoiler: false,
@@ -170,7 +186,7 @@ test("persistState shape round-trips exactly (applyState signature check)", () =
   assert.equal(reparsed.football.tab, "live")
   // and the same holds when football is the active sport
   const saved2 = Model.buildPersistedState("football", base, { ...ui,
-    selectedTeamIds: ["9772"], selectedTeamId: "9772", selectedTeamName: "Benfica",
+    selectedTeamIds: ["9772"], selectedTeamName: "Benfica",
     standingsLeagueId: "61", tabName: "live" })
   assert.equal(JSON.stringify(Model.parseState(JSON.stringify(saved2))), JSON.stringify(saved2))
   assert.equal(saved2.football.tab, "live")
@@ -425,7 +441,18 @@ test("matchesForTeam finds fixtures by team id and ignores other ids", () => {
   const forBenfica = Model.matchesForTeam(sampleMatches, "9772", "football")
   assert.equal(forBenfica.length, 2)
   assert.equal(Model.matchesForTeam(sampleMatches, "unknown", "football").length, 0)
-  assert.equal(Model.matchesForTeam(sampleMatches, "whatever", "f1").length, 3) // f1 returns all
+  assert.equal(Model.matchesForTeam(sampleMatches, [], "football").length, 0)
+  assert.equal(Model.matchesForTeam(sampleMatches, [], "f1").length, 0)
+  assert.equal(Model.matchesForTeam(sampleMatches, "whatever", "f1").length, 0)
+})
+test("matchesForTeam filters F1 races by driver or constructor id", () => {
+  const races = [
+    { id: "r1", sport: "f1", driverId: "leclerc", constructorId: "ferrari", home: { id: "gp1", name: "Monaco GP" }, away: { id: "c1", name: "Monaco" } },
+    { id: "r2", sport: "f1", driverId: "norris", constructorId: "mclaren", home: { id: "gp2", name: "British GP" }, away: { id: "c2", name: "Silverstone" } }
+  ]
+  assert.equal(Model.matchesForTeam(races, "leclerc", "f1").length, 1)
+  assert.equal(Model.matchesForTeam(races, "ferrari", "f1")[0].id, "r1")
+  assert.equal(Model.matchesForTeam(races, "unknown", "f1").length, 0)
 })
 test("matchesForTeam does not substring-match numeric ids in team names", () => {
   const sixers = {
@@ -629,8 +656,10 @@ test("interpolateLiveTime ticks the clock forward with a stoppage cap", () => {
   const fotmob = { status: "live", liveTime: tick(13), sport: "football" }
   assert.equal(Model.interpolateLiveTime(fotmob, now, now - 2.5 * 60000), tick(15))
   assert.equal(Model.interpolateLiveTime(m, now, now - 2.5 * 60000), tick(15))
-  // very stale → capped at +4
-  assert.equal(Model.interpolateLiveTime(m, now, now - 40 * 60000), tick(17))
+  // very stale → capped at +8 (long stoppage windows used to be capped at +4,
+  // which let the broadcast clock visibly stall on injuries/VAR/goal scrambles
+  // even when the provider clock was simply late).
+  assert.equal(Model.interpolateLiveTime(m, now, now - 40 * 60000), tick(21))
   // non-numeric clocks (HT, stoppage, quarters) are never guessed
   for (const t of ["HT", "45+2’", "8:44", "Q4 - 8:44", "Pen", "LIVE"]) {
     assert.equal(Model.interpolateLiveTime({ status: "live", liveTime: t, sport: "football" }, now, now - 30 * 60000), t)

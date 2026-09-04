@@ -82,6 +82,11 @@ BarWidget {
     bar: root.bar
     text: root.barDisplayLabel
     active: root.opened
+    tooltipText: root.opened
+      ? "Hide OmaSports"
+      : (root.favoriteLive
+          ? "OmaSports — " + root.favoriteSummary
+          : "Open OmaSports")
 
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.MiddleButton) root.refresh()
