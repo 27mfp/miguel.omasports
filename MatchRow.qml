@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
-import "Theme.qml" as Theme
 
 // One fixture/result row: a team-vs-team card, or an expandable F1 Grand Prix
 // weekend entry with its sessions timetable. Theme/state inputs are injected

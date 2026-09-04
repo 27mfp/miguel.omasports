@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
-import "Theme.qml" as Theme
 
 // Broadcast-style live match card with pulsing clock pill, scorecard layout
 // and game progression bar. Theme/state inputs are injected by Panel.qml.

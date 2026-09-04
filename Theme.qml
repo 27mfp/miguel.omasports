@@ -11,11 +11,10 @@ import qs.Commons
 //     own Style.cornerRadius so a row never gets more rounded than the
 //     host shell.
 //
-// Imported as a plain QtObject (no `pragma Singleton`) so the plugin
-// keeps its flat-file layout that Quickshell copies into the user's
-// plugins directory. Each consumer instantiates `Theme { id: theme }`
-// as a child of its single root Item (a sibling Theme/Item pair is a
-// QML syntax error) and references `theme.mutedColor(...)`.
+// Plain QtObject (no `pragma Singleton`) so the plugin keeps its
+// flat-file layout. Sibling QML files instantiate `Theme { id: theme }`
+// as a child of their single root Item — do not `import "Theme.qml"`
+// (that is a directory import and fails at runtime).
 QtObject {
   function mutedColor(c, a) {
     return Qt.rgba(c.r, c.g, c.b, a)

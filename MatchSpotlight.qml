@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
-import "Theme.qml" as Theme
 
 // Hero card highlighting the featured match of a followed team, or the next
 // Grand Prix weekend when the active sport is F1. Injected by Panel.qml.

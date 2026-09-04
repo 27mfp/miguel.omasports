@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import "SportsModel.js" as Model
-import "Theme.qml" as Theme
 
 // One league table row; the layout adapts per sport (football, US sports,
 // F1 drivers/constructors). Theme/state inputs are injected by Panel.qml.

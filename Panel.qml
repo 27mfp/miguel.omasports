@@ -4,7 +4,6 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "SportsModel.js" as Model
-import "Theme.qml" as Theme
 
 Panel {
   id: root
@@ -1060,7 +1059,9 @@ Panel {
                  stateBackupProc, matchOpener]
     for (var i = 0; i < procs.length; i++) {
       var w = procs[i]
-      w.handled = true
+      // NetworkProcess owns `handled`; plain Process helpers (notify-send,
+      // logo cache, xdg-open) do not — assigning it throws at runtime.
+      if ("handled" in w) w.handled = true
       if (w.running) w.running = false
     }
   }
@@ -1863,7 +1864,8 @@ Panel {
       root.applyState(str)
     }
     onLoadFailed: function(error) {
-      console.warn("omasports: state file load failed", error)
+      // 2 is a missing file (first run / reset). Anything else is a real I/O problem.
+      if (error !== 2) console.warn("omasports: state file load failed", error)
       root.applyState("")
     }
     onSaveFailed: function(error) {
