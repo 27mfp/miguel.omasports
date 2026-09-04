@@ -38,10 +38,14 @@ jobs:
           out_file=$(mktemp)
           set +e
           "$LINT" ./*.qml >"$out_file" 2>&1
-          lint_status=$?
           set -e
           cat "$out_file"
-          if [ "$lint_status" -ne 0 ] || grep -qE '^Error([: ]|$)|\[syntax\]' "$out_file"; then
+          # qmllint on ubuntu-latest exits non-zero for unresolved qs.*
+          # imports (Quickshell types are not on the CI import path). Ignore
+          # the exit code and fail only on real syntax errors: a leading
+          # "Error:" line, or "Syntax error [syntax]" (two-root documents,
+          # etc. are reported as warnings in some qmllint versions).
+          if grep -qE '^Error([: ]|$)|Syntax error \[syntax\]' "$out_file"; then
             echo "::error::qmllint reported syntax errors"
             exit 1
           fi
