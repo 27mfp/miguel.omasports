@@ -17,6 +17,17 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
 
 ## 🌟 Highlights
 
+- **🎨 Visual Semantic Color System**:
+  - Glanceable at a fraction of a second without reading numbers:
+    - 🟢 **Emerald Green (`#22c55e`)**: Wins, leading scores, positive Goal Difference (`+GD`), UEFA Champions League & NBA/NHL top playoff seeds.
+    - 🟡 **Radiant Amber (`#f59e0b`)**: Draws, tied game states, Europa League & NBA play-in tournament seeds.
+    - 🔴 **Crimson Red (`#ef4444`)**: Losses, trailing scores, negative Goal Difference (`-GD`), and league relegation danger zones.
+    - 👑 **Radiant Gold (`#eab308`)**: Formula 1 Grand Prix winners (P1) and championship gold rank badges.
+
+- **📑 Segmented Schedule Navigation (`[ All ] [ Upcoming ] [ Results ] [ News ]`)**:
+  - Fast segmented pill switcher to jump straight to recent results or breaking news wire stories without scrolling through extensive schedules.
+  - Smart accordion cap (6 upcoming games in `All` view) bringing recent results within 1 scroll.
+
 - **🔔 Native Desktop Notifications (`notify-send`)**:
   - Instant notifications on **Goals** (`⚽ GOAL! <Team>`) for your **followed teams**, with club crests and updated match scorelines.
   - Alerts when a match **kicks off live** (`● LIVE`) and a **15-minute pre-match warning** for upcoming games and F1 Grand Prix sessions.
@@ -76,6 +87,9 @@ Track real-time scores, team schedules, and standings across **Football**, **NBA
     - `omarchy-shell miguel.omasports sport f1`
     - `omarchy-shell miguel.omasports route live`
     - `omarchy-shell miguel.omasports toggleSpoiler`
+    - `omarchy-shell miguel.omasports getActiveSport`
+    - `omarchy-shell miguel.omasports setSuppressFocus true`
+    - `omarchy-shell miguel.omasports setTargetScreen HEADLESS-1`
 
 ---
 
@@ -95,7 +109,7 @@ omarchy plugin validate .
 
 # 2. Copy files to your Omarchy plugins directory
 mkdir -p "$HOME/.config/omarchy/plugins/miguel.omasports"
-cp manifest.json BarWidget.qml Panel.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml NetworkProcess.qml Theme.qml RetryTimer.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
+cp manifest.json BarWidget.qml Panel.qml PanelHeader.qml FixturesTab.qml LiveTab.qml StandingsTab.qml SettingsTab.qml NewsCard.qml MatchRow.qml LiveRow.qml StandingsRow.qml MatchSpotlight.qml TeamCrest.qml NetworkProcess.qml Theme.qml RetryTimer.qml SportsModel.js "$HOME/.config/omarchy/plugins/miguel.omasports/"
 
 # 3. Rescan and enable
 omarchy-shell shell rescanPlugins
@@ -113,6 +127,7 @@ omarchy plugin remove miguel.omasports
 ## Configure
 
 - **Sport Selector**: Switch active sport in one click (`⚽`, `🏀`, `🏎`, `🏈`, `⚾`, `🏒`).
+- **Panel Positioning**: Smart adaptive positioning (`auto`: under icon on edges, centered near middle), always anchored under bar icon (`icon`), or always centered on screen (`center`) (`settings.panelPosition`).
 - **Show Live Ticker on Bar**: Display live scores on the bar chip (`settings.showBarTicker`).
 - **Anti-Spoiler Mode**: Conceal finished match scores until clicked (`settings.antiSpoiler`).
 - **Followed Leagues**: Select up to 12 football leagues simultaneously.
@@ -135,7 +150,20 @@ Configuration is automatically saved to `~/.config/omarchy/sports-favorites.json
 
 ---
 
-## Development
+## Development & Testing
+
+### S-Tier Unified Test Runner (Run All Quality Gates)
+
+Run the full autonomous test suite in one command without stealing keyboard focus or popping up windows:
+
+```bash
+node tests/run-all.mjs           # runs unit, offline goldens, scenarios, interactions, validation, & visual diff
+node tests/run-all.mjs --quick   # rapid run (logic, interaction, and scenarios in < 7s)
+```
+
+---
+
+### Pure JS Unit Tests
 
 The data engine (`SportsModel.js`) is pure JavaScript with no QML dependencies, so the parsers are covered by a Node test suite:
 
@@ -189,11 +217,36 @@ node tests/live.mjs nhl
 node tests/live.mjs f1         # Jolpica calendar + driver/constructor standings
 ```
 
+### Autonomous Non-Interruptive Visual Testing
+
+A built-in autonomous visual test runner captures and validates rendered panel tabs in real time using Wayland `grim` and Omarchy IPC. It operates **headlessly on a virtual Wayland monitor (`HEADLESS-N`) with keyboard focus suppression**, guaranteeing zero window popups and zero focus interruptions while you work:
+
+```bash
+node tests/visual.mjs                       # captures and verifies all tabs for the active sport
+node tests/visual.mjs --sport=football --tab=all  # full suite for a sport
+node tests/visual.mjs --sport=all --tab=all       # test all 6 sports across all tabs
+node tests/visual.mjs --sport=f1 --tab=standings  # test specific view
+node tests/visual.mjs --on-screen                 # run on physical display if desired
+```
+
+Captured screenshots and a self-contained HTML gallery report are generated in `test-artifacts/visual-report.html`.
+
 QML files can be syntax-checked with `qmllint` (from `qt6-declarative`):
 
 ```bash
 qmllint *.qml
 ```
+
+---
+
+## 🤖 Agent & Developer Playbook
+
+For automated AI coding agents, contributors, and detailed architecture notes, please refer to [**AGENTS.md**](AGENTS.md) for:
+- The zero-desktop-interruption principle
+- Complete component map and IPC method contracts
+- Rate limiting rules (15s ESPN, 20s Cloudflare edge for FotMob/F1)
+- Testing recipes (unit, offline goldens, and headless visual)
+- Edge-case gotchas (routing overrides, F1 column spacing, HT score parsing)
 
 ---
 

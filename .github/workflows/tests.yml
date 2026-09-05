@@ -21,6 +21,18 @@ jobs:
       - name: Offline regression (frozen fixtures vs goldens)
         run: node tests/offline.mjs
 
+      - name: Chaos & Edge-case Scenarios
+        run: node tests/scenarios.mjs
+
+      - name: Notification & Delivery Suite
+        run: node tests/notifications.mjs
+
+      - name: Crest Resilience & Fallbacks
+        run: node tests/crest-resilience.mjs
+
+      - name: Burn-In & Memory Stability
+        run: node tests/burnin.mjs
+
   qml-syntax:
     runs-on: ubuntu-latest
     steps:

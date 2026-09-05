@@ -19,8 +19,11 @@ Item {
   property bool antiSpoiler: false
   property var revealedMatchIds: ({})
   property double nowMs: 0
+  property double fetchedAtMs: 0
   property var revealMatch: null // function(matchId)
   property var openMatch: null // function(match)
+  property string broadcast: ""
+  property var matchEvents: null
   property bool listVisible: true
   property bool rowFocused: false
 
@@ -31,6 +34,7 @@ Item {
   readonly property bool favIsHome: Model.isFollowedTeam(modelData.home && modelData.home.id, root.selectedTeamIds)
   readonly property bool favIsAway: Model.isFollowedTeam(modelData.away && modelData.away.id, root.selectedTeamIds)
   readonly property string dateBadge: Model.formatMatchDate(modelData.time)
+  readonly property string syncedLiveTime: Model.cleanLiveTime(Model.interpolateLiveTime(modelData, root.nowMs, root.fetchedAtMs)) || "LIVE"
   readonly property bool isScoreRevealed: root.revealedMatchIds[String(modelData.id)] === true
   readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
   readonly property string scoreLabel: root.scoreHidden
@@ -43,6 +47,14 @@ Item {
   property var expandedIds: ({})
   property var toggleExpand: null // function(matchId)
   readonly property bool expanded: root.expandedIds[String(modelData.id)] === true
+
+  readonly property string favTeamId: Model.teamIdForMatch(modelData, root.selectedTeamIds)
+  readonly property string favOutcome: Model.teamOutcome(modelData, favTeamId)
+  readonly property string favLiveState: Model.teamLiveState(modelData, favTeamId)
+  readonly property string generalOutcome: Model.generalMatchOutcome(modelData)
+  readonly property string ftReason: modelData.sport && modelData.sport !== "football"
+    ? (modelData.statusReason ? modelData.statusReason.toUpperCase() : "FINAL")
+    : (modelData.statusReason === "AET" ? "AET" : (modelData.statusReason === "PEN" ? "PEN" : "FT"))
 
   width: parent.width
   implicitHeight: matchCard.implicitHeight
@@ -64,13 +76,19 @@ Item {
     }
     color: matchMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
-      : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.02)
-    border.width: root.rowFocused ? 2 : 1
+      : theme.mutedColor(root.fgColor, 0.02)
+    border.width: (root.rowFocused || root.favLiveState !== "") ? 1.5 : 1
     border.color: matchMouse.containsMouse
       ? Color.accent
       : (root.rowFocused
-         ? root.urgentColor
-         : (root.isLive ? root.urgentColor : Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.06)))
+         ? Color.accent
+         : (root.favLiveState === "leading"
+            ? Util.alpha("#22c55e", 0.35)
+            : (root.favLiveState === "trailing"
+               ? Util.alpha("#ef4444", 0.35)
+               : (root.favLiveState === "tied"
+                  ? Util.alpha("#f59e0b", 0.35)
+                  : (root.isLive ? Util.alpha(Color.accent, 0.25) : theme.mutedColor(root.fgColor, 0.06))))))
 
     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
@@ -82,8 +100,14 @@ Item {
       anchors.margins: Style.space(3)
       width: Style.space(3)
       radius: width / 2
-      visible: root.isLive
-      color: root.urgentColor
+      visible: root.isLive || (root.isFinished && (root.favOutcome !== "" || (root.isF1 && Boolean(modelData.winner))))
+      color: root.isLive
+        ? (root.favLiveState === "leading" ? "#22c55e" : (root.favLiveState === "trailing" ? "#ef4444" : (root.favLiveState === "tied" ? "#f59e0b" : Color.accent)))
+        : (root.favOutcome === "win"
+           ? "#22c55e"
+           : (root.favOutcome === "loss"
+              ? "#ef4444"
+              : (root.favOutcome === "draw" ? "#f59e0b" : (root.isF1 && modelData.winner ? "#eab308" : theme.mutedColor(root.fgColor, 0.2)))))
     }
 
     // F1 Grand Prix Container Layout (with sessions dropdown)
@@ -125,7 +149,7 @@ Item {
         }
 
         Row {
-          width: parent.width - Style.space(210)
+          width: parent.width - Style.space(175)
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(8)
 
@@ -170,14 +194,28 @@ Item {
             implicitHeight: f1StatusText.implicitHeight + Style.space(4)
             radius: theme.subtleRadius(4)
             color: root.isLive
-              ? root.urgentColor
-              : (root.isFinished ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08) : Util.alpha(Color.accent, 0.15))
+              ? Util.alpha(root.urgentColor, 0.14)
+              : (root.isFinished
+                 ? (modelData.winner ? Util.alpha("#eab308", 0.18) : theme.mutedColor(root.fgColor, 0.08))
+                 : Util.alpha(Color.accent, 0.15))
+            border.width: 1
+            border.color: root.isLive
+              ? Util.alpha(root.urgentColor, 0.3)
+              : (root.isFinished
+                 ? (modelData.winner ? Util.alpha("#eab308", 0.45) : theme.mutedColor(root.fgColor, 0.12))
+                 : Util.alpha(Color.accent, 0.3))
 
             Text {
               id: f1StatusText
               anchors.centerIn: parent
-              text: root.isFinished ? "Official" : (root.isLive ? "RACE DAY" : Model.formatKickoff(modelData.time))
-              color: root.isLive ? theme.onUrgent(root.urgentColor) : (root.isFinished ? theme.mutedColor(root.fgColor, 0.65) : Color.accent)
+              text: root.isFinished
+                ? (modelData.winner ? ("🏆 " + (modelData.winner.code || modelData.winner.familyName)) : "Official")
+                : (root.isLive ? "RACE DAY" : Model.formatKickoff(modelData.time))
+              color: root.isLive
+                ? theme.onUrgent(root.urgentColor)
+                : (root.isFinished
+                   ? (modelData.winner ? "#eab308" : theme.mutedColor(root.fgColor, 0.65))
+                   : Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -207,7 +245,7 @@ Item {
         Rectangle {
           width: parent.width
           height: 1
-          color: Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.08)
+          color: theme.mutedColor(root.fgColor, 0.08)
         }
 
         Repeater {
@@ -220,7 +258,7 @@ Item {
             width: f1SessionsDropdown.width
             implicitHeight: Style.space(22)
             radius: 3
-            color: index % 2 === 1 ? Qt.rgba(root.fgColor.r, root.fgColor.g, root.fgColor.b, 0.025) : "transparent"
+            color: index % 2 === 1 ? theme.mutedColor(root.fgColor, 0.025) : "transparent"
 
             Row {
               anchors.left: parent.left
@@ -254,6 +292,9 @@ Item {
               Text {
                 width: Style.space(84)
                 text: {
+                  if (modelData.shortName === "Race" && root.modelData.winner) {
+                    return "🏆 " + (root.modelData.winner.code || root.modelData.winner.familyName)
+                  }
                   var ms = Date.parse(modelData.time)
                   var now = root.nowMs
                   if (isNaN(ms)) return ""
@@ -267,13 +308,14 @@ Item {
                   return "in " + hrs + "h " + mins + "m"
                 }
                 color: {
+                  if (modelData.shortName === "Race" && root.modelData.winner) return Color.accent
                   var ms2 = Date.parse(modelData.time)
                   if (root.nowMs >= ms2 && root.nowMs <= ms2 + 2.5 * 3600 * 1000) return root.urgentColor
                   return theme.mutedColor(root.fgColor, 0.45)
                 }
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
-                font.bold: true
+                font.bold: (modelData.shortName === "Race" && Boolean(root.modelData.winner)) || (root.nowMs >= Date.parse(modelData.time) && root.nowMs <= Date.parse(modelData.time) + 2.5 * 3600 * 1000)
                 horizontalAlignment: Text.AlignRight
                 anchors.verticalCenter: parent.verticalCenter
               }
@@ -283,101 +325,121 @@ Item {
       }
     }
 
-    // Standard Team vs Team Match Row Layout
-    Row {
+    // Modern Stacked Broadcast Match Card (Football, NBA, NFL, MLB, NHL)
+    Column {
       id: matchRowLayout
       visible: !root.isF1
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(12)
-      anchors.rightMargin: Style.space(12)
-      spacing: Style.space(6)
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(5)
 
-      Column {
-        width: Style.space(88)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 1
-
-        Text {
-          text: root.dateBadge
-          color: theme.mutedColor(root.fgColor, 0.65)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
-        }
-
-        Text {
-          text: root.isLive
-            ? ("● " + (modelData.liveTime || "LIVE"))
-            : (Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : ""))
-          color: root.isLive ? root.urgentColor : theme.mutedColor(root.fgColor, 0.40)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: root.isLive
-          elide: Text.ElideRight
-          width: parent.width
-        }
-      }
-
+      // Top Header Line: Competition name & Kickoff / Status Pill
       Item {
-        width: parent.width - Style.space(94)
-        height: Math.max(homeTeamLayout.implicitHeight, awayTeamLayout.implicitHeight, centerScoreHolder.implicitHeight)
-        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width
+        implicitHeight: Math.max(matchCompLabel.implicitHeight, matchStatusBadge.implicitHeight)
 
-        // Left Side (Home)
-        Item {
-          id: homeTeamLayout
+        Row {
+          id: matchCompLabel
           anchors.left: parent.left
-          anchors.right: centerScoreHolder.left
-          anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          implicitHeight: Math.max(homeRowCrest.height, homeTeamText.implicitHeight)
+          spacing: Style.space(6)
 
-          TeamCrest {
-            id: homeRowCrest
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            sport: modelData.sport || "football"
-            teamId: modelData.home.id
-            teamName: modelData.home.name
-            abbr: modelData.home.abbr || ""
-            source: modelData.home.logo || ""
-            crestSize: Style.space(18)
+          Text {
+            text: root.isLive && Model.formatKickoff(modelData.time)
+              ? (root.dateBadge + " · Started " + Model.formatKickoff(modelData.time))
+              : root.dateBadge
+            color: theme.mutedColor(root.fgColor, 0.65)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
           }
 
           Text {
-            id: homeTeamText
-            anchors.left: parent.left
-            anchors.right: homeRowCrest.left
-            anchors.rightMargin: Style.space(6)
-            anchors.verticalCenter: parent.verticalCenter
-            text: (root.favIsHome ? "★ " : "") + (modelData.home.name || modelData.home.shortName)
-            color: root.favIsHome ? Color.accent : root.fgColor
+            text: "·"
+            color: theme.mutedColor(root.fgColor, 0.35)
             font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
-            font.bold: root.favIsHome || (!root.scoreHidden && modelData.homeScore > modelData.awayScore)
-            horizontalAlignment: Text.AlignRight
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            text: "🏆 " + (Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : ""))
+            color: theme.mutedColor(root.fgColor, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
             elide: Text.ElideRight
+            width: Math.min(implicitWidth, matchRowLayout.width - Style.space(160))
+          }
+
+          // Broadcaster Pill
+          Rectangle {
+            visible: Boolean(root.broadcast) && (root.isUpcoming || root.isLive)
+            implicitWidth: rowBcastText.implicitWidth + Style.space(6)
+            implicitHeight: rowBcastText.implicitHeight + Style.space(2)
+            radius: theme.subtleRadius(3)
+            color: theme.mutedColor(root.fgColor, 0.05)
+            border.width: 1
+            border.color: theme.mutedColor(root.fgColor, 0.1)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Text {
+              id: rowBcastText
+              anchors.centerIn: parent
+              text: "📺 " + String(root.broadcast).toUpperCase()
+              color: root.fgColor
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
           }
         }
 
-        // Center Score
-        Item {
-          id: centerScoreHolder
-          anchors.centerIn: parent
-          // Grow with the scoreline: three-digit basketball totals would
-          // otherwise spill over the crests on both sides
-          width: Math.max(Style.space(56), scoreText.implicitWidth + (root.isLive ? Style.space(12) : Style.space(2)))
-          height: parent.height
+        // Right Status Pill (Live minute, FT, or Kickoff)
+        Rectangle {
+          id: matchStatusBadge
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          implicitWidth: statusRow.implicitWidth + Style.space(10)
+          implicitHeight: statusRow.implicitHeight + Style.space(3)
+          radius: theme.subtleRadius(4)
+          color: root.isLive
+            ? Util.alpha(root.urgentColor, 0.14)
+            : (root.isFinished
+               ? (root.scoreHidden
+                  ? theme.mutedColor(root.fgColor, 0.08)
+                  : (root.favOutcome === "win"
+                     ? Util.alpha("#22c55e", 0.16)
+                     : (root.favOutcome === "loss"
+                        ? Util.alpha("#ef4444", 0.16)
+                        : (root.favOutcome === "draw" || root.generalOutcome === "draw"
+                           ? Util.alpha("#f59e0b", 0.16)
+                           : theme.mutedColor(root.fgColor, 0.08)))))
+               : Util.alpha(Color.accent, 0.14))
+          border.width: 1
+          border.color: root.isLive
+            ? Util.alpha(root.urgentColor, 0.3)
+            : (root.isFinished
+               ? (root.scoreHidden
+                  ? theme.mutedColor(root.fgColor, 0.15)
+                  : (root.favOutcome === "win"
+                     ? Util.alpha("#22c55e", 0.45)
+                     : (root.favOutcome === "loss"
+                        ? Util.alpha("#ef4444", 0.45)
+                        : (root.favOutcome === "draw" || root.generalOutcome === "draw"
+                           ? Util.alpha("#f59e0b", 0.45)
+                           : theme.mutedColor(root.fgColor, 0.15)))))
+               : Util.alpha(Color.accent, 0.3))
 
           Row {
+            id: statusRow
             anchors.centerIn: parent
-            spacing: Style.space(3)
+            spacing: Style.space(4)
 
             Rectangle {
               visible: root.isLive
-              width: Style.space(5)
+              width: Style.space(4)
               height: width
               radius: width / 2
               color: root.urgentColor
@@ -386,59 +448,243 @@ Item {
               SequentialAnimation on opacity {
                 running: root.listVisible && root.isLive
                 loops: Animation.Infinite
-                NumberAnimation { to: 0.25; duration: 500 }
+                NumberAnimation { to: 0.2; duration: 500 }
                 NumberAnimation { to: 1.0; duration: 500 }
               }
             }
 
             Text {
-              id: scoreText
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.scoreLabel
+              text: root.isLive
+                ? root.syncedLiveTime
+                : (root.isFinished
+                    ? (root.scoreHidden
+                        ? "•••• 󰈈"
+                        : (root.favOutcome === "win"
+                           ? ("✓ WIN · " + root.ftReason)
+                           : (root.favOutcome === "loss"
+                              ? ("✕ LOSS · " + root.ftReason)
+                              : (root.favOutcome === "draw"
+                                 ? ("− DRAW · " + root.ftReason)
+                                 : (root.generalOutcome === "draw"
+                                    ? ("DRAW · " + root.ftReason)
+                                    : ("🏁 " + root.ftReason))))))
+                    : ("⏱ " + Model.formatKickoff(modelData.time)))
               color: root.isLive
                 ? root.urgentColor
-                : (root.isUpcoming ? theme.mutedColor(root.fgColor, 0.75) : root.fgColor)
+                : (root.isFinished
+                   ? (root.scoreHidden
+                      ? theme.mutedColor(root.fgColor, 0.75)
+                      : (root.favOutcome === "win"
+                         ? "#22c55e"
+                         : (root.favOutcome === "loss"
+                            ? "#ef4444"
+                            : (root.favOutcome === "draw" || root.generalOutcome === "draw"
+                               ? "#f59e0b"
+                               : theme.mutedColor(root.fgColor, 0.75)))))
+                   : Color.accent)
               font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
+              font.pixelSize: Style.font.caption
               font.bold: true
             }
           }
         }
+      }
 
-        // Right Side (Away)
+      // Middle Stacked Teams Grid
+      Column {
+        width: parent.width
+        spacing: Style.space(3)
+
+        // Home Team Row
         Item {
-          id: awayTeamLayout
-          anchors.left: centerScoreHolder.right
-          anchors.leftMargin: Style.space(8)
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          implicitHeight: Math.max(awayRowCrest.height, awayTeamText.implicitHeight)
+          width: parent.width
+          implicitHeight: Math.max(homeCrest.height, homeTeamName.implicitHeight)
 
-          TeamCrest {
-            id: awayRowCrest
+          Row {
             anchors.left: parent.left
+            anchors.right: homeScoreText.left
+            anchors.rightMargin: Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
-            sport: modelData.sport || "football"
-            teamId: modelData.away.id
-            teamName: modelData.away.name
-            abbr: modelData.away.abbr || ""
-            source: modelData.away.logo || ""
-            crestSize: Style.space(18)
+            spacing: Style.space(6)
+
+            TeamCrest {
+              id: homeCrest
+              sport: modelData.sport || "football"
+              teamId: modelData.home.id
+              teamName: modelData.home.name
+              abbr: modelData.home.abbr || ""
+              source: modelData.home.logo || ""
+              crestSize: Style.space(18)
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: homeTeamName
+              text: (root.favIsHome ? "★ " : "") + (modelData.home.name || modelData.home.shortName)
+              color: root.favIsHome ? Color.accent : root.fgColor
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              font.bold: root.favIsHome || (!root.scoreHidden && Number(modelData.homeScore) > Number(modelData.awayScore))
+              elide: Text.ElideRight
+              width: Math.min(implicitWidth, parent.width - homeCrest.width - Style.space(6) - (homeRecordText.visible ? homeRecordText.implicitWidth + Style.space(4) : 0))
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: homeRecordText
+              visible: Boolean(modelData.home && modelData.home.record)
+              text: modelData.home && modelData.home.record ? ("(" + modelData.home.record + ")") : ""
+              color: theme.mutedColor(root.fgColor, 0.45)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
 
           Text {
-            id: awayTeamText
-            anchors.left: awayRowCrest.right
-            anchors.leftMargin: Style.space(6)
+            id: homeScoreText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: (modelData.away.name || modelData.away.shortName) + (root.favIsAway ? " ★" : "")
-            color: root.favIsAway ? Color.accent : root.fgColor
+            visible: !root.isUpcoming || root.scoreHidden
+            text: root.scoreHidden
+              ? "••••"
+              : (root.isUpcoming ? "" : String(modelData.homeScore !== undefined ? modelData.homeScore : "–"))
+            color: root.scoreHidden
+              ? theme.mutedColor(root.fgColor, 0.5)
+              : (root.isLive
+                 ? (root.favLiveState === "leading" && root.favIsHome
+                    ? "#22c55e"
+                    : (root.favLiveState === "trailing" && root.favIsHome
+                       ? "#ef4444"
+                       : (Number(modelData.homeScore) > Number(modelData.awayScore)
+                          ? "#22c55e"
+                          : (Number(modelData.homeScore) < Number(modelData.awayScore) ? theme.mutedColor(root.fgColor, 0.55) : root.fgColor))))
+                 : (root.isFinished
+                    ? (Number(modelData.homeScore) > Number(modelData.awayScore)
+                       ? "#22c55e"
+                       : (Number(modelData.homeScore) === Number(modelData.awayScore)
+                          ? "#f59e0b"
+                          : theme.mutedColor(root.fgColor, 0.45)))
+                    : root.fgColor))
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
-            font.bold: root.favIsAway || (!root.scoreHidden && modelData.awayScore > modelData.homeScore)
-            horizontalAlignment: Text.AlignLeft
-            elide: Text.ElideRight
+            font.bold: true
+          }
+        }
+
+        // Away Team Row
+        Item {
+          width: parent.width
+          implicitHeight: Math.max(awayCrest.height, awayTeamName.implicitHeight)
+
+          Row {
+            anchors.left: parent.left
+            anchors.right: awayScoreText.left
+            anchors.rightMargin: Style.space(8)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(6)
+
+            TeamCrest {
+              id: awayCrest
+              sport: modelData.sport || "football"
+              teamId: modelData.away.id
+              teamName: modelData.away.name
+              abbr: modelData.away.abbr || ""
+              source: modelData.away.logo || ""
+              crestSize: Style.space(18)
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: awayTeamName
+              text: (root.favIsAway ? "★ " : "") + (modelData.away.name || modelData.away.shortName)
+              color: root.favIsAway ? Color.accent : root.fgColor
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              font.bold: root.favIsAway || (!root.scoreHidden && Number(modelData.awayScore) > Number(modelData.homeScore))
+              elide: Text.ElideRight
+              width: Math.min(implicitWidth, parent.width - awayCrest.width - Style.space(6) - (awayRecordText.visible ? awayRecordText.implicitWidth + Style.space(4) : 0))
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: awayRecordText
+              visible: Boolean(modelData.away && modelData.away.record)
+              text: modelData.away && modelData.away.record ? ("(" + modelData.away.record + ")") : ""
+              color: theme.mutedColor(root.fgColor, 0.45)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          Text {
+            id: awayScoreText
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !root.isUpcoming || root.scoreHidden
+            text: root.scoreHidden
+              ? "••••"
+              : (root.isUpcoming ? "" : String(modelData.awayScore !== undefined ? modelData.awayScore : "–"))
+            color: root.scoreHidden
+              ? theme.mutedColor(root.fgColor, 0.5)
+              : (root.isLive
+                 ? (root.favLiveState === "leading" && root.favIsAway
+                    ? "#22c55e"
+                    : (root.favLiveState === "trailing" && root.favIsAway
+                       ? "#ef4444"
+                       : (Number(modelData.awayScore) > Number(modelData.homeScore)
+                          ? "#22c55e"
+                          : (Number(modelData.awayScore) < Number(modelData.homeScore) ? theme.mutedColor(root.fgColor, 0.55) : root.fgColor))))
+                 : (root.isFinished
+                    ? (Number(modelData.awayScore) > Number(modelData.homeScore)
+                       ? "#22c55e"
+                       : (Number(modelData.awayScore) === Number(modelData.homeScore)
+                          ? "#f59e0b"
+                          : theme.mutedColor(root.fgColor, 0.45)))
+                    : root.fgColor))
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+        }
+
+        // Goal scorers summary for football
+        Item {
+          width: parent.width
+          visible: root.activeSport === "football" && !root.scoreHidden && Boolean(root.matchEvents && root.matchEvents.goals && root.matchEvents.goals.length > 0)
+          implicitHeight: visible ? (goalScorersRow.implicitHeight + Style.space(2)) : 0
+
+          Row {
+            id: goalScorersRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: Style.space(4)
+
+            Text {
+              text: "⚽"
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              width: parent.width - Style.space(20)
+              text: {
+                if (!root.matchEvents || !root.matchEvents.goals) return ""
+                var gList = []
+                for (var g = 0; g < Math.min(root.matchEvents.goals.length, 3); g++) {
+                  var gObj = root.matchEvents.goals[g]
+                  gList.push(gObj.player + " " + gObj.minute)
+                }
+                if (root.matchEvents.goals.length > 3) gList.push("+" + (root.matchEvents.goals.length - 3) + " more")
+                return gList.join(", ")
+              }
+              color: theme.mutedColor(root.fgColor, 0.55)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
         }
       }

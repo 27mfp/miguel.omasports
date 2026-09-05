@@ -28,8 +28,16 @@
         "key": "backgroundUpdates",
         "type": "boolean",
         "label": "Update in background",
-        "description": "Keep fetching matches on the refresh interval even while the panel is closed, so the bar badge shows live games. Disabled by default.",
-        "defaultValue": false
+        "description": "Keep fetching matches on the refresh interval even while the panel is closed, so the bar badge shows live games. Enabled by default.",
+        "defaultValue": true
+      },
+      {
+        "key": "panelPosition",
+        "type": "enum",
+        "label": "Panel position",
+        "description": "Where to render the sports panel relative to the bar icon. 'auto' centers if the icon is in the middle of the bar, or aligns below the icon if placed on the sides.",
+        "options": ["auto", "icon", "center"],
+        "defaultValue": "auto"
       }
     ]
   }

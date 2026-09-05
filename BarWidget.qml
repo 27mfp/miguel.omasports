@@ -15,15 +15,24 @@ BarWidget {
 
   // Glanceable state for the bar badge and ticker
   readonly property bool favoriteLive: panelLoader.item ? panelLoader.item.favoriteTeamLive === true : false
+  readonly property string favoriteLiveState: panelLoader.item ? (panelLoader.item.favoriteLiveState || "") : ""
   readonly property string favoriteSummary: panelLoader.item ? panelLoader.item.favoriteSummaryText : ""
   readonly property int liveCount: panelLoader.item ? (panelLoader.item.liveCount || 0) : 0
   readonly property string activeSportIcon: panelLoader.item ? (panelLoader.item.activeSportIcon || "⚽") : "⚽"
 
   // Settings
-  readonly property bool showBarTicker: setting("showBarTicker", true) === true
+  readonly property bool showBarTicker: {
+    if (panelLoader.item && panelLoader.item.showBarTicker !== undefined) {
+      return panelLoader.item.showBarTicker === true
+    }
+    return setting("showBarTicker", true) === true
+  }
+
+  readonly property bool vertical: root.bar ? root.bar.vertical : false
+  readonly property bool hasTicker: !vertical && showBarTicker && favoriteLive && favoriteSummary !== ""
 
   readonly property string barDisplayLabel: {
-    if (showBarTicker && favoriteLive && favoriteSummary !== "") {
+    if (hasTicker) {
       return activeSportIcon + " " + favoriteSummary
     }
     return activeSportIcon
@@ -76,12 +85,19 @@ BarWidget {
     onLoaded: root.injectPanel()
   }
 
-  BarIconButton {
+  WidgetButton {
     id: button
     anchors.fill: parent
     bar: root.bar
     text: root.barDisplayLabel
+    labelVisible: true
     active: root.opened
+    fontSize: root.hasTicker ? Style.font.bodySmall : Style.bar.iconFont
+    fixedWidth: root.hasTicker ? -1 : (root.vertical ? -1 : Style.bar.iconSlot)
+    fixedHeight: root.vertical ? Style.bar.iconSlot : -1
+    horizontalMargin: root.hasTicker ? 8.5 : 4
+    verticalPadding: 4
+    useActiveColor: root.hasTicker && root.favoriteLive
     tooltipText: root.opened
       ? "Hide OmaSports"
       : (root.favoriteLive
@@ -95,22 +111,30 @@ BarWidget {
     }
   }
 
-  // Live match indicator dot on bar icon
+  // Live match indicator dot on bar icon (only when ticker text is not shown)
   Rectangle {
     id: liveDot
-    visible: root.favoriteLive || root.liveCount > 0
+    visible: !root.hasTicker && (root.favoriteLive || root.liveCount > 0)
     anchors.bottom: parent.bottom
     anchors.right: parent.right
     anchors.margins: Math.max(1, Math.round(Style.space(1)))
     width: Style.space(7)
     height: width
     radius: width / 2
-    color: root.favoriteLive ? (root.bar ? root.bar.urgent : Color.urgent) : Color.accent
+    color: root.favoriteLive
+      ? (root.favoriteLiveState === "leading"
+         ? "#22c55e"
+         : (root.favoriteLiveState === "trailing"
+            ? "#ef4444"
+            : (root.favoriteLiveState === "tied"
+               ? "#f59e0b"
+               : (root.bar ? root.bar.urgent : Color.urgent))))
+      : Color.accent
     border.width: 1
     border.color: Qt.rgba(0, 0, 0, 0.35)
 
     SequentialAnimation on opacity {
-      running: root.favoriteLive || root.liveCount > 0
+      running: liveDot.visible
       loops: Animation.Infinite
       NumberAnimation { to: 0.3; duration: 600; easing.type: Easing.InOutSine }
       NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutSine }

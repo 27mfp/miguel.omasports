@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
@@ -15,6 +16,7 @@ Panel {
 
   property var anchorItem: null
   property bool openedFromHotkey: false
+  property bool routedExplicitly: false
 
   // Long slates (a full MLB week, an F1 season) must scroll instead of
   // stretching the card to the whole screen: cap content at ~72% of the
@@ -34,18 +36,79 @@ Panel {
   readonly property color bgColor: Color.background
   readonly property color urgentColor: root.bar && root.bar.urgent ? root.bar.urgent : Color.urgent
 
-  // Optional background polling
-  readonly property bool backgroundUpdates: setting("backgroundUpdates", false) === true
+  readonly property string userHome: {
+    var h = ""
+    try {
+      if (typeof Quickshell !== "undefined" && Quickshell && typeof Quickshell.env === "function") {
+        h = Quickshell.env("HOME") || ""
+      }
+    } catch (e) {}
+    return h || Model.safeHome()
+  }
+
+  // Optional background polling (from user favorites state or widget settings)
+  property bool backgroundUpdates: (savedState && savedState.backgroundUpdates !== undefined)
+    ? (savedState.backgroundUpdates === true)
+    : (setting("backgroundUpdates", true) === true)
+
+  function toggleBackgroundUpdates() {
+    backgroundUpdates = !backgroundUpdates
+    persistState()
+    scheduleNextPoll()
+  }
+
+  // Live score on bar and spotlight cards display preferences
+  property bool showBarTicker: (savedState && savedState.showBarTicker !== undefined)
+    ? (savedState.showBarTicker === true)
+    : (setting("showBarTicker", true) === true)
+  property bool showSpotlight: (savedState && savedState.showSpotlight !== undefined)
+    ? (savedState.showSpotlight === true)
+    : true
+
+  function toggleBarTicker() {
+    showBarTicker = !showBarTicker
+    persistState()
+  }
+
+  function toggleSpotlight() {
+    showSpotlight = !showSpotlight
+    persistState()
+  }
+
+  // Bar positioning: "auto" (render under icon if placed on edges, center if near screen center),
+  // "icon" (always anchor under the bar icon), or "center" (always center on screen)
+  readonly property string panelPositionSetting: setting("panelPosition", "auto")
+  readonly property bool shouldCenterOnBar: {
+    if (panelPositionSetting === "center") return true
+    if (panelPositionSetting === "icon" || panelPositionSetting === "anchor") return false
+    if (!panel || panel.screenW <= 0 || !root.anchorItem) return true
+    var iconCenterX = panel.anchorScreenPos.x + panel.anchorW / 2
+    var screenCenterX = panel.screenW / 2
+    return Math.abs(iconCenterX - screenCenterX) < (panel.screenW * 0.15)
+  }
 
   // Mock mode: OMASPORTS_MOCK=1 runs the whole panel on a deterministic built-in
   // simulation (no network) — live matches evolve, a goal is scored mid-session,
   // and a kickoff happens 12 minutes in. For development and UI testing.
   readonly property bool mockMode: Quickshell.env("OMASPORTS_MOCK") === "1"
 
+  // Testing & focus suppression for headless/autonomous runs
+  property bool suppressFocus: false
+  property string targetScreenName: ""
+  property var targetScreen: {
+    if (!targetScreenName) return null
+    var screens = Quickshell.screens || []
+    for (var i = 0; i < screens.length; i++) {
+      if (screens[i].name === targetScreenName) return screens[i]
+    }
+    return null
+  }
+
   // ---- Active Sport & Saved State ---------------------------------------
   property string activeSport: "football"
   readonly property var activeSportMeta: Model.sportMeta(activeSport)
   readonly property string activeSportIcon: activeSportMeta.icon
+  property string scheduleSubSection: "all"
 
   property var savedState: Model.defaultState()
   property bool stateLoaded: false
@@ -76,10 +139,28 @@ Panel {
   // Standings data
   property var lastPages: []
   property var multiSportStandings: ({})
+  property var f1RaceWinners: ({})
+  property string f1CalendarRaw: ""
 
   // Per-match enrichment for football
   property var matchDetails: ({})
   property var detailQueue: []
+
+  // Multi-feature enrichment properties
+  property var matchBroadcasts: ({})
+  property var matchLeaders: ({})
+  property var matchEvents: ({})
+  property var matchForm: ({})
+  property var matchStats: ({})
+  property var f1Podium: []
+  property var f1Pole: null
+  property var leagueNews: []
+  property bool showNewsWire: true
+
+  function toggleNewsWire() {
+    showNewsWire = !showNewsWire
+    persistState()
+  }
 
   // Crest disk-cache bookkeeping: keys already on disk are never re-downloaded
   property var knownLogoKeys: ({})
@@ -168,10 +249,19 @@ Panel {
   property var nextKickoffMatch: null
 
   function refreshDerivedLists() {
+    // Followed-team schedule (multi-competition). F1 uses the full calendar
+    // once a driver/constructor is followed: every favourite contests every GP.
+    var tm
+    if (activeSport === "f1") tm = selectedTeamIds.length > 0 ? allMatches : []
+    else if (teamMatchesRaw && teamMatchesRaw.length > 0) tm = teamMatchesRaw
+    else if (selectedTeamIds.length > 0) tm = Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
+    else tm = []
+    if (!Model.sameMatches(teamMatches, tm)) teamMatches = tm
+
     // Fixtures under the current filter
     var fx
     if (activeSport === "f1") fx = allMatches
-    else if (fixtureFilterId === "team" && selectedTeamIds.length > 0) fx = teamMatches
+    else if (fixtureFilterId === "team" && selectedTeamIds.length > 0) fx = tm
     else if (fixtureFilterId.indexOf("fav_") === 0) fx = Model.matchesForTeam(allMatches, fixtureFilterId.slice(4), activeSport)
     else if (fixtureFilterId === "all") fx = allMatches
     else fx = Model.matchesForLeague(allMatches, fixtureFilterId)
@@ -182,15 +272,6 @@ Panel {
 
     var live = Model.liveMatches(allMatches, matchDetails)
     if (!Model.sameMatches(liveList, live)) liveList = live
-
-    // Followed-team schedule (multi-competition). F1 uses the full calendar
-    // once a driver/constructor is followed: every favourite contests every GP.
-    var tm
-    if (activeSport === "f1") tm = selectedTeamIds.length > 0 ? allMatches : []
-    else if (teamMatchesRaw && teamMatchesRaw.length > 0) tm = teamMatchesRaw
-    else if (selectedTeamIds.length > 0) tm = Model.matchesForTeam(allMatches, selectedTeamIds, activeSport)
-    else tm = []
-    if (!Model.sameMatches(teamMatches, tm)) teamMatches = tm
 
     // Standings table for the active selection
     var rows = computeStandingsRows()
@@ -248,23 +329,28 @@ Panel {
 
   // ---- Tabs ---------------------------------------------------------------
   property int tabIndex: 0
+  property bool showingSettings: false
+  function toggleSettingsTab() {
+    showingSettings = !showingSettings
+  }
+
   onTabIndexChanged: {
     focusSection = 0
     if (stateLoaded) persistState()
   }
   readonly property var tabOptions: [
     { value: "team", label: "Fixtures", icon: "★" },
-    { value: "live", label: "Live", icon: "●" },
+    { value: "live", label: "Live" + (root.liveCount > 0 ? " (" + root.liveCount + ")" : ""), icon: "●" },
     { value: "table", label: "Standings", icon: "󰝘" }
   ]
   readonly property int liveCount: liveList.length
 
-  // Live 1-Second Adaptive Clock (60s while the panel is closed — enough to
-  // keep the bar ticker honest without waking the shell every second)
+  // Live Adaptive Clock: 1s with live matches for smooth clock ticks,
+  // 15s when open with no live games (saves 93% idle wakeups), 60s when closed
   property double nowMs: Date.now()
   Timer {
     id: clockTicker
-    interval: root.opened ? 1000 : 60000
+    interval: root.opened ? (root.liveCount > 0 ? 1000 : 15000) : (root.favoriteTeamLive ? 10000 : 60000)
     running: true
     repeat: true
     onTriggered: { root.nowMs = Date.now() }
@@ -437,6 +523,16 @@ Panel {
       if (teamMatches[i] && teamMatches[i].status === "live") return true
     return false
   }
+  readonly property string favoriteLiveState: {
+    if (!favoriteTeamLive) return ""
+    for (var i = 0; i < teamMatches.length; i++) {
+      var m = teamMatches[i]
+      if (m && m.status === "live") {
+        return Model.matchLiveStateForTeams(m, selectedTeamIds)
+      }
+    }
+    return ""
+  }
   readonly property string favoriteSummaryText: {
     if (selectedTeamIds.length === 0) return ""
     if (favoriteTeamLive) {
@@ -475,12 +571,23 @@ Panel {
     savedState.sport = activeSport
     restoreSportSelections()
     fixtureFilterId = activeSport === "f1" ? "all" : (selectedTeamIds.length > 0 ? "team" : "all")
+    scheduleSubSection = "all"
     persistState()
     allMatches = []
     teamMatchesRaw = []
     multiSportStandings = {}
+    f1RaceWinners = {}
+    f1CalendarRaw = ""
     lastPages = []
     matchDetails = {}
+    matchBroadcasts = {}
+    matchLeaders = {}
+    matchEvents = {}
+    matchForm = {}
+    matchStats = {}
+    f1Podium = []
+    f1Pole = null
+    leagueNews = []
     lastSeenMatches = {}
     ensureStandingsSelection()
     forceRefresh()
@@ -492,21 +599,24 @@ Panel {
       selectedLeagueIds = Model.normalizeLeagueIds(fb.leagueIds)
       selectedTeamIds = Model.normalizeTeamIds(fb.teamIds || (fb.teamId ? [fb.teamId] : []))
       standingsLeagueId = String(fb.standingsLeagueId || selectedLeagueIds[0])
-      if (fb.tab === "standings") root.tabIndex = 2
+      if (fb.tab === "settings") root.tabIndex = 3
+      else if (fb.tab === "standings") root.tabIndex = 2
       else if (fb.tab === "live") root.tabIndex = 1
       else root.tabIndex = 0
     } else if (activeSport === "f1") {
       var f1 = savedState.f1 || {}
       selectedTeamIds = Model.normalizeTeamIds(f1.teamIds || (f1.teamId ? [f1.teamId] : []))
       standingsLeagueId = String(f1.standingsGroup || "Drivers")
-      if (f1.tab === "standings") root.tabIndex = 2
+      if (f1.tab === "settings") root.tabIndex = 3
+      else if (f1.tab === "standings") root.tabIndex = 2
       else if (f1.tab === "live") root.tabIndex = 1
       else root.tabIndex = 0
     } else {
       var sp = savedState[activeSport] || {}
       selectedTeamIds = Model.normalizeTeamIds(sp.teamIds || (sp.teamId ? [sp.teamId] : []))
       standingsLeagueId = String(sp.standingsGroup || (standingsOptions.length > 0 ? standingsOptions[0].value : ""))
-      if (sp.tab === "standings") root.tabIndex = 2
+      if (sp.tab === "settings") root.tabIndex = 3
+      else if (sp.tab === "standings") root.tabIndex = 2
       else if (sp.tab === "live") root.tabIndex = 1
       else root.tabIndex = 0
     }
@@ -545,11 +655,8 @@ Panel {
   // setup editor or a non-football sport must not own keyboard stops. Rows
   // (fixtures/live cards) trail the chrome sections and open with Enter.
   readonly property var focusSections: {
-    // Keep tabs as the initial stop so ←/→ retains the documented tab switch;
-    // vertical navigation still exposes the sport selector immediately after.
-    var s = ["tabs", "sports"]
-    if (root.notificationToolAvailable) s.push("notifications")
-    s.push("spoiler", "refresh")
+    if (root.showingSettings) return ["settings"]
+    var s = ["tabs", "sports", "refresh", "settings"]
     if (root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0)) s.push("setup")
     if (root.activeSport === "football" && root.setupEditorVisible) s.push("leagues")
     if (root.setupEditorVisible) s.push("teams")
@@ -557,14 +664,13 @@ Panel {
     if (root.tabIndex === 0
         && ((root.selectedTeamIds.length > 0 && root.featuredMatch !== null)
             || (root.activeSport === "f1" && root.allMatches.length > 0))) s.push("spotlight")
-    s.push("interval")
     if (root.tabIndex === 2 && root.standingsOptions.length > 1) s.push("standings")
     return s
   }
 
-  readonly property int rowSectionCount: root.tabIndex === 0
-    ? flatFixtureRows.length
-    : (root.tabIndex === 1 ? liveList.length : 0)
+  readonly property int rowSectionCount: root.showingSettings
+    ? 0
+    : (root.tabIndex === 0 ? flatFixtureRows.length : (root.tabIndex === 1 ? liveList.length : 0))
 
   // Fixtures flattened in visual order so row focus indices map to matches
   readonly property var flatFixtureRows: {
@@ -613,8 +719,10 @@ Panel {
   }
 
   function anyPopupOpen() {
-    return (leaguePicker && leaguePicker.popupOpen) || (teamPicker && teamPicker.popupOpen) || intervalPicker.popupOpen
-      || (standingsPicker && standingsPicker.popupOpen)
+    return (panelHeader && panelHeader.anyPopupOpen)
+      || (fixturesTab && fixturesTab.anyPopupOpen)
+      || (standingsTab && standingsTab.anyPopupOpen)
+      || (settingsTab && settingsTab.anyPopupOpen)
   }
 
   function activateFocus() {
@@ -637,20 +745,18 @@ Panel {
       }
       root.switchSport(sportsList[(current + 1) % sportsList.length].value)
     } else if (name === "tabs") root.tabIndex = (root.tabIndex + 1) % root.tabOptions.length
-    else if (name === "notifications" && root.notificationToolAvailable) root.toggleNotifications()
-    else if (name === "spoiler") root.toggleSpoiler()
     else if (name === "refresh") root.refresh()
+    else if (name === "settings") root.toggleSettingsTab()
     else if (name === "setup") root.setupExpanded = !root.setupExpanded
     else if (name === "spotlight") root.activateSpotlight()
-    else if (name === "leagues" && leaguePicker) leaguePicker.toggle()
-    else if (name === "teams" && teamPicker) teamPicker.toggle()
+    else if (name === "leagues" && fixturesTab) fixturesTab.toggleLeagues()
+    else if (name === "teams" && fixturesTab) fixturesTab.toggleTeams()
     else if (name === "clear") root.clearSelectedTeam()
-    else if (name === "interval") intervalPicker.toggle()
-    else if (name === "standings" && standingsPicker) standingsPicker.toggle()
+    else if (name === "standings" && standingsTab) standingsTab.toggleStandings()
   }
 
   function activateSpotlight() {
-    var m = root.featuredMatch || (root.activeSport === "f1" ? root.allMatches[0] : null)
+    var m = root.featuredMatch || (root.activeSport === "f1" ? Model.featuredMatchForTeam(root.allMatches) : null)
     if (!m) return
     var hidden = root.antiSpoiler && m.status === "finished"
       && !(root.revealedMatchIds[String(m.id)] === true)
@@ -675,6 +781,21 @@ Panel {
   }
 
   // ---- Lifecycle -----------------------------------------------------------
+  onOpenedChanged: {
+    if (root.opened) {
+      setCenterHoverRevealSuppressed(true)
+      if (!root.routedExplicitly && root.liveCount > 0 && root.tabIndex === 0) root.tabIndex = 1
+      root.routedExplicitly = false
+      scheduleNextPoll()
+      if (root.stateLoaded && !root.loading && (needsAutoRefresh() || root.allMatches.length === 0)) root.refresh()
+      else if (!root.loading && detailQueue.length > 0) Qt.callLater(root.nextDetail)
+    } else {
+      setCenterHoverRevealSuppressed(false)
+      openedFromHotkey = false
+      scheduleNextPoll()
+    }
+  }
+
   function open() { root.openFromHotkey() }
 
   function openFromHotkey() {
@@ -682,21 +803,16 @@ Panel {
     root.controller.show()
     stateFile.reload()
     Qt.callLater(function() {
-      if (!root.opened) return
-      setCenterHoverRevealSuppressed(true)
-      // Surface live action immediately when the panel opens
-      if (root.liveCount > 0 && root.tabIndex === 0) root.tabIndex = 1
-      root.scheduleNextPoll()
-      if (root.stateLoaded && !root.loading && (needsAutoRefresh() || root.allMatches.length === 0)) root.refresh()
-      else if (!root.loading && detailQueue.length > 0) Qt.callLater(root.nextDetail)
+      if (root.opened) scheduleNextPoll()
     })
   }
 
   function close() {
     setCenterHoverRevealSuppressed(false)
     openedFromHotkey = false
-    scheduleNextPoll()
+    showingSettings = false
     root.controller.hide()
+    scheduleNextPoll()
   }
 
   function toggle() {
@@ -737,7 +853,7 @@ Panel {
   }
 
   function stateFilePath() {
-    return Model.safeHome() + "/.config/omarchy/sports-favorites.json"
+    return root.userHome + "/.config/omarchy/sports-favorites.json"
   }
 
   function applyState(raw) {
@@ -760,12 +876,24 @@ Panel {
     activeSport = String(savedState.sport || "football")
     antiSpoiler = savedState.antiSpoiler === true
     enableNotifications = savedState.notifications !== false
+    showNewsWire = savedState.showNewsWire !== false
+    if (savedState.backgroundUpdates !== undefined) {
+      backgroundUpdates = savedState.backgroundUpdates === true
+    } else {
+      backgroundUpdates = true
+    }
+    if (savedState.showBarTicker !== undefined) {
+      showBarTicker = savedState.showBarTicker === true
+    } else {
+      showBarTicker = setting("showBarTicker", true) === true
+    }
+    showSpotlight = savedState.showSpotlight !== false
     restoreSportSelections()
     stateLoaded = true
 
-    if (leaguePicker) leaguePicker.values = selectedLeagueIds
+    if (fixturesTab && fixturesTab.leaguePicker) fixturesTab.leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
-    if (!ownWrite && (root.opened || root.backgroundUpdates)) {
+    if (!ownWrite && (root.opened || root.backgroundUpdates || root.enableNotifications)) {
       espnRetryCount = 0
       f1RetryCount = 0
       root.startRound()
@@ -776,7 +904,7 @@ Panel {
 
   function persistState() {
     if (!stateLoaded) return
-    var tabName = tabIndex === 2 ? "standings" : (tabIndex === 1 ? "live" : "fixtures")
+    var tabName = tabIndex === 3 ? "settings" : (tabIndex === 2 ? "standings" : (tabIndex === 1 ? "live" : "fixtures"))
     savedState = Model.buildPersistedState(activeSport, savedState, {
       tabName: tabName,
       selectedLeagueIds: selectedLeagueIds,
@@ -784,8 +912,15 @@ Panel {
       selectedTeamName: selectedTeamName,
       standingsLeagueId: standingsLeagueId,
       antiSpoiler: antiSpoiler,
-      enableNotifications: enableNotifications
+      enableNotifications: enableNotifications,
+      backgroundUpdates: backgroundUpdates,
+      showBarTicker: showBarTicker,
+      showSpotlight: showSpotlight
     })
+    savedState.showNewsWire = showNewsWire
+    savedState.backgroundUpdates = backgroundUpdates
+    savedState.showBarTicker = showBarTicker
+    savedState.showSpotlight = showSpotlight
     ignoredStateSignature = JSON.stringify(savedState)
     persistenceError = ""
     stateFile.setText(JSON.stringify(savedState, null, 2) + "\n")
@@ -818,13 +953,14 @@ Panel {
       return
     }
     var next = Model.arrayFrom(notificationQueue)
+    if (next.length >= 5) next.splice(0, next.length - 4)
     next.push({ title: String(title || ""), body: String(body || ""), iconPath: String(iconPath || ""), urgency: String(urgency || "") })
     notificationQueue = next
     dispatchNextNotification()
   }
 
   function dispatchNextNotification() {
-    if (notifierProc.running || notificationQueue.length === 0 || !notificationToolAvailable) return
+    if (notifierProc.running || notificationPacingTimer.running || notificationQueue.length === 0 || !notificationToolAvailable) return
     var next = Model.arrayFrom(notificationQueue)
     var item = next.shift()
     notificationQueue = next
@@ -849,12 +985,13 @@ Panel {
   }
 
   function logoCacheDir() {
-    return Model.safeHome() + "/.cache/omarchy-omasports/logos/"
+    return root.userHome + "/.cache/omarchy-omasports/logos/"
   }
 
   function crestIconPath(sport, team) {
     var key = Model.crestCacheKey(sport, team && team.id ? team.id : "", team && team.abbr ? team.abbr : "")
-    return key !== "" ? logoCacheDir() + key + ".png" : ""
+    if (key === "" || !root.knownLogoKeys[key]) return ""
+    return logoCacheDir() + key + ".png"
   }
 
   function checkScoreNotifications() {
@@ -893,10 +1030,10 @@ Panel {
     var next = Model.normalizeLeagueIds(values)
     errorMessage = ""
     selectedLeagueIds = next
-    if (leaguePicker) leaguePicker.values = next
+    if (fixturesTab && fixturesTab.leaguePicker) fixturesTab.leaguePicker.values = next
     ensureStandingsSelection()
     persistState()
-    if (root.opened || root.backgroundUpdates) root.forceRefresh()
+    if (root.opened || root.backgroundUpdates || root.enableNotifications) root.forceRefresh()
   }
 
   function toggleSelectedTeam(value) {
@@ -1051,7 +1188,8 @@ Panel {
     // disk cache, and an in-flight notify-send from the previous sport queues a
     // bogus goal alert for a match the user no longer follows.
     var procs = [workerScoreboard, workerStandings, workerF1Calendar, workerF1Drivers,
-                 workerF1Constructors, workerTeam,
+                 workerF1Constructors, workerF1Winners, workerF1Podium, workerF1Pole,
+                 workerNews, workerTeam,
                  detailProcA, detailProcB, detailProcC,
                  workerA, workerB, workerC, workerD,
                  logoScanProc, logoEvictProc, logoCacheProc,
@@ -1071,6 +1209,62 @@ Panel {
     var mock = Model.mockRound(activeSport, Date.now())
     allMatches = mock.matches
     if (mock.standings && Object.keys(mock.standings).length > 0) multiSportStandings = mock.standings
+
+    leagueNews = [
+      {
+        headline: "Championship Race Tightens Ahead of Decisive Weekend Slate",
+        description: "Tactical battles, lineup rotations, and key returns set up crucial matchups across the league.",
+        published: new Date(Date.now() - 3600000 * 2).toISOString(),
+        url: "https://www.espn.com"
+      },
+      {
+        headline: "Transfer Buzz & Contract Talks Surface Before Trade Deadline",
+        description: "Front offices evaluate mid-season moves and salary cap flexibility for playoff pushes.",
+        published: new Date(Date.now() - 3600000 * 6).toISOString(),
+        url: "https://www.espn.com"
+      }
+    ]
+
+    var bcasts = {}
+    var lds = {}
+    var evs = {}
+    var fms = {}
+    var sts = {}
+    for (var mi = 0; mi < allMatches.length; mi++) {
+      var mm = allMatches[mi]
+      if (!mm) continue
+      var mid = String(mm.id)
+      bcasts[mid] = (mi % 2 === 0) ? "NBC" : "ESPN"
+      lds[mid] = [
+        { category: "PTS", player: "L. Doncic", displayValue: "34 PTS" },
+        { category: "REB", player: "D. Lively", displayValue: "12 REB" },
+        { category: "AST", player: "K. Irving", displayValue: "8 AST" }
+      ]
+      evs[mid] = {
+        goals: [
+          { minute: "23'", player: "B. Saka", isHome: true },
+          { minute: "68'", player: "K. Havertz", isHome: true }
+        ],
+        redCards: []
+      }
+      fms[mid] = { home: ["W", "W", "D", "W", "W"], away: ["W", "L", "W", "D", "L"] }
+      sts[mid] = { possession: [62, 38], xG: ["2.14", "0.52"], shotsOnTarget: [7, 2] }
+    }
+    matchBroadcasts = bcasts
+    matchLeaders = lds
+    matchEvents = evs
+    matchForm = fms
+    matchStats = sts
+
+    if (activeSport === "f1") {
+      f1Podium = [
+        { pos: 1, driverName: "Max Verstappen", code: "VER", constructorName: "Red Bull Racing", time: "1:28:45.123", points: "25" },
+        { pos: 2, driverName: "Lando Norris", code: "NOR", constructorName: "McLaren", time: "+2.418s", points: "18" },
+        { pos: 3, driverName: "Charles Leclerc", code: "LEC", constructorName: "Ferrari", time: "+8.910s", points: "15" }
+      ]
+      f1Pole = { driverName: "Lando Norris", code: "NOR", constructorName: "McLaren", lapTime: "1:26.741" }
+    }
+
     lastUpdated = new Date()
     loadedFromCache = false
     ensureStandingsSelection()
@@ -1093,6 +1287,7 @@ Panel {
     roundResults = {}
     retryCounts = {}
     scopedFootballRound = root.fastPolling && selectedTeamIds.length > 0
+    fetchLeagueNews()
 
     if (scopedFootballRound) {
       // A live followed match identifies the only league pages that need to
@@ -1193,8 +1388,9 @@ Panel {
     workerTeam.serial = root.requestSerial
     workerTeam.command = [
       "curl", "-LfsS", "--compressed", "--max-time", "12",
+      "-H", "Cache-Control: no-cache",
       "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/teams/" + encodeURIComponent(id)
+      "https://www.fotmob.com/teams/" + encodeURIComponent(id) + "?_=" + Date.now()
     ]
     workerTeam.running = true
   }
@@ -1244,8 +1440,9 @@ Panel {
     w.serial = root.requestSerial
     w.command = [
       "curl", "-LfsS", "--compressed", "--max-time", "12",
+      "-H", "Cache-Control: no-cache",
       "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/leagues/" + encodeURIComponent(w.leagueId)
+      "https://www.fotmob.com/leagues/" + encodeURIComponent(w.leagueId) + "?_=" + Date.now()
     ]
     w.running = true
   }
@@ -1334,7 +1531,9 @@ Panel {
     }
     if (pageSnapshot.length > 0 || teamMatchesRaw.length > 0) {
       var mergedMatches = Model.mergePages(pageSnapshot)
+      if (allMatches.length > 0) mergedMatches = Model.mergeMatchUpdates(allMatches, mergedMatches)
       if (teamMatchesRaw.length > 0) mergedMatches = Model.mergeMatchUpdates(mergedMatches, teamMatchesRaw)
+      mergedMatches = Model.reconcileMatchDetails(mergedMatches, matchDetails)
       if (mergedMatches.length > 0 || pageSnapshot.length > 0) allMatches = mergedMatches
       lastUpdated = new Date()
       loadedFromCache = false
@@ -1369,15 +1568,16 @@ Panel {
     workerScoreboard.serial = root.requestSerial
     workerScoreboard.sportCode = sportCode
     workerScoreboard.defaultName = defaultName
-    workerScoreboard.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard?" + dates]
+    workerScoreboard.command = ["curl", "-LfsS", "--max-time", "10", "-H", "Cache-Control: no-cache", "https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard?" + dates]
     workerScoreboard.running = true
 
     workerStandings.handled = false
     workerStandings.gotData = false
     workerStandings.serial = root.requestSerial
     workerStandings.sportCode = sportCode
-    workerStandings.command = ["curl", "-LfsS", "--max-time", "10", "https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings"]
+    workerStandings.command = ["curl", "-LfsS", "--max-time", "10", "-H", "Cache-Control: no-cache", "https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings"]
     workerStandings.running = true
+    fetchLeagueNews()
   }
 
   function resolveEspnScoreboard(raw, sportCode, defaultName) {
@@ -1391,6 +1591,23 @@ Panel {
       try { json = JSON.parse(payload) } catch (e) { json = null }
       if (Model.isEspnScoreboardPayload(json)) {
         allMatches = Model.parseEspnScoreboard(payload, sportCode, defaultName)
+        var events = Model.arrayFrom(json.events)
+        var broadcasts = Object.assign({}, matchBroadcasts)
+        var leaders = Object.assign({}, matchLeaders)
+        for (var evI = 0; evI < events.length; evI++) {
+          var evObj = events[evI]
+          if (!evObj) continue
+          var evComp = (evObj.competitions && evObj.competitions[0]) || {}
+          var evId = String(evObj.id || "")
+          if (evId) {
+            var bCast = Model.parseEspnBroadcast(evComp)
+            if (bCast) broadcasts[evId] = bCast
+            var lds = Model.parseEspnGameLeaders(evComp)
+            if (lds && lds.length > 0) leaders[evId] = lds
+          }
+        }
+        matchBroadcasts = broadcasts
+        matchLeaders = leaders
         lastUpdated = new Date()
         loadedFromCache = false
         workerScoreboard.gotData = true
@@ -1447,11 +1664,86 @@ Panel {
     workerF1Calendar.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current.json"]
     workerF1Calendar.running = true
 
-    // Jolpica documents strict rate limits — each standings table is fetched
+    // Jolpica documents strict rate limits — standings and race winners are fetched
     // once per session (they only change at race cadence) instead of on every
     // poll alongside the calendar
     f1EnsureStandings("Drivers")
     f1EnsureStandings("Constructors")
+    f1EnsureWinners()
+    f1EnsurePodium()
+    f1EnsurePole()
+    fetchLeagueNews()
+  }
+
+  function f1EnsurePodium() {
+    if (f1Podium && f1Podium.length >= 3) {
+      workerF1Podium.handled = true
+      workerF1Podium.gotData = true
+      return
+    }
+    if (workerF1Podium.running) return
+    workerF1Podium.handled = false
+    workerF1Podium.gotData = false
+    workerF1Podium.serial = root.requestSerial
+    workerF1Podium.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/last/results.json"]
+    workerF1Podium.running = true
+  }
+
+  function resolveF1Podium(raw) {
+    var pod = Model.parseF1Podium(String(raw || ""))
+    if (pod && pod.length > 0) {
+      f1Podium = pod
+      workerF1Podium.gotData = true
+    }
+  }
+
+  function f1EnsurePole() {
+    if (f1Pole) {
+      workerF1Pole.handled = true
+      workerF1Pole.gotData = true
+      return
+    }
+    if (workerF1Pole.running) return
+    workerF1Pole.handled = false
+    workerF1Pole.gotData = false
+    workerF1Pole.serial = root.requestSerial
+    workerF1Pole.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/last/qualifying.json"]
+    workerF1Pole.running = true
+  }
+
+  function resolveF1Pole(raw) {
+    var pole = Model.parseF1Pole(String(raw || ""))
+    if (pole) {
+      f1Pole = pole
+      workerF1Pole.gotData = true
+    }
+  }
+
+  function fetchLeagueNews() {
+    if (!root.showNewsWire) return
+    if (workerNews.running) return
+    var url = ""
+    if (activeSport === "football") url = "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news"
+    else if (activeSport === "f1") url = "https://site.api.espn.com/apis/site/v2/sports/racing/f1/news"
+    else if (activeSport === "nba") url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/news"
+    else if (activeSport === "nfl") url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news"
+    else if (activeSport === "mlb") url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/news"
+    else if (activeSport === "nhl") url = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/news"
+    if (!url) return
+
+    workerNews.handled = false
+    workerNews.gotData = false
+    workerNews.serial = root.requestSerial
+    workerNews.command = ["curl", "-LfsS", "--max-time", "10", url]
+    workerNews.running = true
+  }
+
+  function resolveNews(raw) {
+    var news = Model.parseEspnNews(String(raw || ""))
+    if (news && news.length > 0) {
+      leagueNews = news
+      workerNews.gotData = true
+    }
   }
 
   function f1EnsureStandings(group) {
@@ -1470,6 +1762,32 @@ Panel {
     w.running = true
   }
 
+  function f1EnsureWinners() {
+    if (f1RaceWinners && Object.keys(f1RaceWinners).length > 0) {
+      workerF1Winners.handled = true
+      workerF1Winners.gotData = true
+      return
+    }
+    if (workerF1Winners.running) return
+    workerF1Winners.handled = false
+    workerF1Winners.gotData = false
+    workerF1Winners.serial = root.requestSerial
+    workerF1Winners.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/results/1.json"]
+    workerF1Winners.running = true
+  }
+
+  function resolveF1Winners(raw) {
+    var winners = Model.parseF1SeasonWinners(String(raw || ""))
+    if (winners && Object.keys(winners).length > 0) {
+      f1RaceWinners = winners
+      if (f1CalendarRaw) {
+        allMatches = Model.parseF1Calendar(f1CalendarRaw, undefined, f1RaceWinners)
+      }
+      workerF1Winners.gotData = true
+    }
+    Qt.callLater(root.checkF1Done)
+  }
+
   function resolveF1Calendar(raw) {
     var payload = String(raw || "")
     // Valid JSON is success even if the table holds no rounds yet — same
@@ -1477,7 +1795,8 @@ Panel {
     var json = null
     try { json = JSON.parse(payload) } catch (e) { json = null }
     if (Model.isF1CalendarPayload(json)) {
-      var matches = Model.parseF1Calendar(payload)
+      f1CalendarRaw = payload
+      var matches = Model.parseF1Calendar(payload, undefined, f1RaceWinners)
       allMatches = matches
       lastUpdated = new Date()
       workerF1Calendar.gotData = true
@@ -1510,7 +1829,7 @@ Panel {
   }
 
   function checkF1Done() {
-    if (workerF1Calendar.running || workerF1Drivers.running || workerF1Constructors.running) return
+    if (workerF1Calendar.running || workerF1Drivers.running || workerF1Constructors.running || workerF1Winners.running) return
     // The calendar is the critical payload; standings tables degrade gracefully
     var calOk = workerF1Calendar.gotData
     if (!calOk && f1RetryCount < Model.MAX_ROUND_RETRIES) {
@@ -1657,19 +1976,19 @@ Panel {
     var live = Model.liveMatches(allMatches, matchDetails)
     for (var i = 0; i < live.length && wanted.length < 8; i++) {
       var lid = String(live[i].id)
-      if (!matchDetails[lid]) wanted.push(lid)
+      if (wanted.indexOf(lid) === -1) wanted.push(lid)
     }
     var source = teamMatchesRaw && teamMatchesRaw.length > 0 ? teamMatchesRaw : teamMatches
-    for (var j = 0; j < source.length && wanted.length < 16; j++) {
+    for (var j = 0; j < source.length && wanted.length < 8; j++) {
       var tid = String(source[j].id)
-      if (!matchDetails[tid] && wanted.indexOf(tid) === -1) wanted.push(tid)
+      if (wanted.indexOf(tid) === -1 && (!matchDetails[tid] || (source[j] && source[j].status === "live"))) wanted.push(tid)
     }
-    detailQueue = wanted
+    detailQueue = wanted.slice(0, 8)
     Qt.callLater(nextDetail)
   }
 
   function nextDetail() {
-    if (!root.opened && !root.backgroundUpdates) return
+    if (!root.opened && !root.backgroundUpdates && !root.enableNotifications) return
     var procs = [detailProcA, detailProcB, detailProcC]
     for (var p = 0; p < procs.length; p++) {
       var proc = procs[p]
@@ -1693,10 +2012,12 @@ Panel {
       proc.detailId = id
       proc.serial = requestSerial
       proc.handled = false
+      var bustUrl = url + (url.indexOf("?") === -1 ? "?" : "&") + "_=" + Date.now()
       proc.command = [
         "curl", "-LfsS", "--compressed", "--max-time", "8",
+        "-H", "Cache-Control: no-cache",
         "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-        url
+        bustUrl
       ]
       proc.running = true
     }
@@ -1718,32 +2039,91 @@ Panel {
           next[id] = parsed
           matchDetails = next
 
+          var props = Model.extractPageProps(raw)
+          if (props && props.content) {
+            var evs = Model.parseFotmobEvents(props.content)
+            if (evs && (evs.goals.length > 0 || evs.redCards.length > 0)) {
+              var nextEvs = {}
+              for (var k1 in matchEvents) nextEvs[k1] = matchEvents[k1]
+              nextEvs[id] = evs
+              matchEvents = nextEvs
+            }
+            if (props.content.overview && props.content.overview.teams) {
+              var form = Model.parseFotmobForm(props.content.overview.teams)
+              if (form && (form.home.length > 0 || form.away.length > 0)) {
+                var nextForm = {}
+                for (var k2 in matchForm) nextForm[k2] = matchForm[k2]
+                nextForm[id] = form
+                matchForm = nextForm
+              }
+            }
+            if (props.content.stats) {
+              var stats = Model.parseFotmobStats(props.content.stats)
+              if (stats) {
+                var nextStats = {}
+                for (var k3 in matchStats) nextStats[k3] = matchStats[k3]
+                nextStats[id] = stats
+                matchStats = nextStats
+              }
+            }
+          }
+
           // A Full-Time detail must close out the live card in both the global
           // fixture list and the followed-team schedule. Mutate the arrays in
           // place, then re-assign ONCE — a per-row in-place edit followed by
           // an immediate re-broadcast would tear the fixtures Repeater down
           // for every detail that lands during a busy Saturday afternoon.
-          if (parsed.statusLong === "Full-Time" || parsed.reason === "FT" || parsed.finished) {
-            var allNext = Model.arrayFrom(allMatches)
-            var allTouched = false
-            for (var m = 0; m < allNext.length; m++) {
-              if (String(allNext[m].id) === id && allNext[m].status === "live") {
-                allNext[m] = Object.assign({}, allNext[m], { status: "finished" })
+          var isFT = parsed.finished === true || parsed.reason === "FT" || parsed.reason === "AET" || parsed.reason === "PEN" || (parsed.statusLong && /full|extra|penalt|finish|ended/i.test(parsed.statusLong))
+          var allNext = Model.arrayFrom(allMatches)
+          var allTouched = false
+          for (var m = 0; m < allNext.length; m++) {
+            if (String(allNext[m].id) === id) {
+              var mObj = Object.assign({}, allNext[m])
+              if (isFT && mObj.status === "live") {
+                mObj.status = "finished"
+                mObj.statusReason = parsed.reason || "FT"
+                mObj.liveTime = ""
                 allTouched = true
               }
-            }
-            var teamNext = Model.arrayFrom(teamMatchesRaw)
-            var teamTouched = false
-            for (var t = 0; t < teamNext.length; t++) {
-              if (String(teamNext[t].id) === id && teamNext[t].status === "live") {
-                teamNext[t] = Object.assign({}, teamNext[t], { status: "finished" })
-                teamTouched = true
-                break
+              if (parsed.liveTime && mObj.status === "live") {
+                mObj.liveTime = parsed.liveTime
+                allTouched = true
               }
+              if (parsed.liveScore && mObj.status === "live") {
+                mObj.scoreText = parsed.liveScore
+                allTouched = true
+              }
+              allNext[m] = mObj
             }
-            if (allTouched) allMatches = allNext
-            if (teamTouched) teamMatchesRaw = teamNext
           }
+          var teamNext = Model.arrayFrom(teamMatchesRaw)
+          var teamTouched = false
+          for (var t = 0; t < teamNext.length; t++) {
+            if (String(teamNext[t].id) === id) {
+              var tObj = Object.assign({}, teamNext[t])
+              if (isFT && tObj.status === "live") {
+                tObj.status = "finished"
+                tObj.statusReason = parsed.reason || "FT"
+                tObj.liveTime = ""
+                teamTouched = true
+              }
+              if (parsed.liveTime && tObj.status === "live") {
+                tObj.liveTime = parsed.liveTime
+                teamTouched = true
+              }
+              if (parsed.liveScore && tObj.status === "live") {
+                tObj.scoreText = parsed.liveScore
+                teamTouched = true
+              }
+              teamNext[t] = tObj
+              break
+            }
+          }
+          if (allTouched) {
+            allMatches = allNext
+            checkScoreNotifications()
+          }
+          if (teamTouched) teamMatchesRaw = teamNext
         }
       } catch (e) { console.warn("omasports: detail parse failed for", id, e) }
     }
@@ -1776,7 +2156,6 @@ Panel {
       return (match.circuitName || "Circuit") + (match.locality ? " · " + match.locality : "") + (match.country ? ", " + match.country : "")
     }
     var parts = []
-    if (match.round) parts.push(match.round)
     var d = matchDetails[String(match.id)]
     if (d && d.stadium) parts.push("📍 " + d.stadium + (d.city ? ", " + d.city : ""))
     else if (match.venue) parts.push("📍 " + match.venue)
@@ -1824,6 +2203,11 @@ Panel {
     if (fastPolling) return "● LIVE · updated " + age
     if (loadedFromCache) return "Cached · updated " + age
     return "Updated " + age
+  }
+
+  readonly property string statusText: {
+    var _ = root.nowMs
+    return root.statusLine()
   }
 
   Component.onCompleted: {
@@ -1905,9 +2289,15 @@ Panel {
       root.pendingLogoKeys = []
     }
   }
+  Timer {
+    id: notificationPacingTimer
+    interval: 500
+    repeat: false
+    onTriggered: root.dispatchNextNotification()
+  }
   Process {
     id: notifierProc
-    onExited: root.dispatchNextNotification()
+    onExited: notificationPacingTimer.restart()
   }
   Process {
     id: notificationProbe
@@ -1960,6 +2350,38 @@ Panel {
 
     onOutput: function(payload) { root.resolveF1Constructors(payload) }
     onFailed: root.resolveF1Constructors("")
+  }
+
+  NetworkProcess {
+    id: workerF1Winners
+    property bool gotData: false
+
+    onOutput: function(payload) { root.resolveF1Winners(payload) }
+    onFailed: root.resolveF1Winners("")
+  }
+
+  NetworkProcess {
+    id: workerF1Podium
+    property bool gotData: false
+
+    onOutput: function(payload) { root.resolveF1Podium(payload) }
+    onFailed: root.resolveF1Podium("")
+  }
+
+  NetworkProcess {
+    id: workerF1Pole
+    property bool gotData: false
+
+    onOutput: function(payload) { root.resolveF1Pole(payload) }
+    onFailed: root.resolveF1Pole("")
+  }
+
+  NetworkProcess {
+    id: workerNews
+    property bool gotData: false
+
+    onOutput: function(payload) { root.resolveNews(payload) }
+    onFailed: root.resolveNews("")
   }
 
   // Football Workers
@@ -2092,14 +2514,40 @@ Panel {
     return false
   }
 
+  function shouldFastPoll() {
+    // Followed team is playing live
+    if (hasLiveFollowedMatch()) return true
+    // Panel is open or background monitoring active with live events
+    if ((root.opened || root.backgroundUpdates || root.enableNotifications) && root.liveCount > 0) return true
+    return false
+  }
+
+  function livePollIntervalMs() {
+    if (activeSport === "nba" || activeSport === "nfl" || activeSport === "mlb" || activeSport === "nhl") {
+      return 15000 // 15s for ESPN direct JSON API
+    }
+    return 20000   // 20s for FotMob & F1 (safe edge cache limit)
+  }
+
   function scheduleNextPoll() {
-    var wantRunning = root.opened || root.backgroundUpdates
-    fastPolling = wantRunning && hasLiveFollowedMatch()
+    var wantRunning = root.opened
+      || root.backgroundUpdates
+      || root.enableNotifications
+      || root.hasLiveFollowedMatch()
+      || root.liveCount > 0
+    fastPolling = wantRunning && (root.hasLiveFollowedMatch() || shouldFastPoll())
     if (!wantRunning) {
-      refreshTimer.running = false
+      refreshTimer.stop()
       return
     }
-    var ms = fastPolling ? 40000 : root.slowRefreshMs
+    var ms
+    if (fastPolling) {
+      ms = livePollIntervalMs()
+    } else if (root.opened) {
+      ms = Math.min(root.slowRefreshMs, 60000)
+    } else {
+      ms = root.slowRefreshMs
+    }
     root.setRefreshTimerInterval(ms)
   }
 
@@ -2118,16 +2566,20 @@ Panel {
   // before Qt honors the new value. stop()/start() is the documented way to
   // apply a fresh interval cleanly (used by scheduleNextPoll above).
   function setRefreshTimerInterval(ms) {
-    if (refreshTimer.interval === ms) return
-    refreshTimer.stop()
-    refreshTimer.interval = ms
-    if (root.opened || root.backgroundUpdates) refreshTimer.start()
+    var wantRunning = root.opened
+      || root.backgroundUpdates
+      || root.enableNotifications
+      || root.hasLiveFollowedMatch()
+      || root.liveCount > 0
+    var intervalChanged = refreshTimer.interval !== ms
+    if (intervalChanged) {
+      refreshTimer.stop()
+      refreshTimer.interval = ms
+    }
+    if (wantRunning && (!refreshTimer.running || intervalChanged)) {
+      refreshTimer.start()
+    }
   }
-
-  // onBackgroundUpdatesChanged was removed: `backgroundUpdates` is `readonly`
-  // (Quickshell settings are evaluated declaratively and don't fire change
-  // signals), so the handler was dead code that future contributors would
-  // trust. Toggling the setting requires restarting the shell.
 
   // Cap shell IPC that would otherwise spawn a curl storm (`omarchy-shell
   // miguel.omasports refresh` in a tight loop). Open/close/route stay
@@ -2150,11 +2602,53 @@ Panel {
     function toggle(): void { root.toggle() }
     function refresh(): void { if (root.ipcThrottle()) root.refresh() }
     function toggleSpoiler(): void { if (root.ipcThrottle()) root.toggleSpoiler() }
+    function toggleBarTicker(): void { if (root.ipcThrottle()) root.toggleBarTicker() }
+    function toggleSpotlight(): void { if (root.ipcThrottle()) root.toggleSpotlight() }
     function sport(name: string): void { if (root.ipcThrottle()) root.switchSport(name) }
+    function setSuppressFocus(suppress: bool): void { root.suppressFocus = suppress }
+    function setTargetScreen(screenName: string): void { root.targetScreenName = screenName }
+    function getActiveSport(): string { return root.activeSport }
+    function testNotification(): void {
+      root.sendDesktopNotification("OmaSports", "Goal and kickoff notifications are active!", "", "normal")
+    }
+    function getScheduleSection(): string { return root.scheduleSubSection }
+    function scheduleSection(sub: string): void {
+      var s = String(sub || "all").toLowerCase()
+      if (s === "recent" || s === "results") root.scheduleSubSection = "recent"
+      else if (s === "upcoming") root.scheduleSubSection = "upcoming"
+      else if (s === "news") root.scheduleSubSection = "news"
+      else root.scheduleSubSection = "all"
+      root.tabIndex = 0
+      root.showingSettings = false
+      root.routedExplicitly = true
+      if (!root.opened) root.openFromHotkey()
+    }
     function route(tabName: string): void {
-      if (tabName === "fixtures" || tabName === "team") root.tabIndex = 0
-      else if (tabName === "live") root.tabIndex = 1
-      else if (tabName === "standings" || tabName === "table") root.tabIndex = 2
+      var t = String(tabName || "").toLowerCase()
+      if (t === "settings" || t === "preferences") {
+        root.showingSettings = true
+      } else {
+        root.showingSettings = false
+        if (t === "fixtures" || t === "team") {
+          root.tabIndex = 0
+          root.scheduleSubSection = "all"
+        } else if (t === "results" || t === "recent") {
+          root.tabIndex = 0
+          root.scheduleSubSection = "recent"
+        } else if (t === "news") {
+          root.tabIndex = 0
+          root.scheduleSubSection = "news"
+        } else if (t === "upcoming") {
+          root.tabIndex = 0
+          root.scheduleSubSection = "upcoming"
+        } else if (t === "live") {
+          root.tabIndex = 1
+        } else if (t === "standings" || t === "table") {
+          root.tabIndex = 2
+        }
+      }
+      root.routedExplicitly = true
+      if (!root.opened) root.openFromHotkey()
     }
   }
 
@@ -2164,10 +2658,14 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    screen: root.targetScreen ? root.targetScreen : (panel.anchorWindow ? panel.anchorWindow.screen : null)
+    centerOnBar: root.shouldCenterOnBar || Boolean(root.targetScreenName)
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(530))
     contentHeight: panel.fittedContentHeight(Math.min(sportsColumn.implicitHeight + Style.space(16), root.maxPanelContentHeight))
+    WlrLayershell.keyboardFocus: (root.opened && !root.suppressFocus)
+      ? (panel.focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
+      : WlrKeyboardFocus.None
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -2178,7 +2676,10 @@ Panel {
         else root.moveWithin(dx)
       }
       onActivateRequested: root.activateFocus()
-      onCloseRequested: root.close()
+      onCloseRequested: {
+        if (root.showingSettings) root.showingSettings = false
+        else root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
         if (text === "r" || text === "R") root.refresh()
@@ -2206,1218 +2707,35 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            opacity: (root.loading && root.hasData && !root.anyPopupOpen()) ? 0.65 : 1.0
-            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            opacity: 1.0
 
-            // ---- Header Row ------------------------------------------------
-            Item {
-              id: headerRow
-              width: parent.width
-              implicitHeight: Math.max(headerLeft.implicitHeight, headerControls.implicitHeight)
-
-              Row {
-                id: headerLeft
-                anchors.left: parent.left
-                anchors.right: headerControls.left
-                anchors.rightMargin: Style.space(8)
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(8)
-
-                Text {
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: root.activeSportIcon
-                  font.pixelSize: Style.font.display
-                }
-
-                Column {
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Math.max(0, headerLeft.width - Style.space(36))
-                  spacing: Style.space(2)
-
-                  Text {
-                    width: parent.width
-                    text: root.activeSportMeta.label
-                    color: root.fgColor
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.heading
-                    font.bold: true
-                    elide: Text.ElideRight
-                  }
-
-                  Text {
-                    width: parent.width
-                    text: root.statusLine()
-                    color: root.errorMessage !== "" || root.persistenceError !== "" || root.dataStale
-                      ? root.urgentColor
-                      : theme.mutedColor(root.fgColor, 0.55)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    elide: Text.ElideRight
-                  }
-                }
-              }
-
-              Row {
-                id: headerControls
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(6)
-
-                // Notifications Toggle Button
-                Button {
-                  id: notifyBtn
-                  text: ""
-                  iconText: root.enableNotifications ? "󰂚" : "󰂛"
-                  selected: root.enableNotifications
-                  focusable: root.notificationToolAvailable
-                  enabled: root.notificationToolAvailable
-                  hasCursor: root.focusSection === root.sectionIndex("notifications") && root.notificationToolAvailable
-                  tooltipText: root.notificationToolAvailable
-                    ? (root.enableNotifications ? "Disable score notifications" : "Enable score notifications")
-                    : "Notifications unavailable (notify-send not found)"
-                  Accessible.role: Accessible.Button
-                  Accessible.name: notifyBtn.tooltipText
-                  accent: Color.accent
-                  foreground: root.fgColor
-                  onClicked: root.toggleNotifications()
-                }
-
-                // Anti-Spoiler Toggle Button
-                Button {
-                  id: spoilerBtn
-                  text: ""
-                  iconText: root.antiSpoiler ? "󰈉" : "󰈈"
-                  selected: root.antiSpoiler
-                  focusable: true
-                  hasCursor: root.focusSection === root.sectionIndex("spoiler")
-                  tooltipText: (root.antiSpoiler ? "Show final scores" : "Hide final scores") + " (S)"
-                  Accessible.role: Accessible.Button
-                  Accessible.name: spoilerBtn.tooltipText
-                  accent: Color.accent
-                  foreground: root.fgColor
-                  onClicked: root.toggleSpoiler()
-                }
-
-                Button {
-                  id: refreshButton
-                  text: ""
-                  iconText: "󰑐"
-                  iconSpinning: root.loading
-                  focusable: true
-                  hasCursor: root.focusSection === root.sectionIndex("refresh")
-                  tooltipText: (root.loading ? "Updating scores" : "Refresh scores") + " (R)"
-                  Accessible.role: Accessible.Button
-                  Accessible.name: refreshButton.tooltipText
-                  foreground: root.fgColor
-                  onClicked: root.refresh()
-                }
-
-                Item {
-                  width: Style.space(96)
-                  height: refreshButton.height
-
-                  Dropdown {
-                    id: intervalPicker
-                    anchors.fill: parent
-                    showLabel: false
-                    value: root.refreshIntervalLabel()
-                    options: root.refreshIntervalOptions
-                    hasCursor: root.focusSection === root.sectionIndex("interval")
-                    foreground: root.fgColor
-                    background: Color.popups.background
-                    onChanged: function(value) { root.setRefreshMinutes(value) }
-                  }
-                }
-              }
+            PanelHeader {
+              id: panelHeader
+              controller: root
             }
 
-            // Live auto-refresh hint so the interval picker's scope is clear
-            Text {
-              width: parent.width
-              visible: root.liveCount > 0
-              text: "● " + root.liveCount + " live — scores update automatically every ~40s"
-              color: root.urgentColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
-            }
-
-            // ---- Sport Selector Segmented Row -------------------------------
-            Rectangle {
-              width: parent.width
-              implicitHeight: sportSelectorRow.implicitHeight + Style.space(6)
-              radius: theme.subtleRadius(6)
-              color: theme.mutedColor(root.fgColor, 0.035)
-              border.width: 1
-              border.color: theme.mutedColor(root.fgColor, 0.08)
-
-              Row {
-                id: sportSelectorRow
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: Style.space(3)
-                spacing: Style.space(3)
-
-                Repeater {
-                  model: Model.sports()
-
-                  delegate: Rectangle {
-                    required property var modelData
-                    required property int index
-
-                    Accessible.role: Accessible.Button
-                    Accessible.name: modelData.label + (root.activeSport === modelData.value ? " (selected)" : "")
-                    width: (sportSelectorRow.width - (Model.sports().length - 1) * Style.space(3)) / Model.sports().length
-                    implicitHeight: Style.space(26)
-                    radius: theme.subtleRadius(4)
-                    color: root.activeSport === modelData.value
-                      ? Util.alpha(Color.accent, 0.20)
-                      : (sportMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.06) : "transparent")
-                    border.width: 1
-                    border.color: root.activeSport === modelData.value
-                      ? Color.accent
-                      : (sportMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.10) : "transparent")
-
-                    Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
-                    Row {
-                      anchors.centerIn: parent
-                      spacing: Style.space(4)
-
-                      Text {
-                        text: modelData.icon
-                        font.pixelSize: Style.font.caption
-                        anchors.verticalCenter: parent.verticalCenter
-                      }
-
-                      Text {
-                        text: modelData.label
-                        color: root.activeSport === modelData.value ? Color.accent : theme.mutedColor(root.fgColor, 0.75)
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: root.activeSport === modelData.value
-                        anchors.verticalCenter: parent.verticalCenter
-                      }
-                    }
-
-                    MouseArea {
-                      id: sportMouse
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.switchSport(modelData.value)
-                    }
-                  }
-                }
-              }
-            }
-
-            // ---- Tab Navigation Row -----------------------------------------
-            Item {
-              id: tabsContainer
-              width: parent.width
-              implicitHeight: tabsGroup.implicitHeight
-
-              Row {
-                id: tabsGroup
-                anchors.left: parent.left
-                spacing: Style.space(6)
-
-                Repeater {
-                  model: root.tabOptions
-
-                  delegate: Button {
-                    required property var modelData
-                    required property int index
-
-                    text: modelData.label
-                    iconText: modelData.icon
-                    selected: root.tabIndex === index
-                    hasCursor: root.focusSection === root.sectionIndex("tabs") && root.tabIndex === index && !root.anyPopupOpen()
-                    foreground: root.fgColor
-                    accent: Color.accent
-                    onClicked: {
-                      root.tabIndex = index
-                      if (index === 2) {
-                        root.ensureStandingsSelection()
-                        if (root.standingsRows.length === 0 && !root.loading) root.refresh()
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Live Match Pill
-              Rectangle {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                visible: root.liveCount > 0 && root.tabIndex !== 1
-                implicitWidth: liveRowBadge.implicitWidth + Style.space(12)
-                implicitHeight: liveRowBadge.implicitHeight + Style.space(4)
-                radius: theme.subtleRadius(4)
-                color: Util.alpha(root.urgentColor, 0.15)
-                border.width: 1
-                border.color: root.urgentColor
-
-                Row {
-                  id: liveRowBadge
-                  anchors.centerIn: parent
-                  spacing: Style.space(4)
-
-                  Rectangle {
-                    width: Style.space(5)
-                    height: width
-                    radius: width / 2
-                    color: root.urgentColor
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    SequentialAnimation on opacity {
-                      running: root.opened && root.liveCount > 0 && root.tabIndex !== 1
-                      loops: Animation.Infinite
-                      NumberAnimation { to: 0.25; duration: 500 }
-                      NumberAnimation { to: 1.0; duration: 500 }
-                    }
-                  }
-
-                  Text {
-                    text: root.liveCount + " LIVE"
-                    color: root.urgentColor
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    font.bold: true
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
-
-                MouseArea {
-                  anchors.fill: parent
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.tabIndex = 1
-                }
-              }
-            }
-
-            PanelSeparator { foreground: root.fgColor }
-
-            // ================================================================
-            // TAB 0: FIXTURES / CALENDAR (Default View)
-            // ================================================================
-            Column {
+            FixturesTab {
               id: fixturesTab
-              width: parent.width
-              spacing: Style.space(12)
-              visible: root.tabIndex === 0
-
-              // ---- Collapsible Setup Section ---------------------------------
-              Rectangle {
-                id: setupSection
-                width: parent.width
-                implicitHeight: setupCol.implicitHeight + Style.space(16)
-                radius: Style.cornerRadius
-                color: theme.mutedColor(root.fgColor, 0.02)
-                border.width: 1
-                border.color: theme.mutedColor(root.fgColor, 0.08)
-
-                Column {
-                  id: setupCol
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.margins: Style.space(12)
-                  spacing: Style.space(10)
-
-                  Item {
-                    width: parent.width
-                    implicitHeight: Math.max(setupSecHeader.implicitHeight, setupToggleBtn.implicitHeight)
-
-                    PanelSectionHeader {
-                      id: setupSecHeader
-                      anchors.left: parent.left
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: (root.activeSport === "f1"
-                        ? "FAVORITE DRIVER & PREFERENCES"
-                        : ("FOLLOWED " + root.activeSportMeta.label.toUpperCase() + (root.activeSport === "football" ? " & CLUBS" : " TEAMS")))
-                      foreground: root.fgColor
-                    }
-
-                    Button {
-                      id: setupToggleBtn
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: root.setupExpanded ? "Done" : "Edit"
-                      iconText: root.setupExpanded ? "󰅃" : "󰅀"
-                      visible: root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0)
-                      focusable: true
-                      hasCursor: root.focusSection === root.sectionIndex("setup")
-                      tooltipText: root.setupExpanded ? "Finish editing favorites" : "Edit favorites and leagues"
-                      Accessible.role: Accessible.Button
-                      Accessible.name: setupToggleBtn.tooltipText
-                      foreground: root.fgColor
-                      onClicked: root.setupExpanded = !root.setupExpanded
-                    }
-                  }
-
-                  // Collapsed Summary Row
-                  Row {
-                    width: parent.width
-                    spacing: Style.space(8)
-                    visible: !root.setupExpanded && (root.selectedTeamIds.length > 0 || (root.activeSport === "football" && root.selectedLeagueIds.length > 0))
-
-                    Rectangle {
-                      implicitWidth: summaryPillRow.implicitWidth + Style.space(14)
-                      implicitHeight: summaryPillRow.implicitHeight + Style.space(6)
-                      radius: theme.subtleRadius(4)
-                      color: summaryMouse.containsMouse
-                        ? Style.hoverFillFor(root.fgColor, Color.accent)
-                        : theme.mutedColor(root.fgColor, 0.05)
-                      border.width: 1
-                      border.color: summaryMouse.containsMouse
-                        ? Color.accent
-                        : theme.mutedColor(root.fgColor, 0.10)
-
-                      Row {
-                        id: summaryPillRow
-                        anchors.centerIn: parent
-                        spacing: Style.space(6)
-
-                        Text {
-                          visible: root.activeSport === "football"
-                          text: "🏆 " + root.selectedLeagueIds.length + " Leagues"
-                          color: root.fgColor
-                          font.family: Style.font.family
-                          font.pixelSize: Style.font.caption
-                          font.bold: true
-                        }
-
-                        Text {
-                          visible: root.activeSport === "football" && root.selectedTeamIds.length > 0
-                          text: "·"
-                          color: theme.mutedColor(root.fgColor, 0.45)
-                          font.family: Style.font.family
-                          font.pixelSize: Style.font.caption
-                        }
-
-                        Text {
-                          visible: root.selectedTeamIds.length > 0
-                          text: root.selectedTeamIds.length === 1 ? ("★ " + root.teamNameFor(root.selectedTeamIds[0])) : ("★ " + root.selectedTeamIds.length + " Followed Favorites")
-                          color: Color.accent
-                          font.family: Style.font.family
-                          font.pixelSize: Style.font.caption
-                          font.bold: true
-                        }
-                      }
-
-                      MouseArea {
-                        id: summaryMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.setupExpanded = true
-                      }
-                    }
-                  }
-
-                  // Full Editor
-                  Column {
-                    width: parent.width
-                    spacing: Style.space(10)
-                    visible: root.setupEditorVisible
-
-                    // League Picker (Football only)
-                    FocusScope {
-                      id: leagueScope
-                      width: parent.width
-                      height: leaguePicker.implicitHeight
-                      visible: root.activeSport === "football"
-
-                      MultiSelect {
-                        id: leaguePicker
-                        anchors.fill: parent
-                        label: "Followed leagues (up to 12)"
-                        values: root.selectedLeagueIds
-                        options: root.sortedLeagueOptions
-                        placeholderText: "Search leagues (e.g. Premier, La Liga, Primeira)…"
-                        emptyText: "No leagues match"
-                        noSelectionText: "Select up to 12 followed leagues"
-                        popupRowHeight: Style.space(48)
-                        popupMinHeight: Style.space(180)
-                        hasCursor: root.focusSection === root.sectionIndex("leagues")
-                        foreground: root.fgColor
-                        background: Color.popups.background
-                        onChanged: function(values) { root.setSelectedLeagues(values) }
-                      }
-                    }
-
-                    // Selected League Badges (Football only)
-                    Flow {
-                      width: parent.width
-                      spacing: Style.space(6)
-                      visible: root.activeSport === "football" && root.selectedLeagueIds.length > 0
-
-                      Repeater {
-                        model: root.selectedLeagueIds
-
-                        delegate: Rectangle {
-                          required property var modelData
-                          required property int index
-
-                          implicitWidth: chipRow.implicitWidth + Style.space(14)
-                          implicitHeight: chipRow.implicitHeight + Style.space(6)
-                          radius: theme.subtleRadius(4)
-                          color: chipMouse.containsMouse
-                            ? Style.hoverFillFor(root.fgColor, root.urgentColor)
-                            : theme.mutedColor(root.fgColor, 0.06)
-                          border.width: 1
-                          border.color: chipMouse.containsMouse
-                            ? root.urgentColor
-                            : theme.mutedColor(root.fgColor, 0.14)
-
-                          Row {
-                            id: chipRow
-                            anchors.centerIn: parent
-                            spacing: Style.space(6)
-
-                            Text {
-                              text: Model.leagueLabel(modelData)
-                              color: root.fgColor
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.caption
-                              font.bold: true
-                            }
-
-                            Text {
-                              id: leagueChipX
-                              text: "✕"
-                              color: chipMouse.containsMouse ? root.urgentColor : theme.mutedColor(root.fgColor, 0.45)
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.caption
-                              font.bold: true
-
-                              // Only the glyph deletes — an accidental tap on
-                              // the label must not unfollow a league
-                              MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -4
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                  var arr = Model.arrayFrom(root.selectedLeagueIds)
-                                  var idx = arr.indexOf(String(modelData))
-                                  if (idx !== -1) {
-                                    arr.splice(idx, 1)
-                                    root.setSelectedLeagues(arr)
-                                  }
-                                }
-                              }
-                            }
-                          }
-
-                          MouseArea {
-                            id: chipMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                          }
-                        }
-                      }
-                    }
-
-                    // Team / Driver Picker
-                    Row {
-                      width: parent.width
-                      spacing: Style.space(8)
-
-                      FocusScope {
-                        id: teamScope
-                        width: root.selectedTeamIds.length > 0 ? parent.width - clearButton.width - Style.space(8) : parent.width
-                        height: teamPicker.implicitHeight
-
-                        SearchableDropdown {
-                          id: teamPicker
-                          anchors.fill: parent
-                          label: root.activeSport === "f1" ? "Follow Favorite Drivers / Teams" : "Follow Favorite Clubs / Teams"
-                          value: ""
-                          options: root.combinedTeamOptions
-                          placeholderText: root.activeSport === "f1" ? "Search driver or constructor to follow…" : "Search team to follow…"
-                          triggerLabel: root.activeSport === "f1" ? "Add / select favorite driver" : "Add / select favorite team"
-                          emptyText: "No results match search"
-                          popupRowHeight: Style.space(48)
-                          popupMinHeight: Style.space(200)
-                          hasCursor: root.focusSection === root.sectionIndex("teams")
-                          foreground: root.fgColor
-                          background: Color.popups.background
-                          onChanged: function(value) { root.toggleSelectedTeam(value) }
-                        }
-                      }
-
-                      Button {
-                        id: clearButton
-                        visible: root.selectedTeamIds.length > 0
-                        text: ""
-                        iconText: "󰅖"
-                        bordered: true
-                        focusable: true
-                        hasCursor: root.focusSection === root.sectionIndex("clear")
-                        foreground: root.fgColor
-                        anchors.bottom: teamScope.bottom
-                        onClicked: root.clearSelectedTeam()
-                      }
-                    }
-
-                    // Followed Favorite Team Badges
-                    Flow {
-                      width: parent.width
-                      spacing: Style.space(6)
-                      visible: root.selectedTeamIds.length > 0
-
-                      Repeater {
-                        model: root.selectedTeamIds
-
-                        delegate: Rectangle {
-                          required property var modelData
-                          required property int index
-
-                          implicitWidth: favTeamChipRow.implicitWidth + Style.space(14)
-                          implicitHeight: favTeamChipRow.implicitHeight + Style.space(6)
-                          radius: theme.subtleRadius(4)
-                          color: favChipMouse.containsMouse
-                            ? Style.hoverFillFor(root.fgColor, root.urgentColor)
-                            : Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.12)
-                          border.width: 1
-                          border.color: favChipMouse.containsMouse
-                            ? root.urgentColor
-                            : Color.accent
-
-                          Row {
-                            id: favTeamChipRow
-                            anchors.centerIn: parent
-                            spacing: Style.space(6)
-
-                            Text {
-                              text: "★ " + root.teamNameFor(modelData)
-                              color: Color.accent
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.caption
-                              font.bold: true
-                            }
-
-                            Text {
-                              text: "✕"
-                              color: favChipMouse.containsMouse ? root.urgentColor : theme.mutedColor(root.fgColor, 0.45)
-                              font.family: Style.font.family
-                              font.pixelSize: Style.font.caption
-                              font.bold: true
-
-                              MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -4
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.removeSelectedTeam(modelData)
-                              }
-                            }
-                          }
-
-                          MouseArea {
-                            id: favChipMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-
-              // ---- Spotlight Featured Card ----------------------------------
-              MatchSpotlight {
-                visible: (root.selectedTeamIds.length > 0 && root.featuredMatch !== null) || (root.activeSport === "f1" && root.allMatches.length > 0)
-                featuredMatch: root.featuredMatch
-                fallbackMatch: root.activeSport === "f1" && root.allMatches.length > 0 ? root.allMatches[0] : null
-                isF1: root.activeSport === "f1"
-                activeSport: root.activeSport
-                fgColor: root.fgColor
-                urgentColor: root.urgentColor
-                selectedTeamIds: root.selectedTeamIds
-                selectedTeamName: root.selectedTeamName
-                antiSpoiler: root.antiSpoiler
-                revealedMatchIds: root.revealedMatchIds
-                favoriteDriverStanding: root.favoriteDriverStanding
-                kickoffTime: root.kickoffTime
-                matchSubline: root.matchSubline
-                openMatch: root.openMatch
-                revealMatch: root.revealMatch
-                listVisible: root.opened && root.tabIndex === 0
-                rowFocused: root.focusSection === root.sectionIndex("spotlight")
-              }
-
-              // ---- Schedule Header with Filter -----------------------------
-              Item {
-                width: parent.width
-                implicitHeight: Math.max(schedTitle.implicitHeight, fixtureFilterScope.implicitHeight)
-                visible: root.hasData
-
-                Text {
-                  id: schedTitle
-                  anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: root.activeFixtureHeader
-                  color: theme.mutedColor(root.fgColor, 0.55)
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  font.letterSpacing: 1
-                }
-
-                FocusScope {
-                  id: fixtureFilterScope
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(220)
-                  height: fixtureFilterDropdown.implicitHeight
-                  visible: root.fixtureFilterOptions.length > 1
-
-                  Dropdown {
-                    id: fixtureFilterDropdown
-                    anchors.fill: parent
-                    label: ""
-                    showLabel: false
-                    value: root.fixtureFilterId
-                    options: root.fixtureFilterOptions
-                    foreground: root.fgColor
-                    background: Color.popups.background
-                    onChanged: function(val) { root.fixtureFilterId = String(val || "all") }
-                  }
-                }
-              }
-
-              Text {
-                width: parent.width
-                visible: root.activeFixturesList.length === 0 && !root.loading
-                  && (root.hasData || root.fetchedOnce) && root.errorMessage === ""
-                text: "No matches in the next days for this selection. Use the refresh button above or press R."
-                color: theme.mutedColor(root.fgColor, 0.65)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                wrapMode: Text.WordWrap
-              }
-
-              // Inline error card: the only recovery affordance used to be
-              // discovering the tiny refresh icon in the header
-              Rectangle {
-                width: parent.width
-                implicitHeight: errorCol.implicitHeight + Style.space(16)
-                visible: root.errorMessage !== "" && !root.loading
-                radius: theme.subtleRadius(6)
-                color: Util.alpha(root.urgentColor, 0.08)
-                border.width: 1
-                border.color: Util.alpha(root.urgentColor, 0.4)
-
-                Column {
-                  id: errorCol
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.margins: Style.space(8)
-                  spacing: Style.space(8)
-
-                  Text {
-                    width: parent.width
-                    text: root.errorMessage
-                    color: root.fgColor
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.bodySmall
-                    wrapMode: Text.WordWrap
-                  }
-
-                  Row {
-                    spacing: Style.space(6)
-
-                    Button {
-                      text: "Retry"
-                      iconText: "󰑐"
-                      bordered: true
-                      foreground: root.fgColor
-                      onClicked: root.forceRefresh()
-                    }
-                  }
-                }
-              }
-
-              // First-load skeletons: an empty column on a slow network reads
-              // as broken — placeholder cards say "working" instead
-              Column {
-                width: parent.width
-                spacing: Style.space(8)
-                visible: root.loading && !root.hasData
-
-                Repeater {
-                  model: 4
-                  delegate: Rectangle {
-                    width: parent.width
-                    implicitHeight: Style.space(40)
-                    radius: theme.subtleRadius(6)
-                    color: theme.mutedColor(root.fgColor, 0.05)
-
-                    SequentialAnimation on opacity {
-                      running: root.loading && !root.hasData
-                      loops: Animation.Infinite
-                      NumberAnimation { to: 0.45; duration: 700; easing.type: Easing.InOutSine }
-                      NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }
-                    }
-                  }
-                }
-              }
-
-              Column {
-                width: parent.width
-                spacing: Style.space(12)
-
-                Repeater {
-                  model: root.matchGroups
-
-                  delegate: Column {
-                    id: groupDelegate
-                    required property var modelData
-                    required property int index
-                    // Offset of this group's first row in flatFixtureRows, so
-                    // keyboard focus indices map onto the visible cards
-                    readonly property int rowOffset: {
-                      var s = 0
-                      for (var g = 0; g < index; g++) {
-                        s += (root.matchGroups[g].matches || []).length
-                      }
-                      return s
-                    }
-                    width: parent.width
-                    spacing: Style.space(6)
-
-                    Item {
-                      width: parent.width
-                      implicitHeight: groupLabel.implicitHeight + Style.space(4)
-
-                      Text {
-                        id: groupLabel
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.label.toUpperCase()
-                        color: modelData.label === "Live Matches" ? root.urgentColor : theme.mutedColor(root.fgColor, 0.55)
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                        font.letterSpacing: 1.1
-                      }
-
-                      Rectangle {
-                        anchors.left: groupLabel.right
-                        anchors.leftMargin: Style.space(8)
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        height: 1
-                        color: theme.mutedColor(root.fgColor, 0.08)
-                      }
-                    }
-
-                    Column {
-                      width: parent.width
-                      spacing: Style.space(6)
-
-                      Repeater {
-                        model: modelData.matches
-                        delegate: MatchRow {
-                          activeSport: root.activeSport
-                          fgColor: root.fgColor
-                          urgentColor: root.urgentColor
-                          selectedTeamIds: root.selectedTeamIds
-                          antiSpoiler: root.antiSpoiler
-                          revealedMatchIds: root.revealedMatchIds
-                          nowMs: root.nowMs
-                          revealMatch: root.revealMatch
-                          openMatch: root.openMatch
-                          expandedIds: root.f1ExpandedIds
-                          toggleExpand: root.toggleF1Expand
-                          listVisible: root.opened && root.tabIndex === 0
-                          rowFocused: root.focusSection - root.focusSections.length === groupDelegate.rowOffset + index
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+              controller: root
+              visible: !root.showingSettings && root.tabIndex === 0
             }
 
-            // ================================================================
-            // TAB 1: LIVE MATCHES
-            // ================================================================
-            Column {
+            LiveTab {
               id: liveTab
-              width: parent.width
-              spacing: Style.space(10)
-              visible: root.tabIndex === 1
-
-              PanelSectionHeader {
-                text: root.liveCount > 0 ? "LIVE NOW · " + (root.liveCount === 1 ? "1 MATCH" : root.liveCount + " MATCHES") : "LIVE MATCHES"
-                foreground: root.fgColor
-              }
-
-              // Empty state
-              Rectangle {
-                width: parent.width
-                implicitHeight: noLiveCol.implicitHeight + Style.space(24)
-                visible: root.liveCount === 0
-                radius: Style.cornerRadius
-                color: theme.mutedColor(root.fgColor, 0.03)
-                border.width: 1
-                border.color: theme.mutedColor(root.fgColor, 0.08)
-
-                Column {
-                  id: noLiveCol
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.margins: Style.space(16)
-                  spacing: Style.space(8)
-
-                  Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "●"
-                    color: root.urgentColor
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.display
-                  }
-
-                  Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: (root.hasData || root.fetchedOnce)
-                      ? "No live events in progress right now for " + root.activeSportMeta.label + "."
-                      : "Load " + root.activeSportMeta.label + " schedule to see live scores."
-                    color: theme.mutedColor(root.fgColor, 0.65)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.body
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    width: parent.width
-                  }
-
-                  Rectangle {
-                    visible: root.nextKickoffText !== ""
-                    width: parent.width
-                    implicitHeight: nextCol.implicitHeight + Style.space(12)
-                    radius: theme.subtleRadius(4)
-                    color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08)
-                    border.width: 1
-                    border.color: Util.alpha(Color.accent, 0.25)
-
-                    Column {
-                      id: nextCol
-                      anchors.left: parent.left
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      anchors.margins: Style.space(8)
-                      spacing: Style.space(2)
-
-                      Text {
-                        text: "NEXT UPCOMING EVENT"
-                        color: Color.accent
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        font.bold: true
-                      }
-
-                      Text {
-                        width: parent.width
-                        text: root.nextKickoffText
-                        color: root.fgColor
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.bodySmall
-                        font.bold: true
-                        elide: Text.ElideRight
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Live Match Cards
-              Column {
-                width: parent.width
-                spacing: Style.space(10)
-
-                Repeater {
-                  model: root.liveList
-                  delegate: LiveRow {
-                    activeSport: root.activeSport
-                    activeSportIcon: root.activeSportIcon
-                    fgColor: root.fgColor
-                    urgentColor: root.urgentColor
-                    matchDetails: root.matchDetails
-                    matchSubline: root.matchSubline
-                    openMatch: root.openMatch
-                    nowMs: root.nowMs
-                    fetchedAtMs: root.lastUpdated.getTime()
-                    listVisible: root.opened && root.tabIndex === 1
-                    rowFocused: root.focusSection - root.focusSections.length === index
-                  }
-                }
-              }
+              controller: root
+              visible: !root.showingSettings && root.tabIndex === 1
             }
 
-            // ================================================================
-            // TAB 2: STANDINGS TABLE
-            // ================================================================
-            Column {
-              id: tableTab
-              width: parent.width
-              spacing: Style.space(10)
-              visible: root.tabIndex === 2
+            StandingsTab {
+              id: standingsTab
+              controller: root
+              visible: !root.showingSettings && root.tabIndex === 2
+            }
 
-              Item {
-                width: parent.width
-                implicitHeight: Math.max(tableTitle.implicitHeight, standingsScope.implicitHeight)
-
-                Text {
-                  id: tableTitle
-                  anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: root.activeSportMeta.label.toUpperCase() + " STANDINGS"
-                  color: theme.mutedColor(root.fgColor, 0.55)
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  font.letterSpacing: 1
-                }
-
-                FocusScope {
-                  id: standingsScope
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(230)
-                  height: standingsPicker.implicitHeight
-                  visible: root.standingsOptions.length > 1
-
-                  Dropdown {
-                    id: standingsPicker
-                    anchors.fill: parent
-                    label: ""
-                    showLabel: false
-                    value: root.standingsLeagueId
-                    options: root.standingsOptions
-                    hasCursor: root.focusSection === root.sectionIndex("standings")
-                    foreground: root.fgColor
-                    background: Color.popups.background
-                    onChanged: function(value) { root.setStandingsLeague(value) }
-                  }
-                }
-              }
-
-              Text {
-                width: parent.width
-                visible: root.standingsRows.length === 0 && !root.loading
-                text: root.hasData
-                  ? "No standings available for this selection."
-                  : "No standings yet — use the refresh button above or press R."
-                color: theme.mutedColor(root.fgColor, 0.65)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                wrapMode: Text.WordWrap
-              }
-
-              // Table Card Container
-              Rectangle {
-                width: parent.width
-                implicitHeight: tableCardCol.implicitHeight + Style.space(16)
-                visible: root.standingsRows.length > 0
-                radius: Style.cornerRadius
-                color: theme.mutedColor(root.fgColor, 0.02)
-                border.width: 1
-                border.color: theme.mutedColor(root.fgColor, 0.08)
-
-                Column {
-                  id: tableCardCol
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.margins: Style.space(8)
-                  spacing: Style.space(2)
-
-                  // Table Header adapted by Sport
-                  Item {
-                    width: parent.width
-                    implicitHeight: Style.space(20)
-
-                    // Football Header
-                    Row {
-                      visible: root.activeSport === "football"
-                      width: parent.width
-                      anchors.leftMargin: Style.space(6)
-                      anchors.rightMargin: Style.space(6)
-
-                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-                      Text { width: parent.width - Style.space(216); text: "CLUB"; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(26); text: "P"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(26); text: "D"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(32); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(32); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    }
-
-                    // NBA / NHL / MLB / NFL Header
-                    Row {
-                      visible: root.activeSport === "nba" || root.activeSport === "nhl" || root.activeSport === "mlb" || root.activeSport === "nfl"
-                      width: parent.width
-                      anchors.leftMargin: Style.space(6)
-                      anchors.rightMargin: Style.space(6)
-
-                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-                      Text { width: parent.width - Style.space(190); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(36); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(34); text: root.activeSport === "mlb" ? "GB" : "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(36); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    }
-
-                    // F1 Drivers Header
-                    Row {
-                      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Drivers" || root.standingsLeagueId === "" || root.standingsLeagueId.indexOf("Construct") === -1)
-                      width: parent.width
-                      anchors.leftMargin: Style.space(6)
-                      anchors.rightMargin: Style.space(6)
-
-                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-                      Text { width: Style.space(160); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: parent.width - Style.space(290); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(36); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(52); text: "POINTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    }
-
-                    // F1 Constructors Header
-                    Row {
-                      visible: root.activeSport === "f1" && (root.standingsLeagueId === "Constructors" || root.standingsLeagueId.indexOf("Construct") !== -1)
-                      width: parent.width
-                      anchors.leftMargin: Style.space(6)
-                      anchors.rightMargin: Style.space(6)
-
-                      Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-                      Text { width: Style.space(170); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: parent.width - Style.space(300); text: "COUNTRY"; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(36); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                      Text { width: Style.space(52); text: "POINTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-                    }
-                  }
-
-                  Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: theme.mutedColor(root.fgColor, 0.08)
-                  }
-
-                  // Table Rows
-                  Column {
-                    width: parent.width
-                    spacing: 0
-
-                    Repeater {
-                      model: root.standingsRows
-                      delegate: StandingsRow {
-                        activeSport: root.activeSport
-                        standingsLeagueId: root.standingsLeagueId
-                        selectedTeamIds: root.selectedTeamIds
-                        selectedTeamName: root.selectedTeamName
-                        fgColor: root.fgColor
-                        urgentColor: root.urgentColor
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Legend
-              Row {
-                visible: root.standingsRows.length > 0
-                spacing: Style.space(16)
-                anchors.left: parent.left
-                anchors.leftMargin: Style.space(4)
-
-                Row {
-                  spacing: Style.space(5)
-                  Rectangle {
-                    width: Style.space(8)
-                    height: Style.space(8)
-                    radius: 2
-                    color: Color.accent
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                  Text {
-                    text: root.activeSport === "f1" ? "Podium / P1" : "Playoffs / Europe"
-                    color: theme.mutedColor(root.fgColor, 0.55)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
-
-                Row {
-                  visible: root.standingsHasPlayin
-                  spacing: Style.space(5)
-                  Rectangle {
-                    width: Style.space(8)
-                    height: Style.space(8)
-                    radius: 2
-                    color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.08)
-                    border.width: 1
-                    border.color: Util.alpha(Color.accent, 0.35)
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                  Text {
-                    text: root.activeSport === "f1" ? "Podium places" : "Play-in"
-                    color: theme.mutedColor(root.fgColor, 0.55)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
-
-                Row {
-                  spacing: Style.space(5)
-                  Text {
-                    text: "★"
-                    color: Color.accent
-                    font.pixelSize: Style.font.caption
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                  Text {
-                    text: "Favorite"
-                    color: theme.mutedColor(root.fgColor, 0.55)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
-
-                // Relegation/danger zones were previously encoded by red fill
-                // alone — document the third zone so the encoding is readable
-                Row {
-                  visible: root.activeSport === "football"
-                  spacing: Style.space(5)
-                  Rectangle {
-                    width: Style.space(8)
-                    height: Style.space(8)
-                    radius: 2
-                    color: root.urgentColor
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                  Text {
-                    text: "Relegation"
-                    color: theme.mutedColor(root.fgColor, 0.55)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
-              }
+            SettingsTab {
+              id: settingsTab
+              controller: root
+              visible: root.showingSettings
             }
           }
         }

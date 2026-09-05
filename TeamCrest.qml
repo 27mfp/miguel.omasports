@@ -26,26 +26,24 @@ Item {
 
   Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
+  readonly property string userHome: {
+    var h = ""
+    try {
+      if (typeof Quickshell !== "undefined" && Quickshell && typeof Quickshell.env === "function") {
+        h = Quickshell.env("HOME") || ""
+      }
+    } catch (e) {}
+    return h || Model.safeHome()
+  }
+
   // Cache keys are resolved by Model.crestCacheKey so the panel's background
   // downloader and this component always agree on the same file name.
   readonly property string cacheKey: Model.crestCacheKey(sport, teamId, abbr)
   readonly property string localCachePath: cacheKey !== ""
-    ? "file://" + Quickshell.env("HOME") + "/.cache/omarchy-omasports/logos/" + cacheKey + ".png"
+    ? "file://" + userHome + "/.cache/omarchy-omasports/logos/" + cacheKey + ".png"
     : ""
 
-  readonly property string monogramText: {
-    var abbreviation = root.abbr.trim()
-    if (abbreviation) {
-      return abbreviation.substring(0, 3).toUpperCase()
-    }
-    var name = root.teamName.trim()
-    if (!name) return "?"
-    var parts = name.split(/\s+/)
-    if (parts.length >= 2) {
-      return String(parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase()
-    }
-    return name.slice(0, 2).toUpperCase()
-  }
+  readonly property string monogramText: Model.monogramText(root.abbr, root.teamName)
 
   // Circular Monogram Fallback (visible until local or remote image is ready)
   Rectangle {
@@ -53,9 +51,9 @@ Item {
     anchors.fill: parent
     radius: width / 2
     visible: localImg.status !== Image.Ready && remoteImg.status !== Image.Ready
-    color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
+    color: Util.alpha(root.accent, 0.16)
     border.width: 1
-    border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.45)
+    border.color: Util.alpha(root.accent, 0.45)
 
     Text {
       anchors.centerIn: parent

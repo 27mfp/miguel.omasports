@@ -15,12 +15,17 @@ const exported = [
   "f1CountryFlag", "f1DriverFlag", "parseF1Calendar", "parseF1DriverStandings",
   "parseF1ConstructorStandings", "parseScore", "parseMatch", "parseDetails",
   "parseStandings", "zoneFromLegend", "mergePages", "mergeMatchUpdates", "mergeLeaguePages", "isTeamPagePayload", "teamOptionsForSport",
-  "matchesForTeam", "matchesForLeague", "featuredMatchForTeam", "teamIdForMatch", "teamOutcome", "teamOutcomeForTeams", "isFollowedTeam", "isStandingsRowFavorite",
+  "matchesForTeam", "matchesForLeague", "featuredMatchForTeam", "teamIdForMatch", "teamOutcome", "teamOutcomeForTeams", "matchOutcomeForTeams", "teamLiveState", "teamLiveStateForTeams", "matchLiveStateForTeams", "generalMatchOutcome", "isFollowedTeam", "isStandingsRowFavorite",
   "groupMatches", "formatMatchDate", "matchStatusText", "leagueLabel", "isTrustedCrestUrl", "matchExternalUrl", "matchDetailUrl",
   "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime",
   "sameMatches", "sameRows", "sameGroups", "diffMatchNotifications", "buildPersistedState", "parseLeaguePage", "parseTeamPage",
   "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS", "dictSet", "dictDelete",
-  "safeHome", "clampRefreshMinutes", "MAX_ROUND_RETRIES", "RETRY_DELAY_MS", "MIN_REFRESH_MINUTES", "MAX_REFRESH_MINUTES", "REFRESH_OPTIONS"
+  "safeHome", "clampRefreshMinutes", "MAX_ROUND_RETRIES", "RETRY_DELAY_MS", "MIN_REFRESH_MINUTES", "MAX_REFRESH_MINUTES", "REFRESH_OPTIONS",
+  "monogramText", "parseF1SeasonWinners", "nextF1Session",
+  "parseEspnBroadcast", "parseEspnGameLeaders", "parseEspnNews",
+  "parseFotmobEvents", "parseFotmobForm", "parseFotmobStats",
+  "parseF1Podium", "parseF1Pole", "formatLiveClock", "cleanLiveTime", "resetLiveClockCache",
+  "reconcileMatchDetails", "extractPageProps"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -95,6 +100,25 @@ test("us sports key by abbreviation, falling back to id", () => {
 test("sanitizes unsafe characters and returns empty without identity", () => {
   assert.equal(Model.crestCacheKey("nba", "12", "LAC/evil"), "nba-lacevil")
   assert.equal(Model.crestCacheKey("football", "", ""), "")
+})
+
+// ---------------------------------------------------------------- monogram text
+console.log("monogramText")
+test("prefers abbreviation up to 3 chars uppercase", () => {
+  assert.equal(Model.monogramText("LAL", "Los Angeles Lakers"), "LAL")
+  assert.equal(Model.monogramText("gsw", "Golden State Warriors"), "GSW")
+  assert.equal(Model.monogramText("ARSENAL", "Arsenal"), "ARS")
+})
+test("falls back to initials for multi-word club names", () => {
+  assert.equal(Model.monogramText("", "Real Madrid"), "RM")
+  assert.equal(Model.monogramText("", "FC Porto"), "FP")
+  assert.equal(Model.monogramText("", "Sporting CP"), "SC")
+})
+test("falls back to first 2 letters for single-word names or question mark if empty", () => {
+  assert.equal(Model.monogramText("", "Benfica"), "BE")
+  assert.equal(Model.monogramText("", "Arsenal"), "AR")
+  assert.equal(Model.monogramText("", ""), "?")
+  assert.equal(Model.monogramText(null, undefined), "?")
 })
 
 // ---------------------------------------------------------------- espn dates
@@ -190,6 +214,7 @@ test("persistState shape round-trips exactly (applyState signature check)", () =
     standingsLeagueId: "61", tabName: "live" })
   assert.equal(JSON.stringify(Model.parseState(JSON.stringify(saved2))), JSON.stringify(saved2))
   assert.equal(saved2.football.tab, "live")
+  assert.deepEqual(saved2.football.leagueIds, ["61"])
 })
 
 test("parseLeaguePage returns null for bot-wall / consent HTML", () => {
@@ -488,6 +513,27 @@ test("teamOutcome computes win/draw/loss for a team", () => {
   assert.equal(Model.teamOutcome(sampleMatches[2], "9772"), "win")
   assert.equal(Model.teamOutcome(sampleMatches[2], "w1"), "loss")
   assert.equal(Model.teamOutcome(sampleMatches[0], "x1"), "")
+  assert.equal(Model.matchOutcomeForTeams(sampleMatches[2], ["9772"]), "win")
+})
+test("generalMatchOutcome derives decisive winner or draw", () => {
+  assert.equal(Model.generalMatchOutcome(sampleMatches[2]), "away")
+  const homeWin = { ...sampleMatches[2], homeScore: "3", awayScore: "1" }
+  assert.equal(Model.generalMatchOutcome(homeWin), "home")
+  const drawn = { ...sampleMatches[2], homeScore: "2", awayScore: "2" }
+  assert.equal(Model.generalMatchOutcome(drawn), "draw")
+  assert.equal(Model.generalMatchOutcome(sampleMatches[0]), "")
+})
+test("teamLiveState computes leading/tied/trailing for live matches", () => {
+  const liveMatch = { ...sampleMatches[1], status: "live", homeScore: 2, awayScore: 1 }
+  assert.equal(Model.teamLiveState(liveMatch, "9772"), "leading")
+  assert.equal(Model.teamLiveState(liveMatch, "z1"), "trailing")
+  assert.equal(Model.matchLiveStateForTeams(liveMatch, ["9772"]), "leading")
+  assert.equal(Model.matchLiveStateForTeams(liveMatch, ["z1"]), "trailing")
+
+  const liveTied = { ...liveMatch, homeScore: 1, awayScore: 1 }
+  assert.equal(Model.teamLiveState(liveTied, "9772"), "tied")
+  assert.equal(Model.matchLiveStateForTeams(liveTied, ["9772"]), "tied")
+  assert.equal(Model.matchLiveStateForTeams(sampleMatches[0], ["9772"]), "")
 })
 test("groupMatches buckets live/upcoming/recent and caps recent at 10", () => {
   const many = Array.from({ length: 15 }, (_, i) => ({ ...sampleMatches[2], id: "r" + i, time: new Date(Date.parse("2026-01-01T10:00:00Z") + i * 3600000).toISOString() }))
@@ -515,12 +561,77 @@ test("merge helpers replace stale matches and league pages", () => {
   const matches = Model.mergeMatchUpdates(sampleMatches, [updated])
   assert.equal(matches.length, 3)
   assert.equal(matches.find(m => m.id === "b").homeScore, 4)
+
+  // Live match clock monotonicity: a stale team page SSR cache with 1'
+  // must never overwrite an already advanced live match clock (e.g. 47' or HT)
+  const advancedMatch = { id: "live1", status: "live", liveTime: "47’", homeScore: 0, awayScore: 2, scoreText: "0–2" }
+  const staleSsrMatch = { id: "live1", status: "live", liveTime: "1’", homeScore: 0, awayScore: 0, scoreText: "0–0" }
+  const mergedLive = Model.mergeMatchUpdates([advancedMatch], [staleSsrMatch])
+  assert.equal(mergedLive[0].liveTime, "47’", "stale 1' SSR clock regressed live time")
+  assert.equal(mergedLive[0].scoreText, "0–2", "stale score regressed live score")
+
+  // Finished match preservation: once a match finishes, an incoming stale poll
+  // reporting it as live or upcoming must NEVER revert it back to live
+  const finishedMatch = { id: "ft1", status: "finished", statusReason: "FT", scoreText: "2–1", homeScore: 2, awayScore: 1, liveTime: "" }
+  const staleLiveMatch = { id: "ft1", status: "live", liveTime: "75’", scoreText: "1–1", homeScore: 1, awayScore: 1 }
+  const mergedFinished = Model.mergeMatchUpdates([finishedMatch], [staleLiveMatch])
+  assert.equal(mergedFinished[0].status, "finished", "finished match reverted to live")
+  assert.equal(mergedFinished[0].statusReason, "FT", "statusReason lost")
+  assert.equal(mergedFinished[0].liveTime, "", "liveTime restored on finished match")
+  assert.equal(mergedFinished[0].scoreText, "2–1", "score regressed on finished match")
+
   const oldPage = { league: { id: "47" }, matches: [sampleMatches[1]], standings: [] }
   const newPage = { league: { id: "47" }, matches: [updated], standings: [{ pos: "1" }] }
   const pages = Model.mergeLeaguePages([oldPage], [newPage])
   assert.equal(pages.length, 1)
   assert.equal(pages[0].matches[0].homeScore, 4)
   assert.equal(pages[0].standings.length, 1)
+})
+test("reconcileMatchDetails transitions FT, AET, PEN and enforces wall-clock cutoff", () => {
+  const liveMatch = { id: "m1", status: "live", liveTime: "75’", scoreText: "2–2", sport: "football" }
+  const detailsFT = { m1: { finished: true, reason: "FT", statusLong: "Full-Time" } }
+  const rec1 = Model.reconcileMatchDetails([liveMatch], detailsFT)
+  assert.equal(rec1[0].status, "finished")
+  assert.equal(rec1[0].statusReason, "FT")
+  assert.equal(rec1[0].liveTime, "")
+
+  // Extra time / penalties
+  const liveCup = { id: "m2", status: "live", liveTime: "120’", scoreText: "1–1", sport: "football" }
+  const detailsPEN = { m2: { finished: true, reason: "PEN", statusLong: "Penalties" } }
+  const rec2 = Model.reconcileMatchDetails([liveCup], detailsPEN)
+  assert.equal(rec2[0].status, "finished")
+  assert.equal(rec2[0].statusReason, "PEN")
+
+  // Wall-clock cutoff: match kicked off 180 minutes ago
+  const oldKickoff = new Date(Date.now() - 180 * 60 * 1000).toISOString()
+  const ancientLive = { id: "m3", status: "live", liveTime: "80’", scoreText: "0–0", sport: "football", time: oldKickoff }
+  const rec3 = Model.reconcileMatchDetails([ancientLive], {})
+  assert.equal(rec3[0].status, "finished")
+  assert.equal(rec3[0].statusReason, "FT")
+  assert.equal(rec3[0].liveTime, "")
+})
+test("liveMatches excludes matches past wall-clock cutoff and respects AET/PEN", () => {
+  const now = Date.now()
+  const oldKickoff = new Date(now - 180 * 60 * 1000).toISOString()
+  const freshKickoff = new Date(now - 30 * 60 * 1000).toISOString()
+  const stale = { id: "s1", status: "live", time: oldKickoff, sport: "football" }
+  const active = { id: "a1", status: "live", time: freshKickoff, sport: "football" }
+  const pen = { id: "p1", status: "live", time: freshKickoff, sport: "football" }
+
+  const details = { p1: { reason: "PEN", finished: true } }
+  const live = Model.liveMatches([stale, active, pen], details)
+  assert.equal(live.length, 1)
+  assert.equal(live[0].id, "a1")
+})
+test("extractPageProps supports both HTML Next.js scripts and direct JSON", () => {
+  const html = '<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"details":{"name":"EPL"}}}}</script>'
+  assert.equal(Model.extractPageProps(html).details.name, "EPL")
+
+  const jsonStr = JSON.stringify({ details: { name: "La Liga" } })
+  assert.equal(Model.extractPageProps(jsonStr).details.name, "La Liga")
+
+  const jsonObj = { details: { name: "Serie A" } }
+  assert.equal(Model.extractPageProps(jsonObj).details.name, "Serie A")
 })
 test("matchStatusText and shortTournamentName", () => {
   assert.equal(Model.matchStatusText({ status: "finished" }), "FT")
@@ -659,7 +770,9 @@ test("interpolateLiveTime ticks the clock forward with a stoppage cap", () => {
   // very stale → capped at +8 (long stoppage windows used to be capped at +4,
   // which let the broadcast clock visibly stall on injuries/VAR/goal scrambles
   // even when the provider clock was simply late).
-  assert.equal(Model.interpolateLiveTime(m, now, now - 40 * 60000), tick(21))
+  // stoppage boundary caps: 43' + 4m drift caps at 45', 88' + 5m drift caps at 90'
+  assert.equal(Model.interpolateLiveTime({ status: "live", liveTime: "43’", sport: "football" }, now, now - 4 * 60000), tick(45))
+  assert.equal(Model.interpolateLiveTime({ status: "live", liveTime: "88’", sport: "football" }, now, now - 5 * 60000), tick(90))
   // non-numeric clocks (HT, stoppage, quarters) are never guessed
   for (const t of ["HT", "45+2’", "8:44", "Q4 - 8:44", "Pen", "LIVE"]) {
     assert.equal(Model.interpolateLiveTime({ status: "live", liveTime: t, sport: "football" }, now, now - 30 * 60000), t)
@@ -667,8 +780,138 @@ test("interpolateLiveTime ticks the clock forward with a stoppage cap", () => {
   // non-football sports are provider-true only
   const nba = { status: "live", liveTime: "8:44", sport: "nba" }
   assert.equal(Model.interpolateLiveTime(nba, now, now - 30 * 60000), "8:44")
+  // kickoff wall-clock sanity guard: when provider serves frozen 1' for a match that started 80m ago
+  const staleLiveMatch = { status: "live", liveTime: "1’", sport: "football", time: new Date(now - 80 * 60000).toISOString() }
+  assert.equal(Model.interpolateLiveTime(staleLiveMatch, now, now), tick(65), "stale 1' SSR clock was not corrected from kickoff")
+  const halftimeMatch = { status: "live", liveTime: "1’", sport: "football", time: new Date(now - 50 * 60000).toISOString() }
+  assert.equal(Model.interpolateLiveTime(halftimeMatch, now, now), "HT", "halftime match was not corrected to HT")
+  const genericLive = { status: "live", liveTime: "LIVE", sport: "football", time: new Date(now - 30 * 60000).toISOString() }
+  assert.equal(Model.interpolateLiveTime(genericLive, now, now), tick(30), "generic LIVE was not given elapsed minute")
+
   // non-live matches pass through untouched
   assert.equal(Model.interpolateLiveTime({ status: "finished", sport: "football" }, now, now - 60000), "")
+})
+
+test("interpolateLiveTime strictly enforces monotonic non-decreasing time across polls", () => {
+  Model.resetLiveClockCache()
+  const baseNow = Date.parse("2026-09-05T16:00:00Z")
+  const match = { id: "live-monotonic-1", status: "live", liveTime: "78’", sport: "football" }
+
+  // Initial poll: returns 78'
+  assert.equal(Model.cleanLiveTime(Model.interpolateLiveTime(match, baseNow, baseNow)), "78’")
+
+  // 65 seconds pass: drifts to 79'
+  assert.equal(Model.cleanLiveTime(Model.interpolateLiveTime(match, baseNow + 65000, baseNow)), "79’")
+
+  // A fresh background poll completes at +70s, but provider edge cache still served 78'
+  // Crucial test: displayed minute must NEVER regress back to 78'
+  assert.equal(Model.cleanLiveTime(Model.interpolateLiveTime(match, baseNow + 70000, baseNow + 70000)), "79’")
+
+  // Later poll at +130s returns 80' from provider: advances cleanly to 80'
+  const match80 = { id: "live-monotonic-1", status: "live", liveTime: "80’", sport: "football" }
+  assert.equal(Model.cleanLiveTime(Model.interpolateLiveTime(match80, baseNow + 130000, baseNow + 130000)), "80’")
+
+  // Match finishes: cache entry is pruned and live clock returns finished time
+  const finished = { id: "live-monotonic-1", status: "finished", liveTime: "FT", sport: "football" }
+  assert.equal(Model.interpolateLiveTime(finished, baseNow + 200000, baseNow + 200000), "FT")
+})
+
+test("formatLiveClock provides rich match phase and kickoff context", () => {
+  Model.resetLiveClockCache()
+  const now = Date.parse("2026-09-05T16:34:00Z")
+  const liveMatch = {
+    id: "live-phase-1",
+    status: "live",
+    liveTime: "34’",
+    sport: "football",
+    time: "2026-09-05T16:00:00Z"
+  }
+  const clock = Model.formatLiveClock(liveMatch, now, now)
+  assert.equal(clock.minuteText, "34’")
+  assert.equal(clock.phase, "1st Half")
+  assert.equal(clock.fullLabel, "1st Half · 34’")
+  assert.match(clock.kickoffText, /^Started \d{2}:\d{2}$/)
+
+  // Half time match
+  const htMatch = {
+    id: "live-phase-2",
+    status: "live",
+    liveTime: "HT",
+    sport: "football",
+    time: "2026-09-05T15:00:00Z"
+  }
+  const htClock = Model.formatLiveClock(htMatch, now, now)
+  assert.equal(htClock.minuteText, "HT")
+  assert.equal(htClock.phase, "Half Time")
+  assert.equal(htClock.fullLabel, "Half Time · HT")
+
+  // US sports phases
+  const nbaMatch = { status: "live", liveTime: "8:44 - Q2", sport: "nba" }
+  const nbaClock = Model.formatLiveClock(nbaMatch, now, now)
+  assert.equal(nbaClock.minuteText, "8:44 - Q2")
+  assert.equal(nbaClock.phase, "2nd Quarter")
+})
+
+test("notification diff emits finished notifications for concluded matches", () => {
+  const now = Date.parse("2026-08-22T21:00:00Z")
+  const prevLive = {
+    "game-fin": { homeScore: 2, awayScore: 1, status: "live", notifiedUpcoming: true, seenAt: now - 60000 }
+  }
+  const finished = {
+    id: "game-fin", sport: "football", status: "finished", scoreText: "2–1", homeScore: 2, awayScore: 1,
+    home: { id: "9772", name: "Benfica" }, away: { id: "9773", name: "FC Porto" }
+  }
+  // Anti-spoiler mode conceals final score
+  const resSpoiler = Model.diffMatchNotifications([finished], prevLive, { activeSport: "football", favoriteIds: ["9772"], antiSpoiler: true, nowMs: now })
+  assert.equal(resSpoiler.notifications.length, 1)
+  assert.equal(resSpoiler.notifications[0].kind, "finished")
+  assert.match(resSpoiler.notifications[0].title, /FULL TIME: Benfica vs FC Porto/)
+  assert.match(resSpoiler.notifications[0].body, /score concealed/)
+
+  // Normal mode shows final scoreline
+  const resNormal = Model.diffMatchNotifications([finished], prevLive, { activeSport: "football", favoriteIds: ["9772"], antiSpoiler: false, nowMs: now })
+  assert.equal(resNormal.notifications.length, 1)
+  assert.equal(resNormal.notifications[0].kind, "finished")
+  assert.match(resNormal.notifications[0].title, /FULL TIME: Benfica 2–1 FC Porto/)
+  assert.match(resNormal.notifications[0].body, /2–1.*Final/)
+})
+test("notification diff emits half-time notifications and dedupes on subsequent polls", () => {
+  const now = Date.parse("2026-08-22T19:48:00Z")
+  const prevLive = {
+    "game-ht": { homeScore: 1, awayScore: 0, status: "live", notifiedUpcoming: true, notifiedHalfTime: false, seenAt: now - 60000 }
+  }
+  const htMatch = {
+    id: "game-ht", sport: "football", status: "live", liveTime: "HT", scoreText: "1–0", homeScore: 1, awayScore: 0,
+    home: { id: "9772", name: "Benfica" }, away: { id: "9773", name: "FC Porto" }
+  }
+
+  // Normal mode
+  const resNormal = Model.diffMatchNotifications([htMatch], prevLive, { activeSport: "football", favoriteIds: ["9772"], antiSpoiler: false, nowMs: now })
+  assert.equal(resNormal.notifications.length, 1)
+  assert.equal(resNormal.notifications[0].kind, "halftime")
+  assert.match(resNormal.notifications[0].title, /HALF TIME: Benfica 1–0 FC Porto/)
+  assert.match(resNormal.notifications[0].body, /1–0.*Half Time/)
+  assert.equal(resNormal.nextSeen["game-ht"].notifiedHalfTime, true)
+
+  // Subsequent poll while still at HT: must NOT emit another notification
+  const resDedupe = Model.diffMatchNotifications([htMatch], resNormal.nextSeen, { activeSport: "football", favoriteIds: ["9772"], antiSpoiler: false, nowMs: now + 30000 })
+  assert.equal(resDedupe.notifications.length, 0)
+  assert.equal(resDedupe.nextSeen["game-ht"].notifiedHalfTime, true)
+
+  // Anti-spoiler mode conceals half-time scoreline
+  const resSpoiler = Model.diffMatchNotifications([htMatch], prevLive, { activeSport: "football", favoriteIds: ["9772"], antiSpoiler: true, nowMs: now })
+  assert.equal(resSpoiler.notifications.length, 1)
+  assert.equal(resSpoiler.notifications[0].kind, "halftime")
+  assert.match(resSpoiler.notifications[0].title, /HALF TIME: Benfica vs FC Porto/)
+  assert.match(resSpoiler.notifications[0].body, /score concealed/)
+})
+test("normalizeTab handles settings and preferences", () => {
+  assert.equal(Model.normalizeTab("settings"), "settings")
+  assert.equal(Model.normalizeTab("preferences"), "settings")
+  assert.equal(Model.normalizeTab("SETTINGS"), "settings")
+  assert.equal(Model.normalizeTab("fixtures"), "fixtures")
+  assert.equal(Model.normalizeTab("live"), "live")
+  assert.equal(Model.normalizeTab("standings"), "standings")
 })
 
 // ---------------------------------------------------------------- mock mode
@@ -743,4 +986,376 @@ test("teamOptionsForSport returns instant catalogs per sport", () => {
   assert.ok(Model.teamOptionsForSport("football", sampleMatches).length >= 3)
 })
 
+// ---------------------------------------------------------------- f1 winners & sessions
+console.log("f1 winners & sessions")
+test("parseF1SeasonWinners parses Jolpica race results into round-keyed map", () => {
+  const sample = JSON.stringify({
+    MRData: {
+      RaceTable: {
+        Races: [
+          {
+            season: "2026",
+            round: "1",
+            raceName: "Australian Grand Prix",
+            Results: [
+              {
+                position: "1",
+                points: "25",
+                Driver: { driverId: "russell", code: "RUS", givenName: "George", familyName: "Russell" },
+                Constructor: { constructorId: "mercedes", name: "Mercedes" },
+                Time: { time: "1:26:37.979" },
+                laps: "71",
+                grid: "1"
+              }
+            ]
+          },
+          {
+            season: "2026",
+            round: "2",
+            raceName: "Chinese Grand Prix",
+            Results: [
+              {
+                position: "1",
+                points: "25",
+                Driver: { driverId: "norris", code: "NOR", givenName: "Lando", familyName: "Norris" },
+                Constructor: { constructorId: "mclaren", name: "McLaren" },
+                Time: { time: "1:32:15.111" },
+                laps: "56",
+                grid: "2"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  })
+
+  const winners = Model.parseF1SeasonWinners(sample)
+  assert.equal(Object.keys(winners).length, 2)
+  assert.equal(winners["1"].driverId, "russell")
+  assert.equal(winners["1"].driverName, "George Russell")
+  assert.equal(winners["1"].code, "RUS")
+  assert.equal(winners["1"].constructorName, "Mercedes")
+  assert.equal(winners["1"].time, "1:26:37.979")
+  assert.equal(winners["2"].driverId, "norris")
+  assert.equal(winners["2"].driverName, "Lando Norris")
+  assert.equal(winners["2"].code, "NOR")
+  assert.equal(winners["2"].constructorName, "McLaren")
+})
+
+test("parseF1SeasonWinners handles null/empty/corrupt inputs safely", () => {
+  assert.deepEqual(Model.parseF1SeasonWinners(null), {})
+  assert.deepEqual(Model.parseF1SeasonWinners(""), {})
+  assert.deepEqual(Model.parseF1SeasonWinners("{ invalid json"), {})
+  assert.deepEqual(Model.parseF1SeasonWinners(JSON.stringify({ MRData: {} })), {})
+})
+
+test("parseF1Calendar attaches winner and sets scoreText when winnersMap is supplied", () => {
+  const calendarPayload = JSON.stringify({
+    MRData: {
+      RaceTable: {
+        Races: [
+          {
+            round: "1",
+            raceName: "Australian Grand Prix",
+            Circuit: { circuitName: "Albert Park Circuit", Location: { locality: "Melbourne", country: "Australia" } },
+            date: "2026-03-15",
+            time: "04:00:00Z"
+          },
+          {
+            round: "2",
+            raceName: "Chinese Grand Prix",
+            Circuit: { circuitName: "Shanghai International Circuit", Location: { locality: "Shanghai", country: "China" } },
+            date: "2026-03-22",
+            time: "07:00:00Z"
+          }
+        ]
+      }
+    }
+  })
+
+  const winners = {
+    "1": {
+      round: "1",
+      driverId: "russell",
+      driverName: "George Russell",
+      familyName: "Russell",
+      code: "RUS",
+      constructorName: "Mercedes",
+      time: "1:26:37.979"
+    }
+  }
+
+  // With winners map: Round 1 has winner attached and finished status
+  const enriched = Model.parseF1Calendar(calendarPayload, 0, winners)
+  assert.equal(enriched.length, 2)
+  assert.equal(enriched[0].status, "finished")
+  assert.ok(enriched[0].winner)
+  assert.equal(enriched[0].winner.code, "RUS")
+  assert.equal(enriched[0].scoreText, "🏆 RUS")
+  assert.equal(enriched[0].statusReason, "Winner: George Russell")
+
+  // Round 2 has no winner yet: standard behavior
+  assert.equal(enriched[1].winner, undefined)
+
+  // Without winners map: backwards compatible (no winner field, scoreText Official)
+  const legacy = Model.parseF1Calendar(calendarPayload, Date.parse("2026-03-16T00:00:00Z"))
+  assert.equal(legacy[0].winner, undefined)
+  assert.equal(legacy[0].scoreText, "Official")
+})
+
+test("nextF1Session finds live or next upcoming session", () => {
+  const match = {
+    sessions: [
+      { name: "Practice 1", shortName: "FP1", time: "2026-06-05T11:30:00Z" },
+      { name: "Practice 2", shortName: "FP2", time: "2026-06-05T15:00:00Z" },
+      { name: "Qualifying", shortName: "Quali", time: "2026-06-06T14:00:00Z" },
+      { name: "Grand Prix (Race)", shortName: "Race", time: "2026-06-07T13:00:00Z" }
+    ]
+  }
+
+  // Friday morning before FP1
+  const beforeFP1 = Model.nextF1Session(match, Date.parse("2026-06-05T10:00:00Z"))
+  assert.ok(beforeFP1)
+  assert.equal(beforeFP1.shortName, "FP1")
+  assert.equal(beforeFP1.isLive, false)
+
+  // Friday during FP1 (30m after start)
+  const duringFP1 = Model.nextF1Session(match, Date.parse("2026-06-05T12:00:00Z"))
+  assert.ok(duringFP1)
+  assert.equal(duringFP1.shortName, "FP1")
+  assert.equal(duringFP1.isLive, true)
+
+  // Saturday morning before Quali
+  const beforeQuali = Model.nextF1Session(match, Date.parse("2026-06-06T09:00:00Z"))
+  assert.ok(beforeQuali)
+  assert.equal(beforeQuali.shortName, "Quali")
+  assert.equal(beforeQuali.isLive, false)
+
+  // Sunday evening after Race (finished)
+  const afterRace = Model.nextF1Session(match, Date.parse("2026-06-07T17:00:00Z"))
+  assert.equal(afterRace, null)
+})
+
+test("featuredMatchForTeam prioritizes live, then nearest upcoming, then latest finished", () => {
+  const mFinishedOld = { id: "1", status: "finished", time: "2026-08-20T18:00:00Z" }
+  const mFinishedRecent = { id: "2", status: "finished", time: "2026-08-21T18:00:00Z" }
+  const mLive = { id: "3", status: "live", time: "2026-08-22T19:00:00Z" }
+  const mUpcomingSoon = { id: "4", status: "upcoming", time: new Date(Date.now() + 3600000).toISOString() }
+  const mUpcomingLater = { id: "5", status: "upcoming", time: new Date(Date.now() + 86400000).toISOString() }
+
+  // 1. Live takes absolute priority
+  assert.equal(Model.featuredMatchForTeam([mFinishedRecent, mLive, mUpcomingSoon]).id, "3")
+
+  // 2. Nearest upcoming when no live match exists
+  assert.equal(Model.featuredMatchForTeam([mFinishedRecent, mUpcomingLater, mUpcomingSoon]).id, "4")
+
+  // 3. Most recent finished when no live or upcoming exists
+  assert.equal(Model.featuredMatchForTeam([mFinishedOld, mFinishedRecent]).id, "2")
+
+  // 4. Empty array returns null
+  assert.equal(Model.featuredMatchForTeam([]), null)
+})
+
+test("parseEspnBroadcast prefers national market and falls back gracefully", () => {
+  const compNational = {
+    broadcasts: [
+      { market: "home", names: ["Bally Sports"] },
+      { market: "national", names: ["NBC", "Peacock"] }
+    ]
+  }
+  assert.equal(Model.parseEspnBroadcast(compNational), "NBC")
+
+  const compLocal = {
+    broadcasts: [
+      { market: "home", names: ["YES Network"] }
+    ]
+  }
+  assert.equal(Model.parseEspnBroadcast(compLocal), "YES Network")
+  assert.equal(Model.parseEspnBroadcast({}), "")
+  assert.equal(Model.parseEspnBroadcast(null), "")
+})
+
+test("parseEspnGameLeaders extracts category and top athlete values", () => {
+  const comp = {
+    leaders: [
+      {
+        shortDisplayName: "PASS",
+        leaders: [
+          {
+            displayValue: "19/31, 181 YDS",
+            athlete: { shortName: "S. Bennett IV", headshot: "https://example.com/sb.png" }
+          }
+        ]
+      },
+      {
+        shortDisplayName: "RUSH",
+        leaders: [
+          {
+            displayValue: "12 CAR, 68 YDS, 1 TD",
+            athlete: { shortName: "J. Hunter", headshot: "https://example.com/jh.png" }
+          }
+        ]
+      }
+    ]
+  }
+  const leaders = Model.parseEspnGameLeaders(comp)
+  assert.equal(leaders.length, 2)
+  assert.equal(leaders[0].category, "PASS")
+  assert.equal(leaders[0].player, "S. Bennett IV")
+  assert.equal(leaders[0].displayValue, "19/31, 181 YDS")
+  assert.equal(leaders[1].category, "RUSH")
+  assert.equal(leaders[1].player, "J. Hunter")
+  assert.deepEqual(Model.parseEspnGameLeaders(null), [])
+})
+
+test("parseEspnNews extracts top articles with headline and url", () => {
+  const raw = {
+    articles: [
+      {
+        headline: "Free Agency Buzz",
+        description: "Latest trade rumors",
+        published: "2026-09-04T12:00:00Z",
+        links: { web: { href: "https://www.espn.com/nba/story/123" } },
+        images: [{ url: "https://a.espncdn.com/photo/123.jpg" }]
+      }
+    ]
+  }
+  const news = Model.parseEspnNews(raw)
+  assert.equal(news.length, 1)
+  assert.equal(news[0].headline, "Free Agency Buzz")
+  assert.equal(news[0].url, "https://www.espn.com/nba/story/123")
+  assert.deepEqual(Model.parseEspnNews("invalid json"), [])
+})
+
+test("parseFotmobEvents extracts goals with assists and red cards", () => {
+  const rawEvents = [
+    {
+      type: "Goal",
+      time: 15,
+      nameStr: "Kai Havertz",
+      isHome: true,
+      assistInput: "Riccardo Calafiori"
+    },
+    {
+      type: "Goal",
+      time: 82,
+      nameStr: "Lewis Dunk",
+      isHome: false,
+      ownGoal: true
+    },
+    {
+      type: "Card",
+      time: 68,
+      card: "Red",
+      nameStr: "Lewis Dunk",
+      isHome: false
+    },
+    {
+      type: "Card",
+      time: 34,
+      card: "Yellow",
+      nameStr: "Gabriel",
+      isHome: true
+    }
+  ]
+  const parsed = Model.parseFotmobEvents(rawEvents)
+  assert.equal(parsed.goals.length, 2)
+  assert.equal(parsed.goals[0].player, "Kai Havertz")
+  assert.equal(parsed.goals[0].minute, "15'")
+  assert.equal(parsed.goals[0].assist, "Riccardo Calafiori")
+  assert.equal(parsed.goals[0].isHome, true)
+  assert.equal(parsed.goals[1].player, "Lewis Dunk (OG)")
+  assert.equal(parsed.goals[1].isHome, false)
+  assert.equal(parsed.redCards.length, 1)
+  assert.equal(parsed.redCards[0].player, "Lewis Dunk")
+  assert.equal(parsed.redCards[0].minute, "68'")
+})
+
+test("parseFotmobForm extracts 5-match form letters", () => {
+  const rawForm = [
+    [{ resultString: "W" }, { resultString: "W" }, { resultString: "D" }, { resultString: "L" }, { resultString: "W" }],
+    [{ resultString: "L" }, { resultString: "D" }, { resultString: "W" }]
+  ]
+  const form = Model.parseFotmobForm(rawForm)
+  assert.deepEqual(form.home, ["W", "W", "D", "L", "W"])
+  assert.deepEqual(form.away, ["L", "D", "W"])
+  assert.deepEqual(Model.parseFotmobForm(null), { home: [], away: [] })
+})
+
+test("parseFotmobStats extracts possession and xG", () => {
+  const rawStats = {
+    Periods: {
+      All: {
+        stats: [
+          {
+            title: "Top stats",
+            stats: [
+              { key: "BallPossesion", stats: [64, 36] },
+              { key: "expected_goals", stats: ["1.88", "0.20"] },
+              { key: "ShotsOnTarget", stats: [6, 1] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+  const stats = Model.parseFotmobStats(rawStats)
+  assert.ok(stats)
+  assert.deepEqual(stats.possession, [64, 36])
+  assert.deepEqual(stats.xG, ["1.88", "0.20"])
+  assert.deepEqual(stats.shotsOnTarget, [6, 1])
+  assert.equal(Model.parseFotmobStats({}), null)
+})
+
+test("parseF1Podium extracts top 3 finishers with points", () => {
+  const raw = {
+    MRData: {
+      RaceTable: {
+        Races: [
+          {
+            Results: [
+              { Driver: { code: "NOR", givenName: "Lando", familyName: "Norris" }, Constructor: { name: "McLaren" }, Time: { time: "1:28:44.859" }, points: "25" },
+              { Driver: { code: "ANT", givenName: "Kimi", familyName: "Antonelli" }, Constructor: { name: "Mercedes" }, Time: { time: "+11.536" }, points: "18" },
+              { Driver: { code: "RUS", givenName: "George", familyName: "Russell" }, Constructor: { name: "Mercedes" }, Time: { time: "+15.906" }, points: "15" },
+              { Driver: { code: "VER", familyName: "Verstappen" }, Constructor: { name: "Red Bull" }, points: "12" }
+            ]
+          }
+        ]
+      }
+    }
+  }
+  const podium = Model.parseF1Podium(raw)
+  assert.equal(podium.length, 3)
+  assert.equal(podium[0].code, "NOR")
+  assert.equal(podium[0].points, "25")
+  assert.equal(podium[1].code, "ANT")
+  assert.equal(podium[1].points, "18")
+  assert.equal(podium[2].code, "RUS")
+  assert.equal(podium[2].points, "15")
+  assert.deepEqual(Model.parseF1Podium(null), [])
+})
+
+test("parseF1Pole extracts pole position and Q3 time", () => {
+  const raw = {
+    MRData: {
+      RaceTable: {
+        Races: [
+          {
+            QualifyingResults: [
+              { Driver: { code: "NOR", givenName: "Lando", familyName: "Norris" }, Constructor: { name: "McLaren" }, Q3: "1:11.163" }
+            ]
+          }
+        ]
+      }
+    }
+  }
+  const pole = Model.parseF1Pole(raw)
+  assert.ok(pole)
+  assert.equal(pole.code, "NOR")
+  assert.equal(pole.lapTime, "1:11.163")
+  assert.equal(Model.parseF1Pole(null), null)
+})
+
 console.log(`\n${passed} tests passed ✓`)
+

@@ -24,13 +24,15 @@ var REFRESH_OPTIONS = [5, 10, 15, 30, 45, 60]
 // cache/state file. Quickshell.env is only defined inside the QML runtime;
 // under Node (e.g. the test suite) we degrade to process.env so the same
 // helper is safe to call from anywhere a consumer might import SportsModel.
-function safeHome() {
-  var home = ""
-  try {
-    if (typeof Quickshell !== "undefined" && Quickshell && typeof Quickshell.env === "function") {
-      home = String(Quickshell.env("HOME") || "")
-    }
-  } catch (e) { /* Quickshell not bound — fall through */ }
+function safeHome(homeOverride) {
+  var home = String(homeOverride || "")
+  if (!home) {
+    try {
+      if (typeof Quickshell !== "undefined" && Quickshell && typeof Quickshell.env === "function") {
+        home = String(Quickshell.env("HOME") || "")
+      }
+    } catch (e) { /* Quickshell not bound — fall through */ }
+  }
   if (!home && typeof process !== "undefined" && process && process.env) {
     home = String(process.env.HOME || "")
   }
@@ -543,6 +545,9 @@ function defaultState() {
     },
     antiSpoiler: false,
     notifications: true,
+    backgroundUpdates: true,
+    showBarTicker: true,
+    showSpotlight: true,
     refreshMinutes: 15
   }
 }
@@ -597,6 +602,7 @@ function normalizeTab(value) {
   var tab = String(value || "fixtures").toLowerCase()
   if (tab === "live") return "live"
   if (tab === "standings" || tab === "table") return "standings"
+  if (tab === "settings" || tab === "preferences") return "settings"
   return "fixtures"
 }
 
@@ -694,15 +700,21 @@ function parseState(raw) {
     nhl: parseSubSport("nhl", defaults.nhl),
     antiSpoiler: parsed.antiSpoiler === true,
     notifications: parsed.notifications !== false,
+    backgroundUpdates: parsed.backgroundUpdates !== false,
+    showBarTicker: parsed.showBarTicker !== false,
+    showSpotlight: parsed.showSpotlight !== false,
     refreshMinutes: clampRefreshMinutes(parsed.refreshMinutes)
   }
 }
 
-function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, fbStandingsId, sportSettings, antiSpoiler, notifications) {
+function statePayload(sport, fbLeagues, fbTeamIds, fbTeamName, refreshMinutes, fbStandingsId, sportSettings, antiSpoiler, notifications, backgroundUpdates, showBarTicker, showSpotlight) {
   var state = defaultState()
   state.sport = String(sport || "football")
   state.antiSpoiler = antiSpoiler === true
   state.notifications = notifications !== false
+  state.backgroundUpdates = backgroundUpdates !== false
+  state.showBarTicker = showBarTicker !== false
+  state.showSpotlight = showSpotlight !== false
   state.refreshMinutes = clampRefreshMinutes(refreshMinutes)
   var leagues = normalizeLeagueIds(fbLeagues)
   if (leagues.length === 0) leagues = ["47"]
@@ -971,7 +983,45 @@ function f1DriverFlag(driverIdOrNat) {
 // FORMULA 1 CALENDAR & STANDINGS PARSER (JOLPICA / ERGAST)
 // ============================================================================
 
-function parseF1Calendar(raw, nowMs) {
+function parseF1SeasonWinners(raw) {
+  var json = null
+  try { json = JSON.parse(String(raw || "")) } catch (e) { return {} }
+  if (!json || typeof json !== "object") return {}
+  var races = (json.MRData && json.MRData.RaceTable && json.MRData.RaceTable.Races)
+    ? arrayFrom(json.MRData.RaceTable.Races)
+    : []
+  var map = {}
+  for (var i = 0; i < races.length; i++) {
+    var r = races[i]
+    if (!r || !r.round) continue
+    var results = r.Results ? arrayFrom(r.Results) : []
+    if (results.length === 0) continue
+    var res = results[0]
+    if (!res) continue
+    var driver = res.Driver || {}
+    var constructor = res.Constructor || {}
+    var timeObj = res.Time || {}
+    var fastestLap = res.FastestLap || {}
+    map[String(r.round)] = {
+      round: String(r.round),
+      driverId: String(driver.driverId || ""),
+      driverName: String((driver.givenName || "") + " " + (driver.familyName || "")).trim(),
+      familyName: String(driver.familyName || ""),
+      code: String(driver.code || driver.familyName || ""),
+      nationality: String(driver.nationality || ""),
+      constructorId: String(constructor.constructorId || ""),
+      constructorName: String(constructor.name || ""),
+      time: String(timeObj.time || ""),
+      laps: String(res.laps || ""),
+      grid: String(res.grid || ""),
+      points: String(res.points || "25"),
+      fastestLap: fastestLap.Time ? String(fastestLap.Time.time || "") : ""
+    }
+  }
+  return map
+}
+
+function parseF1Calendar(raw, nowMs, winnersMap) {
   var json = null
   try { json = JSON.parse(String(raw || "")) } catch (e) { return [] }
   if (!json || typeof json !== "object") return []
@@ -989,6 +1039,10 @@ function parseF1Calendar(raw, nowMs) {
       if (now > raceMs + 3 * 3600 * 1000) status = "finished"
       else if (now >= raceMs) status = "live"
     }
+
+    var roundKey = String(r.round || "")
+    var winner = (winnersMap && typeof winnersMap === "object" && winnersMap[roundKey]) ? winnersMap[roundKey] : null
+    if (winner) status = "finished"
 
     var raceName = String(r.raceName || "Grand Prix")
     var circuitName = (r.Circuit && r.Circuit.circuitName) || "Circuit"
@@ -1044,7 +1098,7 @@ function parseF1Calendar(raw, nowMs) {
       time: raceIso
     })
 
-    matches.push({
+    var matchObj = {
       id: "f1-2026-" + r.round,
       sport: "f1",
       leagueId: "f1",
@@ -1073,12 +1127,18 @@ function parseF1Calendar(raw, nowMs) {
       status: status,
       homeScore: 0,
       awayScore: 0,
-      scoreText: status === "finished" ? "Official" : (status === "live" ? "RACE DAY" : "Round " + r.round),
-      statusReason: status === "finished" ? "Official" : (status === "live" ? "LIVE" : "Scheduled"),
+      scoreText: winner
+        ? ("🏆 " + (winner.code || winner.familyName))
+        : (status === "finished" ? "Official" : (status === "live" ? "RACE DAY" : "Round " + r.round)),
+      statusReason: status === "finished"
+        ? (winner ? ("Winner: " + winner.driverName) : "Official")
+        : (status === "live" ? "LIVE" : "Scheduled"),
       liveTime: status === "live" ? "RACE" : "",
       time: raceIso,
       pageUrl: r.url || "https://www.formula1.com"
-    })
+    }
+    if (winner) matchObj.winner = winner
+    matches.push(matchObj)
   }
   return matches
 }
@@ -1159,7 +1219,21 @@ function parseF1ConstructorStandings(raw) {
 // ============================================================================
 
 function extractPageProps(html) {
-  if (!html || typeof html !== "string") return {}
+  if (!html) return {}
+  if (typeof html === "object") {
+    if (html.props && html.props.pageProps) return html.props.pageProps
+    return html
+  }
+  if (typeof html !== "string") return {}
+  var trimmed = html.trim()
+  if ((trimmed.charAt(0) === "{" && trimmed.charAt(trimmed.length - 1) === "}") ||
+      (trimmed.charAt(0) === "[" && trimmed.charAt(trimmed.length - 1) === "]")) {
+    try {
+      var direct = JSON.parse(trimmed)
+      if (direct && direct.props && direct.props.pageProps) return direct.props.pageProps
+      if (direct && typeof direct === "object") return direct
+    } catch (e) {}
+  }
   var marker = '<script id="__NEXT_DATA__" type="application/json">'
   var start = html.indexOf(marker)
   if (start === -1) return {}
@@ -1296,7 +1370,7 @@ function parseMatch(raw, league) {
     awayScore: score.away,
     scoreText: score.text,
     statusReason: String(status.reason && status.reason.short || ""),
-    liveTime: status.liveTime && status.liveTime.short ? String(status.liveTime.short) : (state === "live" ? "LIVE" : ""),
+    liveTime: status.liveTime && status.liveTime.short ? String(status.liveTime.short).replace(/[\u200e\u200f]/g, "").trim() : (state === "live" ? "LIVE" : ""),
     time: String(status.utcTime || ""),
     pageUrl: cleanPageUrl(raw && raw.pageUrl)
   }
@@ -1321,10 +1395,29 @@ function parseDetails(html) {
   if (typeof box.Attendance === "number" && box.Attendance > 0) out.attendance = box.Attendance
   var gen = props.general || {}
   if (gen.leagueRoundName) out.round = String(gen.leagueRoundName)
-  if (status.halftimeScore) out.halftimeScore = String(status.halftimeScore)
+  if (status.halftimeScore) {
+    out.halftimeScore = String(status.halftimeScore)
+  } else {
+    var evList = (facts.events && facts.events.events) || facts.events || (content.matchFacts && content.matchFacts.events && content.matchFacts.events.events) || []
+    if (Array.isArray(evList)) {
+      for (var i = 0; i < evList.length; i++) {
+        var ev = evList[i]
+        if (ev && ev.type === "Half" && ev.halfStrShort === "HT" && typeof ev.homeScore === "number" && typeof ev.awayScore === "number") {
+          out.halftimeScore = ev.homeScore + " – " + ev.awayScore
+          break
+        }
+      }
+    }
+  }
   if (status.reason && status.reason.long) out.statusLong = String(status.reason.long)
   if (status.reason && status.reason.short) out.reason = String(status.reason.short)
   if (status.finished === true) out.finished = true
+  if (status.liveTime && status.liveTime.short) {
+    out.liveTime = String(status.liveTime.short).replace(/[\u200e\u200f]/g, "").trim()
+  }
+  if (!status.finished && status.scoreStr) {
+    out.liveScore = String(status.scoreStr)
+  }
 
   return Object.keys(out).length > 0 ? out : null
 }
@@ -1406,6 +1499,7 @@ function parseLeaguePage(html, requestedId) {
 
 function findTeamPageData(html, requestedTeamId) {
   var props = extractPageProps(html)
+  if (props.fixtures && props.fixtures.allFixtures) return props
   var fallback = props.fallback || {}
   var teamKey = "team-" + String(requestedTeamId || "")
   // The fallback map can contain several team payloads. Never substitute the
@@ -1454,6 +1548,16 @@ function mergePages(pages) {
   return matches
 }
 
+function parseClockMinute(timeStr) {
+  if (!timeStr) return 0
+  var s = String(timeStr).replace(/[\u200e\u200f\s]/g, "").toUpperCase()
+  if (s === "HT") return 45.5
+  if (s === "FT") return 999
+  var m = s.match(/^(\d{1,3})/)
+  if (m) return parseInt(m[1], 10) || 0
+  return 0
+}
+
 // Replace existing matches by id while preserving the current ordering. Team
 // pages and scoped live refreshes contain newer score/status data than the
 // previous full round; append only genuinely new fixtures.
@@ -1472,6 +1576,35 @@ function mergeMatchUpdates(existing, updates) {
       indexes[key] = result.length
       result.push(match)
     } else {
+      var prev = result[indexes[key]]
+      // Never allow a finished match to regress back to live or upcoming due to stale cache:
+      if (prev && prev.status === "finished" && match.status !== "finished") {
+        match = Object.assign({}, match, {
+          status: "finished",
+          statusReason: prev.statusReason || match.statusReason || "FT",
+          scoreText: prev.scoreText || match.scoreText,
+          homeScore: prev.homeScore !== undefined ? prev.homeScore : match.homeScore,
+          awayScore: prev.awayScore !== undefined ? prev.awayScore : match.awayScore,
+          liveTime: ""
+        })
+      }
+      // Protect live matches from stale SSR cache regression:
+      // A team page fixture cache from FotMob often serves frozen 1' data.
+      // Never allow a live match clock to regress from e.g. 47' or HT back to 1'.
+      else if (prev && prev.status === "live" && match.status === "live") {
+        var prevMin = parseClockMinute(prev.liveTime)
+        var newMin = parseClockMinute(match.liveTime)
+        if (prevMin > 0 && newMin > 0 && newMin < prevMin) {
+          match = Object.assign({}, match, {
+            liveTime: prev.liveTime,
+            scoreText: prev.scoreText || match.scoreText,
+            homeScore: prev.homeScore !== undefined ? prev.homeScore : match.homeScore,
+            awayScore: prev.awayScore !== undefined ? prev.awayScore : match.awayScore
+          })
+        } else if (prevMin > 0 && (newMin <= 0 || !match.liveTime)) {
+          match = Object.assign({}, match, { liveTime: prev.liveTime })
+        }
+      }
       result[indexes[key]] = match
     }
   }
@@ -1602,7 +1735,7 @@ function mockRound(sport, nowMs) {
   } else if (s === "f1") {
     // Race happening right now (live for a 3h window, like the real parser)
     // plus the next one in 3 days — mirrors parseF1Calendar's output shape.
-    function f1Race(id, round, name, circuit, locality, country, flag, raceOffset, statusOverride) {
+    function f1Race(id, round, name, circuit, locality, country, flag, raceOffset, statusOverride, winner) {
       var raceMs = anchor + raceOffset
       var status = statusOverride
       if (!status) {
@@ -1610,7 +1743,7 @@ function mockRound(sport, nowMs) {
         else if (now >= raceMs) status = "live"
         else status = "upcoming"
       }
-      return {
+      var rObj = {
         id: id, sport: "f1", leagueId: "f1", leagueName: "Formula 1",
         round: round, raceName: name, circuitName: circuit,
         locality: locality, country: country, countryFlag: flag,
@@ -1623,13 +1756,19 @@ function mockRound(sport, nowMs) {
         home: { id: "f1-gp-mock", name: name, shortName: name.replace(" Grand Prix", " GP"), record: locality + ", " + country, logo: "" },
         away: { id: "f1-circuit-mock", name: circuit, shortName: country, record: "", logo: "" },
         homeScore: 0, awayScore: 0,
-        scoreText: status === "finished" ? "Official" : (status === "live" ? "RACE DAY" : round),
-        statusReason: status === "finished" ? "Official" : (status === "live" ? "LIVE" : "Scheduled"),
+        scoreText: winner ? ("🏆 " + (winner.code || winner.familyName)) : (status === "finished" ? "Official" : (status === "live" ? "RACE DAY" : round)),
+        statusReason: status === "finished" ? (winner ? ("Winner: " + winner.driverName) : "Official") : (status === "live" ? "LIVE" : "Scheduled"),
         liveTime: status === "live" ? "RACE" : "",
         time: new Date(raceMs).toISOString(), pageUrl: "https://www.formula1.com"
       }
+      if (winner) rObj.winner = winner
+      return rObj
     }
     matches = [
+      f1Race("mock-f1-0", "Round 10", "Portuguese Grand Prix", "Autódromo", "Portimão", "Portugal", "\ud83c\uddf5\ud83c\uddf7", -5 * DAY, "finished", {
+        round: "10", driverId: "norris", driverName: "Lando Norris", familyName: "Norris", code: "NOR",
+        constructorName: "McLaren", time: "1:30:12.456", laps: "66", grid: "1", points: "25"
+      }),
       f1Race("mock-f1-1", "Round 11", "Mock Grand Prix", "Circuito da Mocka", "Lisboa", "Portugal", "\ud83c\uddf5\ud83c\uddf7", -45 * MIN),
       f1Race("mock-f1-2", "Round 12", "Sprint Mock Grand Prix", "Mock Ring", "Spielberg", "Austria", "\ud83c\udde6\ud83c\uddfa", 3 * DAY)
     ]
@@ -1963,6 +2102,42 @@ function teamOutcome(match, teamId) {
   return as > hs ? "win" : "loss"
 }
 
+function matchOutcomeForTeams(match, teamIds) {
+  return teamOutcomeForTeams(match, teamIds)
+}
+
+function teamLiveState(match, teamId) {
+  if (!match || match.status !== "live") return ""
+  var id = String(teamId || "").toLowerCase()
+  var homeId = String(match.home && match.home.id || "").toLowerCase()
+  var awayId = String(match.away && match.away.id || "").toLowerCase()
+  var isHome = homeId === id
+  var isAway = awayId === id
+  if (!isHome && !isAway) return ""
+
+  var hs = parseInt(match.homeScore, 10) || 0
+  var as = parseInt(match.awayScore, 10) || 0
+  if (hs === as) return "tied"
+  if (isHome) return hs > as ? "leading" : "trailing"
+  return as > hs ? "leading" : "trailing"
+}
+
+function teamLiveStateForTeams(match, teamIds) {
+  return teamLiveState(match, teamIdForMatch(match, teamIds))
+}
+
+function matchLiveStateForTeams(match, teamIds) {
+  return teamLiveStateForTeams(match, teamIds)
+}
+
+function generalMatchOutcome(match) {
+  if (!match || match.status !== "finished") return ""
+  var hs = parseInt(match.homeScore, 10) || 0
+  var as = parseInt(match.awayScore, 10) || 0
+  if (hs === as) return "draw"
+  return hs > as ? "home" : "away"
+}
+
 function groupMatches(matches) {
   var source = arrayFrom(matches)
   if (source.length === 0) return []
@@ -2022,31 +2197,220 @@ function matchStatusText(match) {
 
 // Between provider polls, tick a football live clock forward from the last
 // fetched minute using wall-clock time, capped by a stoppage-time buffer so we
-// never run far ahead of the broadcast clock. Returns the original string
-// untouched when the data is fresh or the clock is not a plain minute
-// ("HT", "45+2’", quarter labels, penalties…).
+// never run far ahead of the broadcast clock.
+// Monotonically tracked per match id so edge-cached poll repetitions never cause
+// the clock to tick backwards.
+var _liveClockCache = {}
+
+function resetLiveClockCache() {
+  _liveClockCache = {}
+}
+
+function cleanLiveTime(str) {
+  if (!str) return ""
+  return String(str).replace(/[\u200e\u200f]/g, "").trim()
+}
+
 function interpolateLiveTime(match, nowMs, fetchedAtMs) {
-  if (!match || match.status !== "live") return match ? String(match.liveTime || "") : ""
+  if (!match || match.status !== "live") {
+    if (match && match.id && _liveClockCache[String(match.id)]) {
+      delete _liveClockCache[String(match.id)]
+    }
+    return match ? String(match.liveTime || "") : ""
+  }
   if (match.sport && match.sport !== "football") return String(match.liveTime || "")
   var lt = String(match.liveTime || "")
-  // Only tick a bare minute like "13" / "13’" — never "8:44", "45+2’, "HT"…
+  var now = Number(nowMs) || Date.now()
+  var matchId = match.id ? String(match.id) : ""
+
+  // If liveTime is missing or generic "LIVE", check kickoff elapsed time as fallback
+  if (!lt || lt === "LIVE") {
+    if (match.time) {
+      var kickoffMs0 = parseMatchTimeMs(match)
+      if (!isNaN(kickoffMs0) && now > kickoffMs0) {
+        var elapsed0 = Math.floor((now - kickoffMs0) / 60000)
+        if (elapsed0 >= 1 && elapsed0 < 45) return "\u200e" + Math.max(1, elapsed0) + "\u2019\u200e"
+        if (elapsed0 >= 45 && elapsed0 < 62) return "HT"
+        if (elapsed0 >= 62 && elapsed0 < 115) return "\u200e" + Math.min(90, elapsed0 - 15) + "\u2019\u200e"
+        if (elapsed0 >= 115) return "\u200e90+’\u200e"
+      }
+    }
+    return lt || "LIVE"
+  }
+
+  // Only tick a bare minute like "13" / "13’" — never "8:44", "45+2’", "HT"…
   // (strip invisible LRM/RLM bi-di control chars FotMob wraps its clocks in)
   var cleaned = lt.replace(/[\u200e\u200f\s]/g, "")
+  if (cleaned.toUpperCase() === "HT") {
+    if (matchId && _liveClockCache[matchId]) delete _liveClockCache[matchId]
+    return "HT"
+  }
+
   var m = cleaned.match(/^(\d{1,3})[\u2019\u2032']?$/)
   if (!m) return lt
   var base = parseInt(m[1], 10)
   if (base < 0 || base > 130) return lt
-  var age = (Number(nowMs) - Number(fetchedAtMs)) / 60000
-  if (!isFinite(age) || age <= 0) return lt
-  var drift = Math.floor(age)
-  if (drift <= 0) return lt
-  // Never show more than +8 minutes beyond what the provider reported —
-  // beyond that a refetch is overdue and guessing is worse than honesty.
-  // The buffer used to be 4, which let the broadcast clock visibly stall on
-  // long stoppage windows (injuries, VAR, goal-mouth scrambles) even when
-  // the provider clock was simply late.
-  return "\u200e" + String(base + Math.min(drift, 8)) + "\u2019\u200e"
+
+  var baseModified = false
+  // Kickoff wall-clock sanity guard:
+  // If the match kicked off >= 15 minutes ago, but the reported clock is <= 5'
+  // (a known FotMob SSR cache artifact where team pages serve frozen 1' data),
+  // derive the realistic base minute from elapsed time since kickoff.
+  if (match.time) {
+    var kickoffMs = parseMatchTimeMs(match)
+    if (!isNaN(kickoffMs) && now > kickoffMs) {
+      var elapsed = Math.floor((now - kickoffMs) / 60000)
+      if (elapsed >= 15 && base <= 5) {
+        if (elapsed < 45) {
+          base = Math.max(1, elapsed)
+          baseModified = true
+        } else if (elapsed < 62) {
+          if (matchId && _liveClockCache[matchId]) delete _liveClockCache[matchId]
+          return "HT"
+        } else if (elapsed < 115) {
+          base = Math.min(90, elapsed - 15)
+          baseModified = true
+        } else {
+          return "\u200e90+’\u200e"
+        }
+      }
+    }
+  }
+
+  // Monotonic tracking for identified matches across polling cycles:
+  if (matchId) {
+    var fetchMs = Number(fetchedAtMs) || now
+    var entry = _liveClockCache[matchId]
+    if (!entry || base > entry.maxBase || baseModified) {
+      entry = {
+        maxBase: base,
+        anchorMs: fetchMs,
+        highestMinute: base,
+        updatedAt: now
+      }
+      _liveClockCache[matchId] = entry
+    } else {
+      entry.updatedAt = now
+    }
+
+    var ageSinceAnchor = (now - entry.anchorMs) / 60000
+    var rawDrift = (isFinite(ageSinceAnchor) && ageSinceAnchor > 0) ? Math.floor(ageSinceAnchor) : 0
+    var effectiveDrift = Math.min(rawDrift, 8)
+    var currentMin = Math.max(entry.highestMinute, entry.maxBase + effectiveDrift)
+
+    if (entry.maxBase <= 45 && currentMin > 45) currentMin = 45
+    if (entry.maxBase <= 90 && currentMin > 90) currentMin = 90
+    entry.highestMinute = currentMin
+
+    if (currentMin === base && !baseModified && effectiveDrift === 0) {
+      return lt
+    }
+    return "\u200e" + String(currentMin) + "\u2019\u200e"
+  }
+
+  // Unidentified matches (e.g. ad-hoc unit test objects without id):
+  var age = (now - Number(fetchedAtMs)) / 60000
+  var drift = (isFinite(age) && age > 0) ? Math.floor(age) : 0
+  if (drift <= 0 && !baseModified) return lt
+  var effective = Math.min(drift, 8)
+  var current = base + effective
+  if (base <= 45 && current > 45) {
+    return "\u200e45\u2019\u200e"
+  }
+  if (base <= 90 && current > 90) {
+    return "\u200e90\u2019\u200e"
+  }
+  return "\u200e" + String(current) + "\u2019\u200e"
 }
+
+// Rich contextual timing helper: provides human-friendly phase, clean minute,
+// and formatted kickoff context ("Started 15:00") across all views.
+function formatLiveClock(match, nowMs, fetchedAtMs) {
+  if (!match) return { minuteText: "", phase: "", statusText: "", kickoffText: "", fullLabel: "" }
+  var rawLiveTime = interpolateLiveTime(match, nowMs, fetchedAtMs)
+  var cleanTime = cleanLiveTime(rawLiveTime)
+  var ko = match.time ? formatKickoff(match.time) : ""
+  var kickoffText = ko ? ("Started " + ko) : ""
+
+  if (match.status !== "live") {
+    return {
+      minuteText: cleanTime,
+      phase: match.status === "finished" ? "FT" : (ko ? ("Starts " + ko) : "Upcoming"),
+      statusText: cleanTime || match.statusReason || "",
+      kickoffText: kickoffText,
+      fullLabel: cleanTime
+    }
+  }
+
+  var phase = ""
+  var sport = match.sport || "football"
+
+  if (sport === "football") {
+    var upper = cleanTime.toUpperCase()
+    if (upper === "HT" || upper.indexOf("HALF") !== -1) {
+      phase = "Half Time"
+      cleanTime = "HT"
+    } else if (upper.indexOf("PEN") !== -1) {
+      phase = "Penalties"
+    } else if (upper.indexOf("ET") !== -1 || upper.indexOf("AET") !== -1) {
+      phase = "Extra Time"
+    } else {
+      var minMatch = cleanTime.match(/^(\d{1,3})(?:\+(\d{1,2}))?/)
+      if (minMatch) {
+        var baseM = parseInt(minMatch[1], 10)
+        var addedM = minMatch[2] ? parseInt(minMatch[2], 10) : 0
+        if (baseM < 45) {
+          phase = "1st Half"
+        } else if (baseM === 45 && addedM > 0) {
+          phase = "1st Half Stoppage"
+        } else if (baseM === 45) {
+          phase = "1st Half"
+        } else if (baseM < 90) {
+          phase = "2nd Half"
+        } else if (baseM === 90 && addedM > 0) {
+          phase = "Stoppage Time"
+        } else if (baseM >= 90) {
+          phase = "Stoppage Time"
+        }
+      } else {
+        phase = "Live"
+      }
+    }
+  } else if (sport === "nba" || sport === "nfl") {
+    if (cleanTime.toLowerCase().indexOf("half") !== -1) phase = "Halftime"
+    else if (cleanTime.indexOf("Q1") !== -1 || cleanTime.indexOf("1st") !== -1) phase = "1st Quarter"
+    else if (cleanTime.indexOf("Q2") !== -1 || cleanTime.indexOf("2nd") !== -1) phase = "2nd Quarter"
+    else if (cleanTime.indexOf("Q3") !== -1 || cleanTime.indexOf("3rd") !== -1) phase = "3rd Quarter"
+    else if (cleanTime.indexOf("Q4") !== -1 || cleanTime.indexOf("4th") !== -1) phase = "4th Quarter"
+    else if (cleanTime.indexOf("OT") !== -1) phase = "Overtime"
+    else phase = "Live"
+  } else if (sport === "nhl") {
+    if (cleanTime.indexOf("1st") !== -1) phase = "1st Period"
+    else if (cleanTime.indexOf("2nd") !== -1) phase = "2nd Period"
+    else if (cleanTime.indexOf("3rd") !== -1) phase = "3rd Period"
+    else if (cleanTime.indexOf("OT") !== -1) phase = "Overtime"
+    else phase = "Live"
+  } else if (sport === "mlb") {
+    phase = cleanTime
+  } else if (sport === "f1") {
+    phase = "Grand Prix"
+  } else {
+    phase = "Live"
+  }
+
+  var fullLabel = phase && cleanTime && phase !== cleanTime
+    ? (phase + " · " + cleanTime)
+    : (cleanTime || "LIVE")
+
+  return {
+    minuteText: cleanTime || "LIVE",
+    phase: phase,
+    statusText: fullLabel,
+    kickoffText: kickoffText,
+    fullLabel: fullLabel
+  }
+}
+
 
 function leagueLabel(id) {
   var s = String(id || "")
@@ -2093,15 +2457,75 @@ function shortTournamentName(name) {
   return s
 }
 
+function reconcileMatchDetails(matches, detailsMap) {
+  var result = arrayFrom(matches).slice()
+  var map = detailsMap || {}
+  var now = Date.now()
+  for (var i = 0; i < result.length; i++) {
+    var m = result[i]
+    if (!m || !m.id) continue
+    var d = map[String(m.id)]
+    var updated = false
+    var mObj = null
+
+    // 1. Check detailsMap for FT / Full-Time / Extra Time / Penalties
+    var isFT = d && (d.finished === true || d.reason === "FT" || d.reason === "AET" || d.reason === "PEN" || (d.statusLong && /full|extra|penalt|finish|ended/i.test(d.statusLong)))
+    if (isFT && m.status === "live") {
+      if (!mObj) mObj = Object.assign({}, m)
+      mObj.status = "finished"
+      mObj.statusReason = d.reason || m.statusReason || "FT"
+      mObj.liveTime = ""
+      updated = true
+    }
+
+    // 2. Wall-clock expiry guard for football:
+    // A football match cannot remain live > 165 minutes after kickoff
+    if (m.status === "live" && (!m.sport || m.sport === "football") && m.time) {
+      var koMs = Date.parse(m.time)
+      if (!isNaN(koMs) && (now - koMs) > 165 * 60 * 1000) {
+        if (!mObj) mObj = Object.assign({}, m)
+        mObj.status = "finished"
+        mObj.statusReason = m.statusReason || "FT"
+        mObj.liveTime = ""
+        updated = true
+      }
+    }
+
+    // 3. Update liveScore / liveTime from details if match is live
+    if (d && (!mObj ? m.status : mObj.status) === "live") {
+      if (d.liveScore && d.liveScore !== m.scoreText) {
+        if (!mObj) mObj = Object.assign({}, m)
+        mObj.scoreText = d.liveScore
+        updated = true
+      }
+      if (d.liveTime && d.liveTime !== m.liveTime) {
+        if (!mObj) mObj = Object.assign({}, m)
+        mObj.liveTime = d.liveTime
+        updated = true
+      }
+    }
+
+    if (updated && mObj) {
+      result[i] = mObj
+    }
+  }
+  return result
+}
+
 function liveMatches(matches, detailsMap) {
   var result = []
   var source = arrayFrom(matches)
   var map = detailsMap || {}
+  var now = Date.now()
   for (var i = 0; i < source.length; i++) {
     var m = source[i]
     if (!m || m.status !== "live") continue
     var d = map[String(m.id)]
-    if (d && (d.statusLong === "Full-Time" || d.reason === "FT" || d.finished === true)) continue
+    if (d && (d.finished === true || d.reason === "FT" || d.reason === "AET" || d.reason === "PEN" || d.statusLong === "Full-Time" || (d.statusLong && /full|extra|penalt|finish|ended/i.test(d.statusLong)))) continue
+    if ((!m.sport || m.sport === "football") && m.time) {
+      var koMs = Date.parse(m.time)
+      if (!isNaN(koMs) && (now - koMs) > 165 * 60 * 1000) continue
+    }
     result.push(m)
   }
   result.sort(compareMatchTimes)
@@ -2148,17 +2572,23 @@ function buildPersistedState(cur, saved, ui) {
   }
 
   var fb = saved.football || {}
+  var fbLeagueIds = cur === "football"
+    ? (ui.selectedLeagueIds || fb.leagueIds)
+    : (fb.leagueIds || ui.selectedLeagueIds)
   var fbTeamIds = cur === "football" ? ui.selectedTeamIds : (fb.teamIds || (fb.teamId ? [fb.teamId] : []))
   var payload = statePayload(
     cur,
-    fb.leagueIds || ui.selectedLeagueIds,
+    fbLeagueIds,
     fbTeamIds,
     cur === "football" ? ui.selectedTeamName : fb.teamName,
     saved.refreshMinutes,
     cur === "football" ? ui.standingsLeagueId : fb.standingsLeagueId,
     sportSettings,
     ui.antiSpoiler,
-    ui.enableNotifications
+    ui.enableNotifications,
+    ui.backgroundUpdates !== undefined ? ui.backgroundUpdates : (saved.backgroundUpdates !== false),
+    ui.showBarTicker !== undefined ? ui.showBarTicker : (saved.showBarTicker !== false),
+    ui.showSpotlight !== undefined ? ui.showSpotlight : (saved.showSpotlight !== false)
   )
   // Keep statePayload's positional API stable; add the active football tab at
   // the persistence boundary where the UI-specific field belongs.
@@ -2335,6 +2765,7 @@ function diffMatchNotifications(matches, previous, options) {
     var homeScore = Number(m.homeScore || 0)
     var awayScore = Number(m.awayScore || 0)
     var upcomingNotified = !!(prev && prev.notifiedUpcoming)
+    var halfTimeNotified = !!(prev && prev.notifiedHalfTime)
 
     // Never notify on first sight: the first poll establishes a baseline.
     if (prev && isFavorite) {
@@ -2352,7 +2783,43 @@ function diffMatchNotifications(matches, previous, options) {
         })
       }
 
+      if (m.status === "finished" && prev.status === "live") {
+        notifications.push({
+          kind: "finished",
+          matchId: id,
+          sport: sport,
+          iconTeam: m.home || {},
+          title: sport === "f1"
+            ? ("🏁 Finished: " + (m.raceName || homeName || "Grand Prix"))
+            : ("🏁 FULL TIME: " + homeName + (opts.antiSpoiler ? " vs " : (" " + (m.scoreText || (homeScore + " – " + awayScore)) + " ")) + awayName),
+          body: opts.antiSpoiler
+            ? (sport === "football" ? "Match has finished (score concealed)" : "Event finished (result concealed)")
+            : (sport === "f1" ? "The session has concluded!" : (homeName + " " + (m.scoreText || (homeScore + " – " + awayScore)) + " " + awayName + " · Final")),
+          urgency: "normal"
+        })
+      }
+
       if (m.status === "live") {
+        var isHalfTime = (
+          parseClockMinute(m.liveTime) === 45.5 ||
+          String(m.liveTime || "").replace(/[\u200e\u200f\s]/g, "").toUpperCase() === "HT" ||
+          String(m.liveTime || "").toLowerCase().indexOf("half") !== -1
+        )
+        if (isHalfTime && !halfTimeNotified) {
+          notifications.push({
+            kind: "halftime",
+            matchId: id,
+            sport: sport,
+            iconTeam: m.home || {},
+            title: "⏱ HALF TIME: " + homeName + (opts.antiSpoiler ? " vs " : (" " + (m.scoreText || (homeScore + " – " + awayScore)) + " ")) + awayName,
+            body: opts.antiSpoiler
+              ? (homeName + " vs " + awayName + " · Half time (score concealed)")
+              : (homeName + " " + (m.scoreText || (homeScore + " – " + awayScore)) + " " + awayName + " · Half Time"),
+            urgency: "normal"
+          })
+          halfTimeNotified = true
+        }
+
         var homeDelta = homeScore - previousHomeScore
         var awayDelta = awayScore - previousAwayScore
         if (homeDelta > 0) {
@@ -2365,7 +2832,7 @@ function diffMatchNotifications(matches, previous, options) {
             iconTeam: m.home || {},
             title: sport === "football" ? ("⚽ GOAL! " + homeName) : (icon + " " + homeName + " (+" + homeDelta + ")"),
             body: opts.antiSpoiler
-              ? (homeName + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+              ? (homeName + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : "") + " · (Score hidden)")
               : (homeName + " " + (m.scoreText || (homeScore + " – " + awayScore)) + " " + awayName + (m.liveTime ? " (" + m.liveTime + ")" : "")),
             urgency: "normal"
           })
@@ -2380,7 +2847,7 @@ function diffMatchNotifications(matches, previous, options) {
             iconTeam: m.away || {},
             title: sport === "football" ? ("⚽ GOAL! " + awayName) : (icon + " " + awayName + " (+" + awayDelta + ")"),
             body: opts.antiSpoiler
-              ? (awayName + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : ""))
+              ? (awayName + " scored" + (m.liveTime ? " (" + m.liveTime + ")" : "") + " · (Score hidden)")
               : (homeName + " " + (m.scoreText || (homeScore + " – " + awayScore)) + " " + awayName + (m.liveTime ? " (" + m.liveTime + ")" : "")),
             urgency: "normal"
           })
@@ -2415,6 +2882,7 @@ function diffMatchNotifications(matches, previous, options) {
       awayScore: awayScore,
       status: String(m.status || "upcoming"),
       notifiedUpcoming: upcomingNotified,
+      notifiedHalfTime: halfTimeNotified,
       seenAt: now
     }
   }
@@ -2423,3 +2891,273 @@ function diffMatchNotifications(matches, previous, options) {
   // unbounded match ids forever.
   return { notifications: notifications, nextSeen: mergeSeenMap(oldSeen, nextSeen, now, NOTIFICATION_TTL_MS) }
 }
+
+function monogramText(abbr, teamName) {
+  var abbreviation = String(abbr || "").trim()
+  if (abbreviation) {
+    return abbreviation.substring(0, 3).toUpperCase()
+  }
+  var name = String(teamName || "").trim()
+  if (!name) return "?"
+  var parts = name.split(/\s+/)
+  if (parts.length >= 2) {
+    return String(parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+}
+
+function nextF1Session(match, nowMs) {
+  if (!match || !match.sessions) return null
+  var sessions = arrayFrom(match.sessions)
+  if (sessions.length === 0) return null
+  var now = Number(nowMs) || Date.now()
+  for (var i = 0; i < sessions.length; i++) {
+    var s = sessions[i]
+    if (!s || !s.time) continue
+    var sMs = Date.parse(s.time)
+    if (isNaN(sMs)) continue
+    // If within 2.5 hours of session start, it's live / in-progress
+    if (now >= sMs && now <= sMs + 2.5 * 3600 * 1000) {
+      return {
+        name: s.name,
+        shortName: s.shortName,
+        time: s.time,
+        timeMs: sMs,
+        isLive: true,
+        formattedTime: formatKickoff(s.time)
+      }
+    }
+    if (sMs > now) {
+      return {
+        name: s.name,
+        shortName: s.shortName,
+        time: s.time,
+        timeMs: sMs,
+        isLive: false,
+        formattedTime: formatKickoff(s.time)
+      }
+    }
+  }
+  return null
+}
+
+function parseEspnBroadcast(comp) {
+  if (!comp || typeof comp !== "object") return ""
+  var broadcasts = arrayFrom(comp.broadcasts)
+  if (broadcasts.length === 0) return ""
+  for (var i = 0; i < broadcasts.length; i++) {
+    var b = broadcasts[i]
+    if (b && b.market === "national" && Array.isArray(b.names) && b.names.length > 0) {
+      return String(b.names[0])
+    }
+  }
+  for (var j = 0; j < broadcasts.length; j++) {
+    var b2 = broadcasts[j]
+    if (b2 && Array.isArray(b2.names) && b2.names.length > 0) {
+      return String(b2.names[0])
+    }
+  }
+  return ""
+}
+
+function parseEspnGameLeaders(comp) {
+  if (!comp || typeof comp !== "object") return []
+  var leaders = arrayFrom(comp.leaders)
+  if (leaders.length === 0) return []
+  var result = []
+  for (var i = 0; i < leaders.length; i++) {
+    var cat = leaders[i]
+    if (!cat) continue
+    var catName = String(cat.shortDisplayName || cat.abbreviation || cat.displayName || "")
+    var topAthletes = arrayFrom(cat.leaders)
+    if (topAthletes.length === 0) continue
+    var top = topAthletes[0]
+    if (!top) continue
+    var athlete = top.athlete || {}
+    var val = String(top.displayValue || top.value || "")
+    var name = String(athlete.shortName || athlete.displayName || athlete.fullName || "Player")
+    result.push({
+      category: catName,
+      player: name,
+      displayValue: val,
+      headshot: String(athlete.headshot || "")
+    })
+  }
+  return result
+}
+
+function parseEspnNews(raw) {
+  var json = null
+  try { json = typeof raw === "string" ? JSON.parse(raw) : raw } catch (e) { return [] }
+  if (!json || typeof json !== "object") return []
+  var articles = arrayFrom(json.articles)
+  var result = []
+  for (var i = 0; i < Math.min(articles.length, 5); i++) {
+    var a = articles[i]
+    if (!a || !a.headline) continue
+    var link = (a.links && a.links.web && a.links.web.href) || ""
+    var img = (a.images && a.images[0] && a.images[0].url) || ""
+    result.push({
+      headline: String(a.headline || "").trim(),
+      description: String(a.description || "").trim(),
+      published: String(a.published || ""),
+      url: cleanPageUrl(link),
+      image: String(img)
+    })
+  }
+  return result
+}
+
+function parseFotmobEvents(raw) {
+  if (!raw) return { goals: [], redCards: [] }
+  var evList = []
+  if (Array.isArray(raw)) {
+    evList = raw
+  } else if (typeof raw === "object") {
+    var mf = raw.matchFacts || raw
+    var evObj = mf.events || {}
+    evList = Array.isArray(evObj.events) ? evObj.events : (Array.isArray(evObj) ? evObj : [])
+  }
+  var goals = []
+  var redCards = []
+  for (var i = 0; i < evList.length; i++) {
+    var e = evList[i]
+    if (!e) continue
+    var type = String(e.type || "")
+    var min = e.time !== undefined ? String(e.time) : (e.timeStr !== undefined ? String(e.timeStr) : "")
+    if (e.overloadTime) min += "+" + e.overloadTime
+    var player = String(e.nameStr || (e.player && (e.player.name || e.player.fullName)) || "Player")
+    var isHome = Boolean(e.isHome)
+
+    if (type === "Goal") {
+      var suffix = e.ownGoal ? " (OG)" : (e.isPenaltyShootoutEvent || e.suffix === "Pen" ? " (P)" : "")
+      var assist = ""
+      if (e.assistInput) assist = String(e.assistInput)
+      else if (e.assistStr) assist = String(e.assistStr).replace(/^assist by /i, "")
+      goals.push({
+        minute: min ? min + "'" : "",
+        player: player + suffix,
+        assist: assist,
+        isHome: isHome
+      })
+    } else if (type === "Card" && (e.card === "Red" || e.card === "YellowRed")) {
+      redCards.push({
+        minute: min ? min + "'" : "",
+        player: player,
+        isHome: isHome
+      })
+    }
+  }
+  return { goals: goals, redCards: redCards }
+}
+
+function parseFotmobForm(teamForm) {
+  if (!teamForm) return { home: [], away: [] }
+  var homeList = []
+  var awayList = []
+  if (Array.isArray(teamForm)) {
+    var hRaw = Array.isArray(teamForm[0]) ? teamForm[0] : []
+    var aRaw = Array.isArray(teamForm[1]) ? teamForm[1] : []
+    for (var i = 0; i < Math.min(hRaw.length, 5); i++) {
+      var r = hRaw[i]
+      if (r && r.resultString) homeList.push(String(r.resultString).toUpperCase())
+    }
+    for (var j = 0; j < Math.min(aRaw.length, 5); j++) {
+      var r2 = aRaw[j]
+      if (r2 && r2.resultString) awayList.push(String(r2.resultString).toUpperCase())
+    }
+  }
+  return { home: homeList, away: awayList }
+}
+
+function parseFotmobStats(stats) {
+  if (!stats || typeof stats !== "object") return null
+  var allStats = []
+  if (stats.Periods && stats.Periods.All && Array.isArray(stats.Periods.All.stats)) {
+    allStats = stats.Periods.All.stats
+  } else if (Array.isArray(stats)) {
+    allStats = stats
+  }
+  var possession = null
+  var xG = null
+  var shotsOnTarget = null
+  for (var i = 0; i < allStats.length; i++) {
+    var group = allStats[i]
+    var items = (group && Array.isArray(group.stats)) ? group.stats : []
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j]
+      if (!it || !it.key) continue
+      var key = String(it.key).toLowerCase()
+      if (key === "ballpossesion" || key === "possession") {
+        if (Array.isArray(it.stats) && it.stats.length >= 2) {
+          possession = [parseInt(it.stats[0], 10) || 50, parseInt(it.stats[1], 10) || 50]
+        }
+      } else if (key === "expected_goals" || key === "xg") {
+        if (Array.isArray(it.stats) && it.stats.length >= 2) {
+          xG = [String(it.stats[0]), String(it.stats[1])]
+        }
+      } else if (key === "shotsontarget" || key === "shots_on_target") {
+        if (Array.isArray(it.stats) && it.stats.length >= 2) {
+          shotsOnTarget = [parseInt(it.stats[0], 10) || 0, parseInt(it.stats[1], 10) || 0]
+        }
+      }
+    }
+  }
+  if (!possession && !xG && !shotsOnTarget) return null
+  return {
+    possession: possession || [50, 50],
+    xG: xG || ["0.0", "0.0"],
+    shotsOnTarget: shotsOnTarget || [0, 0]
+  }
+}
+
+function parseF1Podium(raw) {
+  var json = null
+  try { json = typeof raw === "string" ? JSON.parse(raw) : raw } catch (e) { return [] }
+  if (!json || typeof json !== "object") return []
+  var races = (json.MRData && json.MRData.RaceTable && Array.isArray(json.MRData.RaceTable.Races)) ? json.MRData.RaceTable.Races : []
+  if (races.length === 0) return []
+  var race = races[0]
+  var results = arrayFrom(race.Results)
+  var podium = []
+  for (var i = 0; i < Math.min(results.length, 3); i++) {
+    var res = results[i]
+    if (!res) continue
+    var driver = res.Driver || {}
+    var constructor = res.Constructor || {}
+    var time = (res.Time && res.Time.time) || (res.status) || ""
+    var pts = String(res.points || "0")
+    podium.push({
+      pos: i + 1,
+      driverName: String(driver.givenName ? (driver.givenName + " " + driver.familyName) : (driver.familyName || "Driver")),
+      code: String(driver.code || driver.familyName || "DRV"),
+      constructorName: String(constructor.name || "Constructor"),
+      time: String(time),
+      points: pts
+    })
+  }
+  return podium
+}
+
+function parseF1Pole(raw) {
+  var json = null
+  try { json = typeof raw === "string" ? JSON.parse(raw) : raw } catch (e) { return null }
+  if (!json || typeof json !== "object") return null
+  var races = (json.MRData && json.MRData.RaceTable && Array.isArray(json.MRData.RaceTable.Races)) ? json.MRData.RaceTable.Races : []
+  if (races.length === 0) return null
+  var race = races[0]
+  var qualiResults = arrayFrom(race.QualifyingResults)
+  if (qualiResults.length === 0) return null
+  var pole = qualiResults[0]
+  if (!pole) return null
+  var driver = pole.Driver || {}
+  var constructor = pole.Constructor || {}
+  var lapTime = pole.Q3 || pole.Q2 || pole.Q1 || ""
+  return {
+    driverName: String(driver.givenName ? (driver.givenName + " " + driver.familyName) : (driver.familyName || "Driver")),
+    code: String(driver.code || driver.familyName || "DRV"),
+    constructorName: String(constructor.name || "Constructor"),
+    lapTime: String(lapTime)
+  }
+}
+

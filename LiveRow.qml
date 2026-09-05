@@ -24,6 +24,20 @@ Item {
   // scene-graph updates for content the user cannot see
   property bool listVisible: true
   property bool rowFocused: false
+  property bool antiSpoiler: false
+  property var revealedMatchIds: ({})
+  property var toggleRevealScore: null // function(matchId)
+  property var selectedTeamIds: []
+  readonly property bool isScoreRevealed: Boolean(root.revealedMatchIds && root.revealedMatchIds[String(root.modelData.id)])
+  readonly property bool scoreHidden: root.antiSpoiler && !root.isScoreRevealed
+
+  readonly property string favTeamId: Model.teamIdForMatch(root.modelData, root.selectedTeamIds)
+  readonly property string favLiveState: Model.teamLiveState(root.modelData, root.favTeamId)
+  readonly property int scoreHome: parseInt(root.modelData.homeScore, 10) || 0
+  readonly property int scoreAway: parseInt(root.modelData.awayScore, 10) || 0
+  readonly property bool homeLeading: !root.scoreHidden && scoreHome > scoreAway
+  readonly property bool awayLeading: !root.scoreHidden && scoreAway > scoreHome
+  readonly property bool isTied: !root.scoreHidden && scoreHome === scoreAway
 
   // Provider minute ticked forward between polls (capped stoppage buffer)
   readonly property string syncedLiveTime:
@@ -31,6 +45,13 @@ Item {
 
   readonly property string leagueName: Model.leagueLabel(root.modelData.leagueId).toUpperCase()
   readonly property var details: root.matchDetails[String(root.modelData.id)] || null
+  readonly property string halfTimeText: {
+    if (!root.details || !root.details.halftimeScore) return ""
+    if (root.scoreHidden) return "••••"
+    var s = String(root.details.halftimeScore).trim()
+    if (!s || s === "undefined" || s === "null" || s.indexOf("undefined") !== -1 || !/\d/.test(s)) return ""
+    return s
+  }
 
   width: parent.width
   implicitHeight: liveCard.implicitHeight
@@ -38,7 +59,7 @@ Item {
   Rectangle {
     id: liveCard
     width: parent.width
-    implicitHeight: liveCol.implicitHeight + Style.space(22)
+    implicitHeight: liveCol.implicitHeight + Style.space(16)
     radius: theme.subtleRadius(8)
     Accessible.role: Accessible.Button
     Accessible.name: {
@@ -47,24 +68,42 @@ Item {
       return h + " versus " + a + ", live, " + (root.modelData.scoreText || "") + ", " + root.syncedLiveTime
     }
     color: liveMouse.containsMouse
-      ? Style.hoverFillFor(root.fgColor, root.urgentColor)
-      : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.05)
+      ? Style.hoverFillFor(root.fgColor, Color.accent)
+      : (root.favLiveState === "leading"
+         ? Util.alpha("#22c55e", 0.05)
+         : (root.favLiveState === "trailing"
+            ? Util.alpha("#ef4444", 0.05)
+            : (root.favLiveState === "tied"
+               ? Util.alpha("#f59e0b", 0.05)
+               : theme.mutedColor(root.fgColor, 0.025))))
     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-    border.width: root.rowFocused ? 2 : 1
+    border.width: (root.rowFocused || root.favLiveState !== "") ? 1.5 : 1
     border.color: liveMouse.containsMouse
-      ? root.urgentColor
-      : (root.rowFocused ? root.urgentColor : Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.3))
+      ? Color.accent
+      : (root.rowFocused
+         ? Color.accent
+         : (root.favLiveState === "leading"
+            ? Util.alpha("#22c55e", 0.35)
+            : (root.favLiveState === "trailing"
+               ? Util.alpha("#ef4444", 0.35)
+               : (root.favLiveState === "tied"
+                  ? Util.alpha("#f59e0b", 0.35)
+                  : theme.mutedColor(root.fgColor, 0.08)))))
 
     Rectangle {
       anchors.left: parent.left
       anchors.top: parent.top
       anchors.bottom: parent.bottom
-      anchors.margins: Style.space(4)
-      width: Style.space(4)
+      anchors.margins: Style.space(3)
+      width: Style.space(3)
       radius: width / 2
-      color: root.urgentColor
+      color: root.favLiveState === "leading"
+        ? "#22c55e"
+        : (root.favLiveState === "trailing"
+           ? "#ef4444"
+           : (root.favLiveState === "tied" ? "#f59e0b" : Color.accent))
 
       SequentialAnimation on opacity {
         running: root.listVisible
@@ -79,9 +118,9 @@ Item {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(16)
-      anchors.rightMargin: Style.space(16)
-      spacing: Style.space(8)
+      anchors.leftMargin: Style.space(12)
+      anchors.rightMargin: Style.space(12)
+      spacing: Style.space(6)
 
       Item {
         id: liveTopRow
@@ -111,9 +150,20 @@ Item {
           }
 
           Text {
-            visible: root.modelData.round !== ""
+            readonly property string roundStr: String(root.modelData && root.modelData.round || "").trim()
+            visible: roundStr !== ""
             anchors.verticalCenter: parent.verticalCenter
-            text: "· " + root.modelData.round
+            text: /^\d+$/.test(roundStr) ? ("· Round " + roundStr) : ("· " + roundStr)
+            color: theme.mutedColor(root.fgColor, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            readonly property string koTime: Model.formatKickoff(root.modelData && root.modelData.time)
+            visible: koTime !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            text: "· Started " + koTime
             color: theme.mutedColor(root.fgColor, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -127,7 +177,9 @@ Item {
           implicitWidth: liveTimeRow.implicitWidth + Style.space(12)
           implicitHeight: liveTimeRow.implicitHeight + Style.space(4)
           radius: theme.subtleRadius(4)
-          color: root.urgentColor
+          color: Util.alpha(root.urgentColor, 0.14)
+          border.width: 1
+          border.color: Util.alpha(root.urgentColor, 0.3)
 
           Row {
             id: liveTimeRow
@@ -138,7 +190,7 @@ Item {
               width: Style.space(5)
               height: width
               radius: width / 2
-              color: theme.onUrgent(root.urgentColor)
+              color: root.urgentColor
               anchors.verticalCenter: parent.verticalCenter
 
               SequentialAnimation on opacity {
@@ -150,8 +202,8 @@ Item {
             }
 
             Text {
-              text: root.syncedLiveTime
-              color: theme.onUrgent(root.urgentColor)
+              text: Model.cleanLiveTime(root.syncedLiveTime) || "LIVE"
+              color: root.urgentColor
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -191,10 +243,16 @@ Item {
             anchors.right: liveHomeCrest.left
             anchors.rightMargin: Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.modelData.home.name || root.modelData.home.shortName
-            color: root.fgColor
+            text: {
+              var n = (root.modelData.home && (root.modelData.home.name || root.modelData.home.shortName)) || ""
+              var sn = (root.modelData.home && root.modelData.home.shortName) || ""
+              return (n.length > 15 && sn) ? sn : n
+            }
+            color: root.favTeamId === String(root.modelData.home && root.modelData.home.id)
+              ? Color.accent
+              : (root.homeLeading ? root.fgColor : (root.awayLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: Style.font.title
+            font.pixelSize: text.length > 14 ? Style.font.body : Style.font.title
             font.bold: true
             horizontalAlignment: Text.AlignRight
             elide: Text.ElideRight
@@ -208,17 +266,54 @@ Item {
           width: Style.space(88)
           height: Style.space(32)
           radius: theme.subtleRadius(5)
-          color: Util.alpha(root.urgentColor, 0.2)
-          border.width: 1
-          border.color: root.urgentColor
+          color: root.favLiveState === "leading"
+            ? Util.alpha("#22c55e", 0.16)
+            : (root.favLiveState === "trailing"
+               ? Util.alpha("#ef4444", 0.16)
+               : (root.favLiveState === "tied"
+                  ? Util.alpha("#f59e0b", 0.16)
+                  : theme.mutedColor(root.fgColor, 0.05)))
+          border.width: root.favLiveState !== "" ? 1.5 : 1
+          border.color: root.favLiveState === "leading"
+            ? "#22c55e"
+            : (root.favLiveState === "trailing"
+               ? "#ef4444"
+               : (root.favLiveState === "tied"
+                  ? "#f59e0b"
+                  : theme.mutedColor(root.fgColor, 0.14)))
 
           Text {
             anchors.centerIn: parent
-            text: root.modelData.scoreText || "0–0"
-            color: root.urgentColor
+            text: {
+              if (root.scoreHidden) return "••••"
+              var raw = String(root.modelData && root.modelData.scoreText || "")
+              var m = raw.match(/^(\d+)\s*[-–:]\s*(\d+)$/)
+              if (m) return m[1] + " – " + m[2]
+              if (raw) return raw
+              if (root.modelData && typeof root.modelData.homeScore === "number" && typeof root.modelData.awayScore === "number") {
+                return root.modelData.homeScore + " – " + root.modelData.awayScore
+              }
+              return "0 – 0"
+            }
+            color: root.favLiveState === "leading"
+              ? "#22c55e"
+              : (root.favLiveState === "trailing"
+                 ? "#ef4444"
+                 : (root.favLiveState === "tied"
+                    ? "#f59e0b"
+                    : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: Style.font.heading
+            font.pixelSize: root.scoreHidden ? Style.font.caption : Style.font.heading
             font.bold: true
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: {
+              if (root.toggleRevealScore) root.toggleRevealScore(root.modelData.id)
+            }
           }
         }
 
@@ -249,10 +344,16 @@ Item {
             anchors.leftMargin: Style.space(8)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: root.modelData.away.name || root.modelData.away.shortName
-            color: root.fgColor
+            text: {
+              var n = (root.modelData.away && (root.modelData.away.name || root.modelData.away.shortName)) || ""
+              var sn = (root.modelData.away && root.modelData.away.shortName) || ""
+              return (n.length > 15 && sn) ? sn : n
+            }
+            color: root.favTeamId === String(root.modelData.away && root.modelData.away.id)
+              ? Color.accent
+              : (root.awayLeading ? root.fgColor : (root.homeLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: Style.font.title
+            font.pixelSize: text.length > 14 ? Style.font.body : Style.font.title
             font.bold: true
             horizontalAlignment: Text.AlignLeft
             elide: Text.ElideRight
@@ -266,7 +367,7 @@ Item {
         width: Style.space(88)
         height: 3
         radius: 1.5
-        color: Qt.rgba(root.urgentColor.r, root.urgentColor.g, root.urgentColor.b, 0.18)
+        color: theme.mutedColor(root.fgColor, 0.08)
         clip: true
 
         Rectangle {
@@ -291,43 +392,63 @@ Item {
             if (lt.indexOf("Q2") !== -1 || lt.indexOf("2nd") !== -1) return parent.width * 0.50
             if (lt.indexOf("Q3") !== -1 || lt.indexOf("3rd") !== -1) return parent.width * 0.75
             if (lt.indexOf("Q4") !== -1 || lt.indexOf("4th") !== -1) return parent.width * 0.95
+            if (lt.indexOf("OT") !== -1 || lt.indexOf("SO") !== -1 || lt.indexOf("EXTRA") !== -1) return parent.width * 0.98
             return parent.width * 0.60
           }
           radius: 1.5
-          color: root.urgentColor
+          color: root.favLiveState === "leading"
+            ? "#22c55e"
+            : (root.favLiveState === "trailing"
+               ? "#ef4444"
+               : (root.favLiveState === "tied" ? "#f59e0b" : Color.accent))
         }
       }
 
       // Period-by-period lines (NBA/NFL quarters, NHL periods, MLB innings) —
       // already captured by the parser; hidden for sports without them
-      Column {
+      Row {
+        id: linescoreGrid
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Style.space(1)
+        spacing: Style.space(8)
         visible: root.activeSport !== "football"
           && Boolean(root.modelData.linescores)
           && Boolean(root.modelData.linescores.home)
           && Boolean(root.modelData.linescores.away)
-          && root.modelData.linescores.home.length > 0
-          && root.modelData.linescores.away.length > 0
+          && (root.modelData.linescores.home.length > 0 || root.modelData.linescores.away.length > 0)
+
+        readonly property var homeScores: (root.modelData.linescores && root.modelData.linescores.home) || []
+        readonly property var awayScores: (root.modelData.linescores && root.modelData.linescores.away) || []
+        readonly property int periodCount: Math.max(homeScores.length, awayScores.length)
 
         Repeater {
-          model: ["home", "away"]
+          model: linescoreGrid.periodCount
 
-          delegate: Text {
-            required property var modelData
+          delegate: Column {
+            required property int index
+            spacing: Style.space(2)
 
-            readonly property var ls: (root.modelData.linescores && root.modelData.linescores[modelData]) || []
-
-            text: {
-              var out = []
-              for (var i = 0; i < ls.length; i++) out.push(ls[i] === undefined ? "–" : String(ls[i]))
-              return out.join("   ")
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: {
+                var s = linescoreGrid.homeScores[index]
+                return (s === undefined || s === null) ? "–" : String(s)
+              }
+              color: theme.mutedColor(root.fgColor, 0.85)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: true
             }
-            color: modelData === "home" ? theme.mutedColor(root.fgColor, 0.8) : theme.mutedColor(root.fgColor, 0.5)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.letterSpacing: 2
-            anchors.horizontalCenter: parent.horizontalCenter
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: {
+                var s = linescoreGrid.awayScores[index]
+                return (s === undefined || s === null) ? "–" : String(s)
+              }
+              color: theme.mutedColor(root.fgColor, 0.70)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
           }
         }
       }
@@ -335,10 +456,10 @@ Item {
       Row {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Style.space(6)
-        visible: root.details && root.details.halftimeScore && String(root.details.halftimeScore) !== "undefined" && String(root.details.halftimeScore).trim() !== ""
+        visible: root.halfTimeText !== ""
 
         Text {
-          text: "HT " + (root.details ? root.details.halftimeScore : "")
+          text: "⏱ HT " + root.halfTimeText
           color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -355,7 +476,7 @@ Item {
           anchors.right: liveLinkText.left
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          text: root.matchSubline(root.modelData) || "Live match in progress"
+          text: (root.matchSubline && root.matchSubline(root.modelData)) ? root.matchSubline(root.modelData) : "● Live in progress"
           color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
