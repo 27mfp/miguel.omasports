@@ -66,7 +66,7 @@ The plugin appears in the center section of the Omarchy bar. Open it from the ba
 omarchy plugin validate .
 install_dir="$HOME/.config/omarchy/plugins/miguel.omasports"
 mkdir -p "$install_dir"
-cp -- *.qml SportsModel.js manifest.json "$install_dir/"
+cp -- *.qml SportsModel.js manifest.json icon.svg icon.png "$install_dir/"
 omarchy-shell shell rescanPlugins
 omarchy plugin enable miguel.omasports --section center
 ```
