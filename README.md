@@ -17,7 +17,7 @@
 
 ![OmaSports football fixtures panel](assets/omasports-preview.png)
 
-<p align="center"><sub>Preview shown with deterministic sample data. Live scores are fetched when the plugin runs.</sub></p>
+<p align="center"><sub>Preview captured from the live FotMob feed. Fixture times and availability vary by season and timezone.</sub></p>
 
 ## Overview
 
