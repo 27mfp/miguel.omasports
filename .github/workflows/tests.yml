@@ -21,6 +21,12 @@ jobs:
       - name: Offline regression (frozen fixtures vs goldens)
         run: node tests/offline.mjs
 
+      - name: Manifest & package contract
+        run: node tests/manifest.mjs
+
+      - name: QML cross-file contracts
+        run: node tests/qml-contract.mjs
+
       - name: Chaos & Edge-case Scenarios
         run: node tests/scenarios.mjs
 
@@ -32,6 +38,9 @@ jobs:
 
       - name: Burn-In & Memory Stability
         run: node tests/burnin.mjs
+
+      - name: JavaScript syntax check
+        run: node --check tests/*.mjs
 
   qml-syntax:
     runs-on: ubuntu-latest

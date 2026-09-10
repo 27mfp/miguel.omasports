@@ -24,11 +24,16 @@ function curl(url, { compressed = false, ua = null } = {}) {
   return execFileSync("curl", args, { maxBuffer: 64 * 1024 * 1024 }).toString()
 }
 
-let passed = 0, failed = 0
+let passed = 0, failed = 0, skipped = 0
 const failures = []
 async function test(name, fn) {
   try {
-    await fn()
+    const result = await fn()
+    if (result && result.skip) {
+      skipped++
+      console.log("  ○ SKIP " + name + "\n    " + result.skip)
+      return
+    }
     passed++
     console.log("  ✓ " + name)
   } catch (e) {
@@ -39,6 +44,11 @@ async function test(name, fn) {
 }
 
 const which = process.argv[2] || "football"
+const validSelectors = new Set(["football", "nba", "nfl", "mlb", "nhl", "f1", "all"])
+if (!validSelectors.has(which)) {
+  console.error(`Unknown live-test selector '${which}'. Use football, nba, nfl, mlb, nhl, f1, or all.`)
+  process.exit(2)
+}
 
 // ------------------------------------------------------------------ football
 if (which === "football" || which === "all") {
@@ -112,7 +122,7 @@ if (which === "football" || which === "all") {
       console.log(`    (live: ${m.home.name} v ${m.away.name} — ${d.stadium || "?"})`)
       break
     }
-    if (!checked) console.log("    (no live matches right now — skipped live-detail assertion)")
+    if (!checked) return { skip: "no live matches were available in the sampled leagues" }
   })
 }
 
@@ -120,8 +130,11 @@ if (which === "football" || which === "all") {
 for (const [sport, espnPath] of [["nba", "basketball/nba"], ["nfl", "football/nfl"], ["mlb", "baseball/mlb"], ["nhl", "hockey/nhl"]]) {
   if (which !== sport && which !== "all") continue
   console.log(`\n${sport.toUpperCase()} (ESPN live)`)
-  await test(`${sport}: scoreboard parses events`, () => {    const dates = Model.espnDateRange(1, 3)
+  await test(`${sport}: scoreboard parses events`, () => {
+    const dates = Model.espnDateRange(1, 3)
     const raw = curl(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?${dates}`)
+    const payload = JSON.parse(raw)
+    assert.ok(Array.isArray(payload.events), "scoreboard payload has no events array")
     const parsed = Model.parseEspnScoreboard(raw, sport, sport.toUpperCase())
     assert.ok(Array.isArray(parsed), "scoreboard parser did not return an array")
     for (const m of parsed) {
@@ -173,7 +186,11 @@ if (which === "f1" || which === "all") {
   })
 }
 
-console.log(`\n${passed} passed, ${failed} failed`)
+console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped`)
+if (passed + failed + skipped === 0) {
+  console.error("No live tests executed.")
+  process.exit(1)
+}
 if (failures.length) {
   console.log("Failed: " + failures.join(", "))
   process.exit(1)

@@ -157,8 +157,9 @@ Configuration is automatically saved to `~/.config/omarchy/sports-favorites.json
 Run the full autonomous test suite in one command without stealing keyboard focus or popping up windows:
 
 ```bash
-node tests/run-all.mjs           # runs unit, offline goldens, scenarios, interactions, validation, & visual diff
-node tests/run-all.mjs --quick   # rapid run (logic, interaction, and scenarios in < 7s)
+node tests/run-all.mjs           # unit, offline, manifest, scenarios, validation & visual diff
+node tests/run-all.mjs --quick   # non-desktop logic gate
+node tests/run-all.mjs --quick --interactive  # opt-in headless interaction gate
 ```
 
 ---
@@ -219,17 +220,16 @@ node tests/live.mjs f1         # Jolpica calendar + driver/constructor standings
 
 ### Autonomous Non-Interruptive Visual Testing
 
-A built-in autonomous visual test runner captures and validates rendered panel tabs in real time using Wayland `grim` and Omarchy IPC. It operates **headlessly on a virtual Wayland monitor (`HEADLESS-N`) with keyboard focus suppression**, guaranteeing zero window popups and zero focus interruptions while you work:
+A built-in autonomous visual test runner captures and validates rendered panel tabs in real time using Wayland `grim` and Omarchy IPC. It **requires** a virtual Wayland monitor (`HEADLESS-N`) and confirmed keyboard focus suppression; it refuses physical-screen fallback. It temporarily enables the runtime-only deterministic mock mode and restores the prior mode afterward:
 
 ```bash
 node tests/visual.mjs                       # captures and verifies all tabs for the active sport
 node tests/visual.mjs --sport=football --tab=all  # full suite for a sport
 node tests/visual.mjs --sport=all --tab=all       # test all 6 sports across all tabs
 node tests/visual.mjs --sport=f1 --tab=standings  # test specific view
-node tests/visual.mjs --on-screen                 # run on physical display if desired
 ```
 
-Captured screenshots and a self-contained HTML gallery report are generated in `test-artifacts/visual-report.html`.
+Captured screenshots and a self-contained HTML gallery report are generated in `test-artifacts/visual-report.html`. The runner fails closed when a baseline is missing or cannot be measured; use `--update-goldens` only after reviewing the headless capture.
 
 QML files can be syntax-checked with `qmllint` (from `qt6-declarative`):
 

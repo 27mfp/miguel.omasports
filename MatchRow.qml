@@ -36,7 +36,7 @@ Item {
   readonly property string dateBadge: Model.formatMatchDate(modelData.time)
   readonly property string syncedLiveTime: Model.cleanLiveTime(Model.interpolateLiveTime(modelData, root.nowMs, root.fetchedAtMs)) || "LIVE"
   readonly property bool isScoreRevealed: root.revealedMatchIds[String(modelData.id)] === true
-  readonly property bool scoreHidden: root.antiSpoiler && isFinished && !isScoreRevealed
+  readonly property bool scoreHidden: root.antiSpoiler && (isFinished || isLive) && !isScoreRevealed
   readonly property string scoreLabel: root.scoreHidden
     ? "••••"
     : (root.isUpcoming

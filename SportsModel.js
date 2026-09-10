@@ -15,7 +15,14 @@ var NOTIFICATION_TTL_MS = 6 * 3600 * 1000
 // consolidating them here lets QML read them via `Model.MAX_ROUND_RETRIES`
 // and friends so a new value only needs to be added once.
 var MAX_ROUND_RETRIES = 2
-var RETRY_DELAY_MS = 2500
+// Retries are provider polls too: never retry faster than the documented
+// provider floor, otherwise a transient error can still trigger an IP ban.
+var RETRY_DELAY_ESPN_MS = 15 * 1000
+var RETRY_DELAY_FOTMOB_F1_MS = 20 * 1000
+var RETRY_DELAY_MS = RETRY_DELAY_ESPN_MS // compatibility for existing consumers
+// Race results change only when a weekend completes, so refresh enrichment
+// periodically rather than on every 20-second calendar poll.
+var F1_RESULTS_REFRESH_MS = 5 * 60 * 1000
 var MIN_REFRESH_MINUTES = 5
 var MAX_REFRESH_MINUTES = 60
 var REFRESH_OPTIONS = [5, 10, 15, 30, 45, 60]
@@ -3001,7 +3008,10 @@ function parseEspnNews(raw) {
       headline: String(a.headline || "").trim(),
       description: String(a.description || "").trim(),
       published: String(a.published || ""),
-      url: cleanPageUrl(link),
+      // News is rendered as a clickable external link. Keep the same
+      // provider-host boundary used by matchExternalUrl instead of allowing a
+      // provider payload to launch an arbitrary HTTPS destination.
+      url: trustedHttpsUrl(link, ["espn.com"]),
       image: String(img)
     })
   }

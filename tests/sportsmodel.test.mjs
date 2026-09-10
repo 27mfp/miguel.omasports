@@ -20,7 +20,7 @@ const exported = [
   "sportMeta", "shortTournamentName", "liveMatches", "matchLine", "interpolateLiveTime",
   "sameMatches", "sameRows", "sameGroups", "diffMatchNotifications", "buildPersistedState", "parseLeaguePage", "parseTeamPage",
   "mockRound", "parseMatchTimeMs", "refreshIntervalOptions", "mergeSeenMap", "NOTIFICATION_TTL_MS", "dictSet", "dictDelete",
-  "safeHome", "clampRefreshMinutes", "MAX_ROUND_RETRIES", "RETRY_DELAY_MS", "MIN_REFRESH_MINUTES", "MAX_REFRESH_MINUTES", "REFRESH_OPTIONS",
+  "safeHome", "clampRefreshMinutes", "MAX_ROUND_RETRIES", "RETRY_DELAY_MS", "RETRY_DELAY_ESPN_MS", "RETRY_DELAY_FOTMOB_F1_MS", "F1_RESULTS_REFRESH_MS", "MIN_REFRESH_MINUTES", "MAX_REFRESH_MINUTES", "REFRESH_OPTIONS",
   "monogramText", "parseF1SeasonWinners", "nextF1Session",
   "parseEspnBroadcast", "parseEspnGameLeaders", "parseEspnNews",
   "parseFotmobEvents", "parseFotmobForm", "parseFotmobStats",
@@ -55,7 +55,10 @@ test("formatCountdown formats days/hours/minutes", () => {
 })
 test("polling constants and clampRefreshMinutes", () => {
   assert.equal(Model.MAX_ROUND_RETRIES, 2)
-  assert.equal(Model.RETRY_DELAY_MS, 2500)
+  assert.equal(Model.RETRY_DELAY_ESPN_MS, 15000)
+  assert.equal(Model.RETRY_DELAY_FOTMOB_F1_MS, 20000)
+  assert.equal(Model.RETRY_DELAY_MS, Model.RETRY_DELAY_ESPN_MS)
+  assert.equal(Model.F1_RESULTS_REFRESH_MS, 300000)
   assert.equal(Model.MIN_REFRESH_MINUTES, 5)
   assert.equal(Model.MAX_REFRESH_MINUTES, 60)
   assert.deepEqual(Model.REFRESH_OPTIONS, [5, 10, 15, 30, 45, 60])
@@ -1225,6 +1228,10 @@ test("parseEspnNews extracts top articles with headline and url", () => {
   assert.equal(news.length, 1)
   assert.equal(news[0].headline, "Free Agency Buzz")
   assert.equal(news[0].url, "https://www.espn.com/nba/story/123")
+  const untrusted = Model.parseEspnNews({
+    articles: [{ headline: "Untrusted", links: { web: { href: "https://evil.example/story" } } }]
+  })
+  assert.equal(untrusted[0].url, "")
   assert.deepEqual(Model.parseEspnNews("invalid json"), [])
 })
 

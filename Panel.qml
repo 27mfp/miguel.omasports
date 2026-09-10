@@ -90,7 +90,9 @@ Panel {
   // Mock mode: OMASPORTS_MOCK=1 runs the whole panel on a deterministic built-in
   // simulation (no network) — live matches evolve, a goal is scored mid-session,
   // and a kickoff happens 12 minutes in. For development and UI testing.
-  readonly property bool mockMode: Quickshell.env("OMASPORTS_MOCK") === "1"
+  property bool mockModeOverride: false
+  property var mockPreTestState: null
+  readonly property bool mockMode: mockModeOverride || Quickshell.env("OMASPORTS_MOCK") === "1"
 
   // Testing & focus suppression for headless/autonomous runs
   property bool suppressFocus: false
@@ -140,6 +142,9 @@ Panel {
   property var lastPages: []
   property var multiSportStandings: ({})
   property var f1RaceWinners: ({})
+  property double f1WinnersFetchedAt: 0
+  property double f1DriversFetchedAt: 0
+  property double f1ConstructorsFetchedAt: 0
   property string f1CalendarRaw: ""
 
   // Per-match enrichment for football
@@ -160,6 +165,85 @@ Panel {
   function toggleNewsWire() {
     showNewsWire = !showNewsWire
     persistState()
+  }
+
+  // Runtime-only override used by the headless visual harness. It avoids
+  // restarting the user's shell just to select deterministic mock payloads;
+  // the override is never persisted.
+  function setMockModeForTesting(enabled) {
+    var next = enabled === true
+    if (mockModeOverride === next) return
+    if (next) {
+      mockPreTestState = {
+        allMatches: allMatches,
+        teamMatchesRaw: teamMatchesRaw,
+        lastPages: lastPages,
+        multiSportStandings: multiSportStandings,
+        f1RaceWinners: f1RaceWinners,
+        f1CalendarRaw: f1CalendarRaw,
+        f1WinnersFetchedAt: f1WinnersFetchedAt,
+        f1DriversFetchedAt: f1DriversFetchedAt,
+        f1ConstructorsFetchedAt: f1ConstructorsFetchedAt,
+        matchDetails: matchDetails,
+        matchBroadcasts: matchBroadcasts,
+        matchLeaders: matchLeaders,
+        matchEvents: matchEvents,
+        matchForm: matchForm,
+        matchStats: matchStats,
+        f1Podium: f1Podium,
+        f1Pole: f1Pole,
+        leagueNews: leagueNews,
+        lastSeenMatches: lastSeenMatches,
+        notificationQueue: notificationQueue,
+        detailQueue: detailQueue,
+        loading: loading,
+        lastUpdated: lastUpdated,
+        loadedFromCache: loadedFromCache,
+        errorMessage: errorMessage,
+        failedLeagues: failedLeagues
+      }
+      mockModeOverride = true
+      requestSerial++
+      stopNetworkWorkers()
+      loading = false
+      allMatches = []
+      teamMatchesRaw = []
+      lastUpdated = new Date(0)
+      errorMessage = ""
+      return
+    }
+
+    mockModeOverride = false
+    var prior = mockPreTestState
+    mockPreTestState = null
+    if (!prior) return
+    allMatches = prior.allMatches
+    teamMatchesRaw = prior.teamMatchesRaw
+    lastPages = prior.lastPages
+    multiSportStandings = prior.multiSportStandings
+    f1RaceWinners = prior.f1RaceWinners
+    f1CalendarRaw = prior.f1CalendarRaw
+    f1WinnersFetchedAt = prior.f1WinnersFetchedAt
+    f1DriversFetchedAt = prior.f1DriversFetchedAt
+    f1ConstructorsFetchedAt = prior.f1ConstructorsFetchedAt
+    matchDetails = prior.matchDetails
+    matchBroadcasts = prior.matchBroadcasts
+    matchLeaders = prior.matchLeaders
+    matchEvents = prior.matchEvents
+    matchForm = prior.matchForm
+    matchStats = prior.matchStats
+    f1Podium = prior.f1Podium
+    f1Pole = prior.f1Pole
+    leagueNews = prior.leagueNews
+    lastSeenMatches = prior.lastSeenMatches
+    notificationQueue = prior.notificationQueue
+    detailQueue = prior.detailQueue
+    loading = prior.loading
+    lastUpdated = prior.lastUpdated
+    loadedFromCache = prior.loadedFromCache
+    errorMessage = prior.errorMessage
+    failedLeagues = prior.failedLeagues
+    scheduleNextPoll()
   }
 
   // Crest disk-cache bookkeeping: keys already on disk are never re-downloaded
@@ -577,6 +661,9 @@ Panel {
     teamMatchesRaw = []
     multiSportStandings = {}
     f1RaceWinners = {}
+    f1WinnersFetchedAt = 0
+    f1DriversFetchedAt = 0
+    f1ConstructorsFetchedAt = 0
     f1CalendarRaw = ""
     lastPages = []
     matchDetails = {}
@@ -639,6 +726,16 @@ Panel {
 
   function revealMatch(matchId) {
     revealedMatchIds = Model.dictSet(revealedMatchIds, String(matchId), true)
+  }
+
+  // Score rows use a toggle callback so pointer activation can reveal a
+  // concealed score and hide it again without duplicating state logic in QML.
+  function toggleRevealScore(matchId) {
+    var key = String(matchId)
+    if (revealedMatchIds[key] === true)
+      revealedMatchIds = Model.dictDelete(revealedMatchIds, key)
+    else
+      revealedMatchIds = Model.dictSet(revealedMatchIds, key, true)
   }
 
   // Which F1 weekend cards have their sessions timetable unfolded
@@ -758,7 +855,8 @@ Panel {
   function activateSpotlight() {
     var m = root.featuredMatch || (root.activeSport === "f1" ? Model.featuredMatchForTeam(root.allMatches) : null)
     if (!m) return
-    var hidden = root.antiSpoiler && m.status === "finished"
+    var hidden = root.antiSpoiler
+      && (m.status === "finished" || m.status === "live")
       && !(root.revealedMatchIds[String(m.id)] === true)
     if (hidden) root.revealMatch(m.id)
     else root.openMatch(m)
@@ -774,7 +872,8 @@ Panel {
     }
     // Enter must mirror the pointer path: anti-spoiler results are revealed
     // first instead of unexpectedly launching an external browser.
-    var scoreHidden = root.antiSpoiler && m.status === "finished"
+    var scoreHidden = root.antiSpoiler
+      && (m.status === "finished" || m.status === "live")
       && !(root.revealedMatchIds[String(m.id)] === true)
     if (scoreHidden) root.revealMatch(m.id)
     else root.openMatch(m)
@@ -833,7 +932,9 @@ Panel {
   }
 
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+      root.bar.setCenterHoverRevealSuppressed(value)
+    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
       root.bar.centerHoverRevealSuppressed = value
   }
 
@@ -1209,6 +1310,16 @@ Panel {
     var mock = Model.mockRound(activeSport, Date.now())
     allMatches = mock.matches
     if (mock.standings && Object.keys(mock.standings).length > 0) multiSportStandings = mock.standings
+    if (activeSport === "football") {
+      // Football standings are page-backed (unlike the ESPN/F1 maps). Keep
+      // the mock table under the selected league id so visual tests work even
+      // when the user's persisted league differs from the default.
+      var mockLeagueId = String(standingsLeagueId || (selectedLeagueIds.length > 0 ? selectedLeagueIds[0] : "47"))
+      lastPages = [{
+        league: { id: mockLeagueId, name: Model.leagueLabel(mockLeagueId) },
+        standings: Model.arrayFrom(mock.standings && mock.standings["Premier League"])
+      }]
+    }
 
     leagueNews = [
       {
@@ -1388,9 +1499,8 @@ Panel {
     workerTeam.serial = root.requestSerial
     workerTeam.command = [
       "curl", "-LfsS", "--compressed", "--max-time", "12",
-      "-H", "Cache-Control: no-cache",
       "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/teams/" + encodeURIComponent(id) + "?_=" + Date.now()
+      "https://www.fotmob.com/teams/" + encodeURIComponent(id)
     ]
     workerTeam.running = true
   }
@@ -1440,9 +1550,8 @@ Panel {
     w.serial = root.requestSerial
     w.command = [
       "curl", "-LfsS", "--compressed", "--max-time", "12",
-      "-H", "Cache-Control: no-cache",
       "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/leagues/" + encodeURIComponent(w.leagueId) + "?_=" + Date.now()
+      "https://www.fotmob.com/leagues/" + encodeURIComponent(w.leagueId)
     ]
     w.running = true
   }
@@ -1581,6 +1690,7 @@ Panel {
   }
 
   function resolveEspnScoreboard(raw, sportCode, defaultName) {
+    if (workerScoreboard.serial !== root.requestSerial || workerScoreboard.handled) return
     var payload = String(raw || "")
     if (payload.trim()) {
       // A syntactically valid response counts as success even when the window
@@ -1617,6 +1727,7 @@ Panel {
   }
 
   function resolveEspnStandings(raw, sportCode) {
+    if (workerStandings.serial !== root.requestSerial || workerStandings.handled) return
     var payload = String(raw || "")
     if (payload.trim()) {
       var json2 = null
@@ -1664,9 +1775,9 @@ Panel {
     workerF1Calendar.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current.json"]
     workerF1Calendar.running = true
 
-    // Jolpica documents strict rate limits — standings and race winners are fetched
-    // once per session (they only change at race cadence) instead of on every
-    // poll alongside the calendar
+    // Jolpica documents strict rate limits — standings are cached while the
+    // result enrichment refreshes on its own five-minute cadence instead of
+    // adding a result request to every 20-second calendar poll.
     f1EnsureStandings("Drivers")
     f1EnsureStandings("Constructors")
     f1EnsureWinners()
@@ -1690,6 +1801,7 @@ Panel {
   }
 
   function resolveF1Podium(raw) {
+    if (workerF1Podium.serial !== root.requestSerial || workerF1Podium.handled) return
     var pod = Model.parseF1Podium(String(raw || ""))
     if (pod && pod.length > 0) {
       f1Podium = pod
@@ -1712,6 +1824,7 @@ Panel {
   }
 
   function resolveF1Pole(raw) {
+    if (workerF1Pole.serial !== root.requestSerial || workerF1Pole.handled) return
     var pole = Model.parseF1Pole(String(raw || ""))
     if (pole) {
       f1Pole = pole
@@ -1739,6 +1852,7 @@ Panel {
   }
 
   function resolveNews(raw) {
+    if (workerNews.serial !== root.requestSerial || workerNews.handled) return
     var news = Model.parseEspnNews(String(raw || ""))
     if (news && news.length > 0) {
       leagueNews = news
@@ -1748,7 +1862,9 @@ Panel {
 
   function f1EnsureStandings(group) {
     var w = group === "Constructors" ? workerF1Constructors : workerF1Drivers
-    if ((multiSportStandings[group] || []).length > 0) {
+    var fetchedAt = group === "Constructors" ? f1ConstructorsFetchedAt : f1DriversFetchedAt
+    var age = Date.now() - Number(fetchedAt || 0)
+    if (fetchedAt > 0 && age < Model.F1_RESULTS_REFRESH_MS) {
       w.handled = true
       w.gotData = true
       return
@@ -1763,7 +1879,8 @@ Panel {
   }
 
   function f1EnsureWinners() {
-    if (f1RaceWinners && Object.keys(f1RaceWinners).length > 0) {
+    var age = Date.now() - Number(f1WinnersFetchedAt || 0)
+    if (f1WinnersFetchedAt > 0 && age < Model.F1_RESULTS_REFRESH_MS) {
       workerF1Winners.handled = true
       workerF1Winners.gotData = true
       return
@@ -1772,16 +1889,27 @@ Panel {
     workerF1Winners.handled = false
     workerF1Winners.gotData = false
     workerF1Winners.serial = root.requestSerial
-    workerF1Winners.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/results/1.json"]
+    // The round-specific endpoint only returns round 1. Fetch the complete
+    // current-season result set so every completed race can be decorated.
+    workerF1Winners.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/results.json?limit=100"]
     workerF1Winners.running = true
   }
 
   function resolveF1Winners(raw) {
-    var winners = Model.parseF1SeasonWinners(String(raw || ""))
-    if (winners && Object.keys(winners).length > 0) {
-      f1RaceWinners = winners
-      if (f1CalendarRaw) {
-        allMatches = Model.parseF1Calendar(f1CalendarRaw, undefined, f1RaceWinners)
+    if (workerF1Winners.serial !== root.requestSerial || workerF1Winners.handled) return
+    var payload = String(raw || "")
+    if (Model.isF1CalendarPayload(payload)) {
+      // Record a valid empty result set too; otherwise an off-season response
+      // would be fetched on every poll despite being a successful response.
+      f1WinnersFetchedAt = Date.now()
+      var winners = Model.parseF1SeasonWinners(payload)
+      if (winners && typeof winners === "object") {
+        // Replace, rather than merge, so a new season or a provider correction
+        // cannot retain winners from the previous result set.
+        f1RaceWinners = winners
+        if (f1CalendarRaw) {
+          allMatches = Model.parseF1Calendar(f1CalendarRaw, undefined, f1RaceWinners)
+        }
       }
       workerF1Winners.gotData = true
     }
@@ -1789,6 +1917,7 @@ Panel {
   }
 
   function resolveF1Calendar(raw) {
+    if (workerF1Calendar.serial !== root.requestSerial || workerF1Calendar.handled) return
     var payload = String(raw || "")
     // Valid JSON is success even if the table holds no rounds yet — same
     // off-season contract as the ESPN resolvers above
@@ -1805,24 +1934,28 @@ Panel {
   }
 
   function resolveF1Drivers(raw) {
+    if (workerF1Drivers.serial !== root.requestSerial || workerF1Drivers.handled) return
     var drivers = Model.parseF1DriverStandings(String(raw || ""))
     if (drivers && drivers.length > 0) {
       var cur = {}
       for (var k in multiSportStandings) cur[k] = multiSportStandings[k]
       cur["Drivers"] = drivers
       multiSportStandings = cur
+      f1DriversFetchedAt = Date.now()
       workerF1Drivers.gotData = true
     }
     Qt.callLater(root.checkF1Done)
   }
 
   function resolveF1Constructors(raw) {
+    if (workerF1Constructors.serial !== root.requestSerial || workerF1Constructors.handled) return
     var con = Model.parseF1ConstructorStandings(String(raw || ""))
     if (con && con.length > 0) {
       var cur2 = {}
       for (var k2 in multiSportStandings) cur2[k2] = multiSportStandings[k2]
       cur2["Constructors"] = con
       multiSportStandings = cur2
+      f1ConstructorsFetchedAt = Date.now()
       workerF1Constructors.gotData = true
     }
     Qt.callLater(root.checkF1Done)
@@ -2012,12 +2145,10 @@ Panel {
       proc.detailId = id
       proc.serial = requestSerial
       proc.handled = false
-      var bustUrl = url + (url.indexOf("?") === -1 ? "?" : "&") + "_=" + Date.now()
       proc.command = [
         "curl", "-LfsS", "--compressed", "--max-time", "8",
-        "-H", "Cache-Control: no-cache",
         "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-        bustUrl
+        url
       ]
       proc.running = true
     }
@@ -2423,7 +2554,7 @@ Panel {
 
   RetryTimer {
     id: retryDelay
-    interval: Model.RETRY_DELAY_MS
+    interval: Model.RETRY_DELAY_FOTMOB_F1_MS
     predicate: function() {
       return root.loading && pendingRetryIds.length > 0
     }
@@ -2436,7 +2567,7 @@ Panel {
 
   RetryTimer {
     id: teamRetryDelay
-    interval: Model.RETRY_DELAY_MS
+    interval: Model.RETRY_DELAY_FOTMOB_F1_MS
     predicate: function() {
       return root.teamFetchActive
         && root.teamRetrySerial === root.requestSerial
@@ -2451,7 +2582,7 @@ Panel {
   // Retry dead rounds for ESPN sports (same contract as the football retry)
   RetryTimer {
     id: espnRetryDelay
-    interval: Model.RETRY_DELAY_MS
+    interval: Model.RETRY_DELAY_ESPN_MS
     predicate: function() {
       return root.loading
         && root.activeSport === root.espnSportCode
@@ -2464,7 +2595,7 @@ Panel {
 
   RetryTimer {
     id: f1RetryDelay
-    interval: Model.RETRY_DELAY_MS
+    interval: Model.RETRY_DELAY_FOTMOB_F1_MS
     predicate: function() {
       return root.loading
         && root.activeSport === "f1"
@@ -2498,8 +2629,9 @@ Panel {
     onFailed: root.consumeDetail(detailProcC, "")
   }
 
-  // Adaptive polling: while a followed match is live we poll every 40s so the
-  // clock and score track reality; otherwise we fall back to the user interval.
+  // Adaptive polling: while a followed match is live we use the provider-safe
+  // cadence (15s ESPN, 20s FotMob/F1) so the clock and score track reality;
+  // otherwise we fall back to the user interval.
   // Clamp to [5,60] like every other writer: a malformed state file (or a v1
   // save with refreshMinutes outside the dropdown range) must not produce a
   // multi-hour poll interval with no UI affordance to reset it.
@@ -2508,7 +2640,7 @@ Panel {
 
   function hasLiveFollowedMatch() {
     // Same contract as favoriteTeamLive: only followed-team games justify
-    // the ~40s adaptive polling cadence
+    // the provider-safe adaptive polling cadence
     for (var i = 0; i < teamMatches.length; i++)
       if (teamMatches[i] && teamMatches[i].status === "live") return true
     return false
@@ -2602,12 +2734,37 @@ Panel {
     function toggle(): void { root.toggle() }
     function refresh(): void { if (root.ipcThrottle()) root.refresh() }
     function toggleSpoiler(): void { if (root.ipcThrottle()) root.toggleSpoiler() }
+    function toggleBackgroundUpdates(): void { if (root.ipcThrottle()) root.toggleBackgroundUpdates() }
     function toggleBarTicker(): void { if (root.ipcThrottle()) root.toggleBarTicker() }
     function toggleSpotlight(): void { if (root.ipcThrottle()) root.toggleSpotlight() }
+    function toggleNewsWire(): void { if (root.ipcThrottle()) root.toggleNewsWire() }
+    function setNotifications(enabled: bool): void {
+      root.enableNotifications = enabled
+      root.savedState.notifications = enabled
+      root.persistState()
+      root.scheduleNextPoll()
+    }
+    function setMockMode(enabled: bool): void { root.setMockModeForTesting(enabled) }
     function sport(name: string): void { if (root.ipcThrottle()) root.switchSport(name) }
     function setSuppressFocus(suppress: bool): void { root.suppressFocus = suppress }
     function setTargetScreen(screenName: string): void { root.targetScreenName = screenName }
     function getActiveSport(): string { return root.activeSport }
+    function getMockMode(): bool { return root.mockMode }
+    function getRoute(): string {
+      if (root.showingSettings) return "settings"
+      if (root.tabIndex === 1) return "live"
+      if (root.tabIndex === 2) return "standings"
+      return "fixtures"
+    }
+    function getAntiSpoiler(): bool { return root.antiSpoiler }
+    function getNotifications(): bool { return root.enableNotifications }
+    function getBackgroundUpdates(): bool { return root.backgroundUpdates }
+    function getBarTicker(): bool { return root.showBarTicker }
+    function getSpotlight(): bool { return root.showSpotlight }
+    function getNewsWire(): bool { return root.showNewsWire }
+    function getSuppressFocus(): bool { return root.suppressFocus }
+    function getTargetScreen(): string { return root.targetScreenName }
+    function getOpened(): bool { return root.opened }
     function testNotification(): void {
       root.sendDesktopNotification("OmaSports", "Goal and kickoff notifications are active!", "", "normal")
     }

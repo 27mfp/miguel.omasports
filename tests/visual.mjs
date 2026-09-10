@@ -2,7 +2,7 @@
 // Autonomous non-interruptive visual testing & perceptual diff suite for miguel.omasports
 // Captures UI snapshots and runs pixel-level visual regression comparisons against goldens.
 // Run with: node tests/visual.mjs [--tab=<name>] [--sport=<name>] [--delay=<ms>] [--update-goldens] [--tolerance=<percent>]
-import { execSync } from "node:child_process"
+import { execSync, execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, writeFileSync, copyFileSync, statSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
 
@@ -23,6 +23,33 @@ const ON_SCREEN = Boolean(getArg("on-screen", false))
 const UPDATE_GOLDENS = Boolean(getArg("update-goldens", false))
 const TOLERANCE = parseFloat(getArg("tolerance", "0.5"))
 const TARGET_SCALE = parseFloat(getArg("scale", "1.25"))
+const VALID_TABS = new Set(["live", "fixtures", "standings", "settings", "news", "results"])
+const VALID_SPORTS = new Set(["football", "f1", "nba", "nfl", "mlb", "nhl"])
+
+if (ON_SCREEN) {
+  console.error("Error: on-screen visual testing is disabled; use a headless Hyprland monitor.")
+  process.exit(1)
+}
+if (TARGET_TAB && TARGET_TAB !== "all" && !VALID_TABS.has(String(TARGET_TAB))) {
+  console.error(`Error: unsupported tab '${TARGET_TAB}'.`)
+  process.exit(1)
+}
+if (TARGET_SPORT && TARGET_SPORT !== "all" && !VALID_SPORTS.has(String(TARGET_SPORT))) {
+  console.error(`Error: unsupported sport '${TARGET_SPORT}'.`)
+  process.exit(1)
+}
+if (!Number.isFinite(TOLERANCE) || TOLERANCE < 0) {
+  console.error("Error: tolerance must be a non-negative number.")
+  process.exit(1)
+}
+if (!Number.isFinite(TARGET_SCALE) || TARGET_SCALE <= 0) {
+  console.error("Error: scale must be a positive number.")
+  process.exit(1)
+}
+if (!Number.isFinite(DELAY_MS) || DELAY_MS < 0) {
+  console.error("Error: delay must be a non-negative number.")
+  process.exit(1)
+}
 
 const ARTIFACTS_DIR = join(process.cwd(), "test-artifacts")
 const GOLDENS_DIR = join(process.cwd(), "tests", "fixtures", "visual-goldens")
@@ -41,83 +68,123 @@ function sh(cmd, ignoreError = false) {
   }
 }
 
+function ipc(method, ...args) {
+  return execFileSync("omarchy-shell", ["miguel.omasports", method, ...args], {
+    stdio: "pipe",
+    encoding: "utf8"
+  }).trim()
+}
+
+function commandSucceeds(command) {
+  try {
+    execSync(command, { stdio: "ignore" })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function ensureToggle(getter, toggle, expected) {
+  if (String(ipc(getter)).trim().toLowerCase() === String(expected)) return
+  ipc(toggle)
+  await sleep(300) // Panel IPC mutation throttle is 250ms by design.
+  if (String(ipc(getter)).trim().toLowerCase() !== String(expected)) {
+    throw new Error(`${getter} could not be set to ${expected}`)
+  }
+}
+
+async function setBoolean(method, getter, expected) {
+  ipc(method, String(expected))
+  await sleep(100)
+  if (String(ipc(getter)).trim().toLowerCase() !== String(expected)) {
+    throw new Error(`${getter} could not be set to ${expected}`)
+  }
 }
 
 const hasGrim = Boolean(sh("which grim", true))
 const hasHyprctl = Boolean(sh("which hyprctl", true))
 const hasMagick = Boolean(sh("which magick", true) || sh("which convert", true))
 const hasPython3 = Boolean(sh("which python3", true))
+const hasPillow = hasPython3 && commandSucceeds("python3 -c \"import PIL\"")
 
 if (!hasGrim) {
   console.error("Error: 'grim' is required for autonomous visual testing on Wayland.")
   process.exit(1)
 }
+if (!hasPillow && !hasMagick) {
+  console.error("Error: Python Pillow or ImageMagick is required to measure visual baselines.")
+  process.exit(1)
+}
 
 let headlessMonitor = null
 
+function headlessMonitors() {
+  const output = sh("hyprctl monitors")
+  return [...output.matchAll(/Monitor (HEADLESS-\d+)/g)].map((match) => match[1])
+}
+
 function setupHeadlessMonitor() {
-  if (ON_SCREEN || !hasHyprctl) {
-    console.log("  🖥️  Running in on-screen mode (focus suppression enabled).")
-    return null
+  if (!hasHyprctl) {
+    throw new Error("hyprctl is required; refusing to run visual tests on a physical screen")
   }
+  let mon = null
+  let before = []
   try {
-    const out = sh("hyprctl output create headless", true)
-    let mon = null
+    before = headlessMonitors()
+    const out = sh("hyprctl output create headless")
     const match = out.match(/HEADLESS-\d+/)
     if (match) {
       mon = match[0]
     } else {
-      const monitors = sh("hyprctl monitors", true)
-      const matches = [...monitors.matchAll(/Monitor (HEADLESS-\d+)/g)]
-      if (matches.length > 0) {
-        mon = matches[matches.length - 1][1]
+      const after = headlessMonitors()
+      mon = after.find((name) => !before.includes(name)) || null
+    }
+    if (!mon) throw new Error("Hyprland did not report a headless monitor")
+    if (TARGET_SCALE) {
+      try {
+        sh(`hyprctl eval "hl.monitor({ output = '${mon}', mode = '1920x1080@60', position = 'auto', scale = ${TARGET_SCALE} })"`)
+      } catch {
+        sh(`hyprctl keyword monitor "${mon},1920x1080@60,auto,${TARGET_SCALE}"`)
       }
     }
-    if (mon) {
-      if (TARGET_SCALE) {
-        try {
-          sh(`hyprctl eval "hl.monitor({ output = '${mon}', mode = '1920x1080@60', position = 'auto', scale = ${TARGET_SCALE} })"`, true)
-        } catch {
-          sh(`hyprctl keyword monitor "${mon},1920x1080@60,auto,${TARGET_SCALE}"`, true)
-        }
-      }
-      console.log(`  🕶️  Running in headless mode on virtual monitor: [${mon}] (scale: ${TARGET_SCALE}, zero screen popups, zero focus disruption)`)
-      return mon
-    }
+    console.log(`  🕶️  Running in headless mode on virtual monitor: [${mon}] (scale: ${TARGET_SCALE}, zero screen popups, zero focus disruption)`)
+    return mon
   } catch (err) {
-    console.warn(`    ⚠️ Failed to create headless output: ${err.message}. Falling back to on-screen.`)
+    try {
+      const after = headlessMonitors()
+      const leaked = mon || after.find((name) => !before.includes(name))
+      if (leaked) sh(`hyprctl output remove "${leaked}"`)
+    } catch {}
+    throw new Error(`failed to provision headless output: ${err.message}`)
   }
-  return null
 }
 
 function removeHeadlessMonitor(mon) {
-  if (!mon || !hasHyprctl) return
-  try {
-    sh(`hyprctl output remove "${mon}"`, true)
-    console.log(`  🧹 Virtual monitor [${mon}] destroyed cleanly.`)
-  } catch {}
+  if (!mon) return
+  sh(`hyprctl output remove "${mon}"`)
+  console.log(`  🧹 Virtual monitor [${mon}] destroyed cleanly.`)
 }
-
-const DEFAULT_ON_SCREEN_GEOMETRY = "1024,20 512x672"
 
 async function captureTab(tabName, sport = null, isSportSwitch = false) {
   console.log(`\n  📸 Testing view: [${tabName.toUpperCase()}]${sport ? ` (sport: ${sport})` : ""}`)
 
   if (sport && isSportSwitch) {
-    sh(`omarchy-shell miguel.omasports sport "${sport}"`, true)
+    ipc("sport", sport)
     await sleep(2500)
   }
 
   if (tabName === "results") {
-    sh(`omarchy-shell miguel.omasports route "fixtures"`, true)
-    sh(`omarchy-shell miguel.omasports scheduleSection "results"`, true)
+    ipc("route", "fixtures")
+    ipc("scheduleSection", "results")
   } else if (tabName === "news") {
-    sh(`omarchy-shell miguel.omasports route "fixtures"`, true)
-    sh(`omarchy-shell miguel.omasports scheduleSection "news"`, true)
+    ipc("route", "fixtures")
+    ipc("scheduleSection", "news")
   } else {
-    sh(`omarchy-shell miguel.omasports route "${tabName}"`, true)
+    ipc("route", tabName)
   }
   await sleep(DELAY_MS)
 
@@ -127,11 +194,12 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
   const diffFilename = `diff-${filename}`
   const diffPath = join(ARTIFACTS_DIR, diffFilename)
 
-  if (headlessMonitor) {
+  if (!headlessMonitor) throw new Error("no headless monitor is active")
+  {
     const rawPath = join(ARTIFACTS_DIR, `raw-${filename}`)
     sh(`grim -o "${headlessMonitor}" "${rawPath}"`)
     
-    if (hasPython3 && existsSync(CROP_SCRIPT)) {
+    if (hasPillow && existsSync(CROP_SCRIPT)) {
       sh(`python3 "${CROP_SCRIPT}" "${rawPath}" "${filepath}"`, true)
     } else if (hasMagick) {
       const magickCmd = sh("which magick", true) ? "magick" : "convert"
@@ -143,8 +211,6 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
     if (existsSync(rawPath) && existsSync(filepath) && rawPath !== filepath) {
       try { unlinkSync(rawPath) } catch {}
     }
-  } else {
-    sh(`grim -g "${DEFAULT_ON_SCREEN_GEOMETRY}" "${filepath}"`)
   }
 
   // Verification 1: File size
@@ -166,19 +232,20 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
 
   // Verification 3: Responsive Viewport Constraint (max 72% screen height)
   let cardDimensions = null
-  if (hasPython3) {
-    try {
-      const dimRaw = sh(`python3 -c "from PIL import Image; im = Image.open('${filepath}'); print(f'{im.width}x{im.height}')"`, true)
-      if (dimRaw.includes("x")) {
-        const [w, h] = dimRaw.split("x").map(Number)
-        cardDimensions = { width: w, height: h }
-        if (h > 850) {
-          console.warn(`    ⚠️ Warning: Cropped card height (${h}px) exceeds 72% viewport budget.`)
-        } else {
-          console.log(`    📏 Card size: ${w}x${h}px (within 72% viewport limit) ✓`)
-        }
-      }
-    } catch {}
+  try {
+    const magickCmd = sh("which magick", true) ? "magick" : "convert"
+    const dimRaw = hasPillow
+      ? sh(`python3 -c "from PIL import Image; im = Image.open('${filepath}'); print(f'{im.width}x{im.height}')"`)
+      : sh(`${magickCmd} "${filepath}" -format "%wx%h" info:`)
+    if (!dimRaw.includes("x")) throw new Error("could not measure captured image")
+    const [w, h] = dimRaw.split("x").map(Number)
+    cardDimensions = { width: w, height: h }
+    if (h > 850) {
+      throw new Error(`cropped card height (${h}px) exceeds 72% viewport budget`)
+    }
+    console.log(`    📏 Card size: ${w}x${h}px (within 72% viewport limit) ✓`)
+  } catch (error) {
+    throw error
   }
 
   // Perceptual Diffing vs Golden
@@ -188,7 +255,7 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
     copyFileSync(filepath, goldenPath)
     console.log(`    🌟 Updated baseline golden: tests/fixtures/visual-goldens/${filename}`)
   } else if (existsSync(goldenPath)) {
-    if (hasPython3 && existsSync(DIFF_SCRIPT)) {
+    if (hasPillow && existsSync(DIFF_SCRIPT)) {
       const diffRaw = sh(`python3 "${DIFF_SCRIPT}" "${goldenPath}" "${filepath}" "${diffPath}" ${TOLERANCE}`, true)
       try {
         diffResult = JSON.parse(diffRaw)
@@ -204,9 +271,12 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
         passed = false
       }
     } else {
-      console.warn("    ⚠️ diff.py or python3 missing; cannot compare against baseline golden.")
+      console.warn("    ⚠️ Pillow and diff.py are required to compare against a baseline golden.")
       passed = false
     }
+  } else {
+    console.error(`    ✗ Missing visual golden for ${filename}`)
+    passed = false
   }
 
   if (passed) {
@@ -235,30 +305,80 @@ async function run() {
   console.log("  OMASports Autonomous Visual & Perceptual Diff Runner")
   console.log("==================================================")
 
-  const initialSport = sh("omarchy-shell miguel.omasports getActiveSport", true) || "football"
+  const initialSport = ipc("getActiveSport") || "football"
+  const initialRoute = ipc("getRoute") || "fixtures"
+  const initialSection = ipc("getScheduleSection") || "all"
+  const initialTargetScreen = ipc("getTargetScreen") || ""
+  const initialSuppressFocus = ipc("getSuppressFocus")
+  const initialOpened = String(ipc("getOpened")).trim().toLowerCase() === "true"
+  const initialAntiSpoiler = String(ipc("getAntiSpoiler")).trim().toLowerCase() === "true"
+  const initialBackgroundUpdates = String(ipc("getBackgroundUpdates")).trim().toLowerCase() === "true"
+  const initialBarTicker = String(ipc("getBarTicker")).trim().toLowerCase() === "true"
+  const initialSpotlight = String(ipc("getSpotlight")).trim().toLowerCase() === "true"
+  const initialNewsWire = String(ipc("getNewsWire")).trim().toLowerCase() === "true"
+  const initialNotifications = String(ipc("getNotifications")).trim().toLowerCase() === "true"
+  const initialMockMode = String(ipc("getMockMode")).trim().toLowerCase() === "true"
   console.log(`  📌 Initial active sport: ${initialSport}`)
   if (UPDATE_GOLDENS) console.log("  🌟 MODE: Updating baseline visual goldens")
 
-  headlessMonitor = setupHeadlessMonitor()
-  if (headlessMonitor) {
-    await sleep(400)
-    sh(`omarchy-shell miguel.omasports setTargetScreen "${headlessMonitor}"`, true)
-  }
-
-  sh("omarchy-shell miguel.omasports setSuppressFocus true", true)
-
-  const sportsToTest = TARGET_SPORT === "all"
-    ? ["football", "f1", "nba", "nfl", "mlb", "nhl"]
-    : [TARGET_SPORT || initialSport]
-
-  const tabsToTest = TARGET_TAB === "all" || !TARGET_TAB
-    ? ["live", "fixtures", "standings", "settings"]
-    : [TARGET_TAB]
-
   const results = []
   let anyFailed = false
+  let cleanupErrors = []
 
   try {
+    const sportsToTest = TARGET_SPORT === "all"
+      ? ["football", "f1", "nba", "nfl", "mlb", "nhl"]
+      : [TARGET_SPORT || initialSport]
+    const tabsToTest = TARGET_TAB === "all" || !TARGET_TAB
+      ? ["live", "fixtures", "standings", "settings"]
+      : [TARGET_TAB]
+
+    if (!UPDATE_GOLDENS) {
+      const missing = []
+      for (const sport of sportsToTest) {
+        for (const tab of tabsToTest) {
+          const filename = `tab-${sport ? `${sport}-` : ""}${tab}.png`
+          if (!existsSync(join(GOLDENS_DIR, filename))) missing.push(filename)
+        }
+      }
+      if (missing.length > 0) {
+        throw new Error(`Missing visual golden(s): ${missing.join(", ")}`)
+      }
+    }
+
+    // Screenshots must not depend on the user's persisted display toggles.
+    // Normalize them temporarily, then restore every value in finally.
+    if (!initialMockMode) {
+      ipc("setMockMode", "true")
+      await sleep(300)
+      if (String(ipc("getMockMode")).trim().toLowerCase() !== "true") {
+        throw new Error("deterministic mock mode could not be enabled")
+      }
+    }
+    await ensureToggle("getAntiSpoiler", "toggleSpoiler", false)
+    await ensureToggle("getBackgroundUpdates", "toggleBackgroundUpdates", true)
+    await ensureToggle("getBarTicker", "toggleBarTicker", true)
+    await ensureToggle("getSpotlight", "toggleSpotlight", true)
+    await ensureToggle("getNewsWire", "toggleNewsWire", true)
+    // Toasts are external to the panel and make screenshots nondeterministic.
+    await setBoolean("setNotifications", "getNotifications", false)
+    // Let any notification already emitted before the test expire before the
+    // first capture. This avoids including another process's toast in a panel
+    // golden while still restoring the user's notification setting afterward.
+    await sleep(6000)
+
+    headlessMonitor = setupHeadlessMonitor()
+    await sleep(400)
+    ipc("setTargetScreen", headlessMonitor)
+    if (ipc("getTargetScreen") !== headlessMonitor) {
+      throw new Error("panel did not accept the headless target screen")
+    }
+
+    ipc("setSuppressFocus", "true")
+    if (ipc("getSuppressFocus").toLowerCase() !== "true") {
+      throw new Error("focus suppression could not be confirmed")
+    }
+
     for (const sport of sportsToTest) {
       let isFirstTab = true
       for (const tab of tabsToTest) {
@@ -280,18 +400,63 @@ async function run() {
         isFirstTab = false
       }
     }
+  } catch (error) {
+    anyFailed = true
+    console.error(`  ✗ Visual suite aborted safely: ${error.message}`)
   } finally {
     console.log("\n  🧹 Restoring session state...")
-    sh("omarchy-shell miguel.omasports close", true)
-    sh("omarchy-shell miguel.omasports setTargetScreen \"\"", true)
-    sh("omarchy-shell miguel.omasports setSuppressFocus false", true)
-    if (initialSport) {
-      sh(`omarchy-shell miguel.omasports sport "${initialSport}"`, true)
+    const cleanup = (label, fn) => {
+      try { fn() } catch (error) {
+        cleanupErrors.push(`${label}: ${error.message}`)
+        console.error(`  ⚠️ Cleanup failed — ${label}: ${error.message}`)
+      }
     }
-    if (headlessMonitor) {
-      removeHeadlessMonitor(headlessMonitor)
+    const cleanupAsync = async (label, fn) => {
+      try { await fn() } catch (error) {
+        cleanupErrors.push(`${label}: ${error.message}`)
+        console.error(`  ⚠️ Cleanup failed — ${label}: ${error.message}`)
+      }
     }
-    console.log("  ✓ Session state restored. User workspace untouched.")
+    cleanup("close", () => ipc("close"))
+    await sleep(400)
+    await cleanupAsync("anti-spoiler", () => ensureToggle("getAntiSpoiler", "toggleSpoiler", initialAntiSpoiler))
+    await cleanupAsync("background updates", () => ensureToggle("getBackgroundUpdates", "toggleBackgroundUpdates", initialBackgroundUpdates))
+    await cleanupAsync("bar ticker", () => ensureToggle("getBarTicker", "toggleBarTicker", initialBarTicker))
+    await cleanupAsync("spotlight", () => ensureToggle("getSpotlight", "toggleSpotlight", initialSpotlight))
+    await cleanupAsync("news wire", () => ensureToggle("getNewsWire", "toggleNewsWire", initialNewsWire))
+    await cleanupAsync("notifications", () => setBoolean("setNotifications", "getNotifications", initialNotifications))
+    cleanup("sport", () => ipc("sport", initialSport))
+    cleanup("route", () => {
+      if (initialRoute === "fixtures") ipc("scheduleSection", initialSection)
+      else ipc("route", initialRoute)
+    })
+    cleanup("close after route restore", () => ipc("close"))
+    await sleep(400)
+    cleanup("target screen", () => {
+      ipc("setTargetScreen", initialTargetScreen)
+      if (ipc("getTargetScreen") !== initialTargetScreen) throw new Error("target screen did not restore")
+    })
+    cleanup("focus suppression", () => {
+      ipc("setSuppressFocus", initialSuppressFocus)
+      if (ipc("getSuppressFocus") !== initialSuppressFocus) throw new Error("focus state did not restore")
+    })
+    cleanup("visibility", () => {
+      if (initialOpened) ipc("open")
+      else ipc("close")
+    })
+    await sleep(400)
+    cleanup("visibility verification", () => {
+      if ((String(ipc("getOpened")).trim().toLowerCase() === "true") !== initialOpened) {
+        throw new Error("panel visibility did not restore")
+      }
+    })
+    cleanup("headless monitor removal", () => removeHeadlessMonitor(headlessMonitor))
+    if (!initialMockMode) {
+      cleanup("mock mode", () => ipc("setMockMode", "false"))
+      await sleep(300)
+    }
+    if (cleanupErrors.length > 0) anyFailed = true
+    else console.log("  ✓ Session state restored. User workspace untouched.")
   }
 
   generateHtmlReport(results)
@@ -302,9 +467,7 @@ async function run() {
   console.log(`  Report generated: test-artifacts/visual-report.html`)
   console.log("==================================================")
 
-  if (anyFailed) {
-    process.exit(1)
-  }
+  if (anyFailed) process.exit(1)
 }
 
 function generateHtmlReport(results) {

@@ -7,6 +7,7 @@ import { execSync } from "node:child_process"
 const ARGS = process.argv.slice(2)
 const QUICK = ARGS.includes("--quick")
 const FULL = ARGS.includes("--full")
+const INTERACTIVE = ARGS.includes("--interactive")
 
 function sh(cmd) {
   return execSync(cmd, { stdio: "pipe", encoding: "utf8" }).trim()
@@ -24,14 +25,19 @@ const steps = [
     cmd: "node tests/offline.mjs"
   },
   {
+    name: "Manifest & Package Contract",
+    file: "tests/manifest.mjs",
+    cmd: "node tests/manifest.mjs"
+  },
+  {
+    name: "QML Cross-File Contracts",
+    file: "tests/qml-contract.mjs",
+    cmd: "node tests/qml-contract.mjs"
+  },
+  {
     name: "Chaos & Edge-Case Scenarios",
     file: "tests/scenarios.mjs",
     cmd: "node tests/scenarios.mjs"
-  },
-  {
-    name: "Headless Interaction Suite",
-    file: "tests/interaction.mjs",
-    cmd: "node tests/interaction.mjs"
   },
   {
     name: "Notification & Delivery Suite",
@@ -74,7 +80,15 @@ if (!QUICK) {
 
 console.log("======================================================================")
 console.log("  🏆 OMASports S-Tier Master Test Orchestrator")
-console.log(`  Mode: ${FULL ? "FULL (All sports & views)" : (QUICK ? "QUICK (Logic & interaction only)" : "STANDARD (Comprehensive with visual verification)")}`)
+if (INTERACTIVE) {
+  steps.splice(3, 0, {
+    name: "Safe Headless Interaction Suite",
+    file: "tests/interaction.mjs",
+    cmd: "node tests/interaction.mjs"
+  })
+}
+
+console.log(`  Mode: ${FULL ? "FULL (All sports & views)" : (QUICK ? (INTERACTIVE ? "QUICK + HEADLESS INTERACTION" : "QUICK (Logic only)") : "STANDARD (Comprehensive with visual verification)")}`)
 console.log("======================================================================")
 
 const startTime = Date.now()

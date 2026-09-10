@@ -8,7 +8,8 @@ const raw = readFileSync(new URL("../SportsModel.js", import.meta.url), "utf8")
 const exported = [
   "parseScore", "parseMatch", "parseDetails", "parseLeaguePage", "isEspnScoreboardPayload",
   "matchesForTeam", "featuredMatchForTeam", "teamOutcome", "matchStatusText",
-  "mergePages", "mergeMatchUpdates", "groupMatches", "interpolateLiveTime"
+  "mergePages", "mergeMatchUpdates", "groupMatches", "interpolateLiveTime",
+  "RETRY_DELAY_ESPN_MS", "RETRY_DELAY_FOTMOB_F1_MS"
 ]
 const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -150,6 +151,8 @@ test("Resilience against HTTP 429 & Cloudflare HTML bot-walls (No Data Loss)", (
   assert.equal(merged.length, 1, "Must retain cached matches during provider failure")
   assert.equal(merged[0].id, "1")
   assert.equal(merged[0].homeScore, 2)
+  assert.equal(Model.RETRY_DELAY_ESPN_MS, 15000, "ESPN retry floor must be at least 15 seconds")
+  assert.equal(Model.RETRY_DELAY_FOTMOB_F1_MS, 20000, "FotMob/F1 retry floor must be at least 20 seconds")
 })
 
 // -----------------------------------------------------------------------------

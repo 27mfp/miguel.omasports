@@ -39,14 +39,16 @@ miguel.omasports/
     ├── visual.mjs         # Headless visual test runner with perceptual diff comparisons
     ├── diff.py            # Perceptual diffing engine (pixel mismatch % & neon magenta heatmaps)
     ├── crop.py            # Automated popup card bounding-box auto-crop tool
-    ├── interaction.mjs    # Headless interaction tests (spoiler reveal, tab routing, toggles)
+    ├── interaction.mjs    # Safe opt-in headless interaction tests (routing, toggles, lifecycle)
     ├── scenarios.mjs      # Chaos & edge-case scenario tests (429 rate limit, shootouts, red cards)
     ├── notifications.mjs  # 9 notification delivery, 500ms pacing & security tests
     ├── crest-resilience.mjs # 8 crest cache resilience & 404/corrupt fallback tests
     ├── burnin.mjs         # 3 burn-in & memory stability tests (100 mock cycles, TTL pruning)
-    ├── sportsmodel.test.mjs # 71 unit tests covering all pure JS functions
+    ├── sportsmodel.test.mjs # 91 unit tests covering all pure JS functions
     ├── offline.mjs        # 13 offline golden tests against frozen provider payloads
     ├── live.mjs           # Live E2E integration tests against real provider APIs
+    ├── manifest.mjs       # Manifest/package structure contract checks
+    ├── qml-contract.mjs   # Static cross-file QML wiring and harness contracts
     ├── capture-fixtures.mjs # Captures new real-world payloads for offline testing (network required)
     └── fixtures/
         ├── goldens.json   # Frozen JSON payloads and parser golden results
@@ -65,6 +67,10 @@ All IPC commands are sent via the running Omarchy shell:
 | `route` | `tabName: string` (`"fixtures"`, `"live"`, `"standings"`, `"settings"`) | Opens the panel and routes directly to the requested tab. |
 | `sport` | `sportName: string` (`"football"`, `"f1"`, `"nba"`, `"nfl"`, `"mlb"`, `"nhl"`) | Switches active sport and triggers background fetch. |
 | `getActiveSport` | *none* | Returns the currently active sport string (e.g. `"football"`). |
+| `getRoute` / `getOpened` | *none* | Returns current panel route / visibility for safe test orchestration. |
+| `getAntiSpoiler` / `getNotifications` | *none* | Returns notification privacy settings. |
+| `getBackgroundUpdates` / `getBarTicker` / `getSpotlight` | *none* | Returns display and polling settings. |
+| `getSuppressFocus` / `getTargetScreen` | *none* | Returns test-isolation state for verification and restoration. |
 | `toggleSpoiler` | *none* | Toggles Anti-Spoiler Shield globally. |
 | `refresh` | *none* | Force-refreshes data for the current sport. |
 | `open` | *none* | Opens the panel window. |
@@ -78,10 +84,11 @@ All IPC commands are sent via the running Omarchy shell:
 ## 4. Testing Playbook
 
 ### A. Unified S-Tier Master Runner (Run Everything)
-Executes all 10 quality gates across pure JS logic, goldens, scenarios, interactions, notifications, crest resilience, burn-in memory stability, plugin validation, live E2E integration, and perceptual visual diffs:
+Executes the local quality gates across pure JS logic, goldens, manifest/package integrity, scenarios, notifications, crest resilience, burn-in memory stability, plugin validation, live E2E integration, and perceptual visual diffs. Desktop interaction testing is opt-in:
 ```bash
 node tests/run-all.mjs           # standard full verification (includes live E2E and visual diff)
-node tests/run-all.mjs --quick   # rapid run across 8 non-network gates in < 6.5s
+node tests/run-all.mjs --quick   # non-desktop logic gates
+node tests/run-all.mjs --quick --interactive # opt-in safe headless interaction gate
 node tests/run-all.mjs --full    # exhaustive run across all 6 sports and tabs
 ```
 
@@ -90,7 +97,7 @@ Always run before committing changes to `SportsModel.js`:
 ```bash
 node tests/sportsmodel.test.mjs
 ```
-*Current status: 71 tests passing (100%).*
+*Current status: 91 tests passing (100%).*
 
 ### C. Offline Golden Regression Tests
 Verifies parser output against frozen real-world provider payloads without touching the network:
@@ -100,49 +107,55 @@ node tests/offline.mjs
 *Current status: 13 tests passing (100%).*
 > **Note**: Only update goldens via `node tests/capture-fixtures.mjs` if you are intentionally updating data schemas.
 
-### D. Chaos & Edge-Case Scenario Suite
+### D. QML Cross-File Contract Suite
+Checks score-reveal/anti-spoiler wiring, provider retry floors, and fail-closed desktop test harness contracts without starting Quickshell:
+```bash
+node tests/qml-contract.mjs
+```
+
+### E. Chaos & Edge-Case Scenario Suite
 Verifies resilience against penalty shootouts, extra time (`AET`), red cards, HTTP 429 rate limits, HTML bot-walls, and extreme team names:
 ```bash
 node tests/scenarios.mjs
 ```
 *Current status: 6 tests passing (100%).*
 
-### E. Headless Interaction Suite
-Tests real-time UI state toggling without stealing keyboard focus or popping up windows:
+### F. Safe Headless Interaction Suite
+Tests real-time UI state toggling only on a dedicated virtual monitor with confirmed focus suppression:
 ```bash
 node tests/interaction.mjs
 ```
-*Current status: 4 tests passing (100%).*
+*Current status: 6 tests passing (100%) when run on a dedicated headless monitor.*
 
-### F. Notification & Delivery Suite
+### G. Notification & Delivery Suite
 Validates desktop notification diffing, goal alerts, anti-spoiler concealment, lifecycle transitions, crest key sanitization, queue capping, 500ms toast pacing, and `notify-send` argument escaping:
 ```bash
 node tests/notifications.mjs
 ```
 *Current status: 9 tests passing (100%).*
 
-### G. Crest Cache Resilience & Fallback Suite
+### H. Crest Cache Resilience & Fallback Suite
 Validates monogram derivation, cold cache resilience, broken CDN recovery (404/500/corrupt bytes), and system log hygiene:
 ```bash
 node tests/crest-resilience.mjs
 ```
 *Current status: 8 tests passing (100%).*
 
-### H. Burn-In & Memory Stability Suite
+### I. Burn-In & Memory Stability Suite
 Simulates 100 consecutive mock polling cycles, verifies array and queue bounds (`detailQueue ≤ 8`, `notificationQueue ≤ 5`), tests `seenMap` TTL pruning (6h), and measures heap stability:
 ```bash
 node tests/burnin.mjs
 ```
 *Current status: 3 tests passing (100%).*
 
-### I. Omarchy Plugin Validation
+### J. Omarchy Plugin Validation
 Validates QML syntax, plugin structure, and manifest integrity:
 ```bash
 omarchy plugin validate .
 ```
 *Must always exit with return code 0.*
 
-### J. Live Provider E2E Integration
+### K. Live Provider E2E Integration
 Hits real provider APIs (FotMob, ESPN, Jolpica) to verify parsers work against live data. Requires network access; only runs in standard and `--full` modes:
 ```bash
 node tests/live.mjs football   # football only (default in standard mode)
@@ -151,8 +164,8 @@ node tests/live.mjs all        # all 6 sports (used in --full mode)
 *Current status: 8 tests passing (football). ~20 tests across all sports.*
 > **Note**: Excluded from `--quick` / pre-commit to avoid blocking commits on third-party network issues.
 
-### K. Autonomous Perceptual Visual Diffing
-Runs pixel-level visual regression testing **headlessly in the background** against baseline goldens, supporting HiDPI scaling and viewport height constraints (≤ 72% screen height):
+### L. Autonomous Perceptual Visual Diffing
+Runs pixel-level visual regression testing **headlessly in the background** against deterministic runtime mock data, supporting HiDPI scaling and viewport height constraints (≤ 72% screen height). It temporarily enables and restores the runtime-only mock override:
 ```bash
 # Compare against approved visual baselines
 node tests/visual.mjs --sport=f1 --tab=standings
@@ -162,14 +175,17 @@ node tests/visual.mjs --sport=football --tab=all
 node tests/visual.mjs --sport=f1 --tab=standings --scale=1.0
 node tests/visual.mjs --sport=f1 --tab=standings --scale=2.0
 
-# Update visual golden baselines when design changes are intentional
+# Update visual golden baselines when design changes are intentional (headless only)
 node tests/visual.mjs --sport=f1 --tab=standings --update-goldens
 
 # Inspect the generated 3-way comparative visual report
 xdg-open test-artifacts/visual-report.html
 ```
+The visual runner fails closed for missing or unmeasurable baselines; only approve
+new goldens after reviewing the headless capture. Full `--sport=all --tab=all`
+coverage requires a committed golden for every requested sport/view.
 
-### L. Automated Git Pre-Commit Quality Gate
+### M. Automated Git Pre-Commit Quality Gate
 A git pre-commit hook runs the `--quick` suite (~6.5s) before every commit. If any test fails, the commit is rejected:
 ```bash
 # The hook lives at .git/hooks/pre-commit and runs automatically.
@@ -177,7 +193,7 @@ A git pre-commit hook runs the `--quick` suite (~6.5s) before every commit. If a
 .git/hooks/pre-commit
 ```
 
-### M. Reloading Omarchy Shell
+### N. Reloading Omarchy Shell
 To apply QML changes to the live desktop environment without restarting the user session:
 ```bash
 omarchy-restart-shell
