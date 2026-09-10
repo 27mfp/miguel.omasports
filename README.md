@@ -123,7 +123,7 @@ omarchy-shell miguel.omasports toggleSpoiler
 omarchy-shell miguel.omasports getActiveSport
 ```
 
-The complete IPC contract, including safe headless-test controls, is documented in [AGENTS.md](AGENTS.md).
+The complete IPC contract, including safe headless-test controls, is documented in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Requirements
 
@@ -150,6 +150,7 @@ node tests/interaction.mjs                 # headless IPC and lifecycle tests
 node tests/visual.mjs --sport=all --tab=all # headless visual regression suite
 node tests/offline.mjs                     # frozen provider payload regressions
 node tests/live.mjs all                     # live provider acceptance tests; network required
+node tests/release-guard.mjs                # release payload safety checks
 ```
 
 Visual and interaction tests are headless-only. They create a temporary `HEADLESS-*` Wayland monitor, suppress keyboard focus, and restore the user’s shell state when finished. The visual suite uses the built-in deterministic mock mode so screenshots do not depend on changing match data.
@@ -160,7 +161,7 @@ For local UI work, launch the shell with mock data:
 OMASPORTS_MOCK=1 omarchy-launch-shell
 ```
 
-See [AGENTS.md](AGENTS.md) for the architecture map, provider polling floors, IPC details, and the full testing playbook.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the architecture map, provider polling floors, IPC details, and the full testing playbook.
 
 ## License
 

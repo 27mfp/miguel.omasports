@@ -30,6 +30,11 @@ const steps = [
     cmd: "node tests/manifest.mjs"
   },
   {
+    name: "Release Payload Guard",
+    file: "tests/release-guard.mjs",
+    cmd: "node tests/release-guard.mjs"
+  },
+  {
     name: "QML Cross-File Contracts",
     file: "tests/qml-contract.mjs",
     cmd: "node tests/qml-contract.mjs"

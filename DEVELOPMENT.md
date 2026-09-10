@@ -1,6 +1,6 @@
-# 🤖 Agent Guide & Engineering Playbook: OmaSports (`miguel.omasports`)
+# 🛠️ Development & Engineering Playbook: OmaSports (`miguel.omasports`)
 
-This document serves as the authoritative operational manual for AI agents and developers working on the `miguel.omasports` Omarchy plugin. Follow these instructions, conventions, and architectural contracts to prevent regressions and maintain desktop harmony.
+This document is the operational manual for developers working on the `miguel.omasports` Omarchy plugin. Follow these instructions, conventions, and architectural contracts to prevent regressions and maintain desktop harmony.
 
 ---
 
