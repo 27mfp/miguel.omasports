@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="icon.svg" alt="OmaSports icon" width="96" height="96">
+  <img src="icon.png" alt="OmaSports icon" width="96" height="96">
   <h1>OmaSports</h1>
   <p><strong>Live scores, fixtures, and standings for Omarchy.</strong></p>
   <p>
