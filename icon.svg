@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OmaSports</title>
+  <desc id="desc">A cyan sports scoreboard badge with a live red indicator.</desc>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#202b3a"/>
+      <stop offset="1" stop-color="#0b0f17"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="128" y1="136" x2="384" y2="344" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#26364a"/>
+      <stop offset="1" stop-color="#172331"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#070a0e"/>
+  <circle cx="256" cy="256" r="202" fill="url(#bg)" stroke="#38bdf8" stroke-width="10"/>
+  <circle cx="256" cy="256" r="174" fill="none" stroke="#334155" stroke-width="2"/>
+
+  <!-- Scoreboard face -->
+  <rect x="94" y="132" width="324" height="244" rx="34" fill="url(#screen)" stroke="#64748b" stroke-width="4"/>
+  <path d="M128 180h256M128 320h256" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" opacity=".85"/>
+
+  <!-- Compact OS sports mark -->
+  <circle cx="202" cy="248" r="58" fill="none" stroke="#f8fafc" stroke-width="18"/>
+  <path d="M302 197c-14-9-31-13-47-7-18 7-18 30 0 37l32 12c18 7 18 30 0 37-17 7-36 2-50-8" fill="none" stroke="#f59e0b" stroke-width="18" stroke-linecap="round"/>
+
+  <!-- Score ticks / live pulse -->
+  <path d="M137 352h34M190 352h34M243 352h34M296 352h34M349 352h26" stroke="#94a3b8" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="379" cy="112" r="25" fill="#ef4444" opacity=".28" filter="url(#glow)"/>
+  <circle cx="379" cy="112" r="13" fill="#ef4444"/>
+</svg>
