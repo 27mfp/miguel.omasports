@@ -15,7 +15,7 @@
   </p>
 </div>
 
-![OmaSports football fixtures panel](assets/omasports-preview.png)
+![OmaSports football fixtures panel](preview.png)
 
 <p align="center"><sub>Preview captured from the live FotMob feed. Fixture times and availability vary by season and timezone.</sub></p>
 
