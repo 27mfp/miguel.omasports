@@ -40,6 +40,11 @@ const steps = [
     cmd: "node tests/qml-contract.mjs"
   },
   {
+    name: "Security Hardening",
+    file: "tests/security-hardening.mjs",
+    cmd: "node tests/security-hardening.mjs"
+  },
+  {
     name: "Chaos & Edge-Case Scenarios",
     file: "tests/scenarios.mjs",
     cmd: "node tests/scenarios.mjs"

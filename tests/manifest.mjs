@@ -28,7 +28,7 @@ const keys = schema.map((setting) => {
 })
 assert.equal(new Set(keys).size, keys.length, "manifest setting keys must be unique")
 
-for (const file of ["Panel.qml", "NetworkProcess.qml", "RetryTimer.qml", "SportsModel.js"]) {
+for (const file of ["Panel.qml", "NetworkProcess.qml", "SecureProcess.qml", "secure_io.py", "RetryTimer.qml", "SportsModel.js"]) {
   assert.ok(existsSync(new URL(file, root)), `required runtime file is missing: ${file}`)
 }
 

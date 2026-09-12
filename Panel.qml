@@ -45,6 +45,28 @@ Panel {
     } catch (e) {}
     return h || Model.safeHome()
   }
+  property string secureHome: ""
+
+  readonly property string secureHelperPath: {
+    var value = String(Qt.resolvedUrl("secure_io.py") || "")
+    if (value.indexOf("file://") === 0) value = value.slice(7)
+    try { return decodeURIComponent(value) } catch (e) { return value }
+  }
+
+  function secureCommand(args) {
+    return ["/usr/bin/python3", "-I", "-S", root.secureHelperPath].concat(args || [])
+  }
+
+  function secureFetchCommand(url, maxBytes, timeoutSeconds, userAgent, noCache) {
+    var args = ["fetch", "--url", String(url), "--max-bytes", String(maxBytes), "--timeout", String(timeoutSeconds || 12)]
+    if (userAgent) args.push("--user-agent", String(userAgent))
+    if (noCache) args.push("--no-cache")
+    return secureCommand(args)
+  }
+
+  function secureToolCommand(tool, args) {
+    return secureCommand(["exec-tool", String(tool)].concat(args || []))
+  }
 
   // Optional background polling (from user favorites state or widget settings)
   property bool backgroundUpdates: (savedState && savedState.backgroundUpdates !== undefined)
@@ -128,6 +150,7 @@ Panel {
   property bool notificationToolAvailable: true
   property bool notificationWarningShown: false
   property string persistenceError: ""
+  property string pendingStatePayload: ""
 
   // Match and standings storage
   property var allMatches: []
@@ -900,7 +923,7 @@ Panel {
   function openFromHotkey() {
     openedFromHotkey = true
     root.controller.show()
-    stateFile.reload()
+    loadStateSecure()
     Qt.callLater(function() {
       if (root.opened) scheduleNextPoll()
     })
@@ -954,21 +977,18 @@ Panel {
   }
 
   function stateFilePath() {
-    return root.userHome + "/.config/omarchy/sports-favorites.json"
+    return (root.secureHome || root.userHome) + "/.config/omarchy/sports-favorites.json"
+  }
+
+  function loadStateSecure() {
+    if (stateReadProc.running) return
+    stateReadProc.handled = false
+    stateReadProc.command = secureCommand(["state-read"])
+    stateReadProc.running = true
   }
 
   function applyState(raw) {
     var str = String(raw || "")
-    // A non-empty file that fails to parse is corruption (crash mid-write,
-    // disk full, manual edit) — preserve it before any persist can overwrite
-    // the user's leagues and teams with defaults
-    if (str.trim() !== "") {
-      try { JSON.parse(str) } catch (e) {
-        console.warn("omasports: state file corrupt — backing up before continuing with defaults")
-        stateBackupProc.command = ["cp", stateFilePath(), stateFilePath() + ".corrupt"]
-        stateBackupProc.running = true
-      }
-    }
     var nextState = Model.parseState(str)
     var ownWrite = ignoredStateSignature !== ""
       && JSON.stringify(nextState) === ignoredStateSignature
@@ -1024,7 +1044,16 @@ Panel {
     savedState.showSpotlight = showSpotlight
     ignoredStateSignature = JSON.stringify(savedState)
     persistenceError = ""
-    stateFile.setText(JSON.stringify(savedState, null, 2) + "\n")
+    pendingStatePayload = JSON.stringify(savedState, null, 2) + "\n"
+    if (!stateWriteProc.running) startStateWrite()
+  }
+
+  function startStateWrite() {
+    if (!pendingStatePayload) return
+    var payload = pendingStatePayload
+    pendingStatePayload = ""
+    stateWriteProc.command = secureCommand(["state-write", payload])
+    stateWriteProc.running = true
   }
 
   function toggleNotifications() {
@@ -1065,7 +1094,7 @@ Panel {
     var next = Model.arrayFrom(notificationQueue)
     var item = next.shift()
     notificationQueue = next
-    var cmd = ["notify-send", "-a", "OmaSports"]
+    var args = ["-a", "OmaSports"]
     if (item.iconPath && item.iconPath.trim()) {
       var p = item.iconPath
       if (p.indexOf("file://") === 0) p = p.slice(7)
@@ -1075,18 +1104,18 @@ Panel {
       // arbitrary file under the user's home (defense in depth alongside
       // crestCacheKey's bytes whitelist).
       var cacheRoot = logoCacheDir()
-      if (p.indexOf(cacheRoot) === 0) cmd.push("-i", p)
+      if (p.indexOf(cacheRoot) === 0) args.push("-i", p)
     }
-    if (item.urgency) cmd.push("-u", item.urgency)
+    if (item.urgency) args.push("-u", item.urgency)
     // "--" ends option parsing: provider-derived strings must never be
     // mistaken for flags even when they start with a dash.
-    cmd.push("--", item.title, item.body)
-    notifierProc.command = cmd
+    args.push("--", item.title, item.body)
+    notifierProc.command = secureToolCommand("notify-send", args)
     notifierProc.running = true
   }
 
   function logoCacheDir() {
-    return root.userHome + "/.cache/omarchy-omasports/logos/"
+    return (root.secureHome || root.userHome) + "/.cache/omarchy-omasports/logos/"
   }
 
   function crestIconPath(sport, team) {
@@ -1225,7 +1254,7 @@ Panel {
   // ---- Multi-Sport Fetch Dispatch ------------------------------------------
   function refresh() {
     if (!stateLoaded) {
-      stateFile.reload()
+      loadStateSecure()
       return
     }
     // A round is already in flight — restarting workers mid-flight would
@@ -1238,7 +1267,7 @@ Panel {
   // whatever generation is in flight even if refresh() would normally defer
   function forceRefresh() {
     if (!stateLoaded) {
-      stateFile.reload()
+      loadStateSecure()
       return
     }
     espnRetryCount = 0
@@ -1275,7 +1304,7 @@ Panel {
 
   // Kill every in-flight request so a stale generation can never land after
   // a new round starts (switching sports, IPC refresh spam, state reloads).
-  // handled=true suppresses late StdioCollector/exit callbacks; the serial
+  // handled=true suppresses late stream/exit callbacks; the serial
   // gates inside the resolve functions are the second line of defense.
   function stopNetworkWorkers() {
     retryDelay.stop()
@@ -1294,14 +1323,11 @@ Panel {
                  detailProcA, detailProcB, detailProcC,
                  workerA, workerB, workerC, workerD,
                  logoScanProc, logoEvictProc, logoCacheProc,
-                 notificationProbe, notifierProc,
-                 stateBackupProc, matchOpener]
+                 notificationProbe, notifierProc, matchOpener]
     for (var i = 0; i < procs.length; i++) {
       var w = procs[i]
-      // NetworkProcess owns `handled`; plain Process helpers (notify-send,
-      // logo cache, xdg-open) do not — assigning it throws at runtime.
       if ("handled" in w) w.handled = true
-      if (w.running) w.running = false
+      if (w.running) w.hardStop()
     }
   }
 
@@ -1388,7 +1414,7 @@ Panel {
   function startFootballRound() {
     var workers = [workerA, workerB, workerC, workerD]
     for (var i = 0; i < workers.length; i++) {
-      if (workers[i].running) workers[i].running = false
+      if (workers[i].running) workers[i].hardStop()
       workers[i].handled = false
     }
     retryDelay.stop()
@@ -1434,11 +1460,11 @@ Panel {
     teamFetchQueue = []
     teamRetryId = ""
     workerTeam.handled = true
-    if (workerTeam.running) workerTeam.running = false
+    if (workerTeam.running) workerTeam.hardStop()
   }
 
   function beginTeamPageFetch(ids, isRound) {
-    if (workerTeam.running) workerTeam.running = false
+    if (workerTeam.running) workerTeam.hardStop()
     workerTeam.handled = true
     teamRetryDelay.stop()
     teamFetchQueue = Model.normalizeTeamIds(ids)
@@ -1497,11 +1523,14 @@ Panel {
     workerTeam.handled = false
     workerTeam.teamId = id
     workerTeam.serial = root.requestSerial
-    workerTeam.command = [
-      "curl", "-LfsS", "--compressed", "--max-time", "12",
-      "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/teams/" + encodeURIComponent(id)
-    ]
+    workerTeam.maxOutputBytes = 4 * 1024 * 1024
+    workerTeam.command = secureFetchCommand(
+      "https://www.fotmob.com/teams/" + encodeURIComponent(id),
+      workerTeam.maxOutputBytes,
+      12,
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+      false
+    )
     workerTeam.running = true
   }
 
@@ -1548,11 +1577,14 @@ Panel {
     w.handled = false
     w.leagueId = String(leagueId)
     w.serial = root.requestSerial
-    w.command = [
-      "curl", "-LfsS", "--compressed", "--max-time", "12",
-      "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-      "https://www.fotmob.com/leagues/" + encodeURIComponent(w.leagueId)
-    ]
+    w.maxOutputBytes = 4 * 1024 * 1024
+    w.command = secureFetchCommand(
+      "https://www.fotmob.com/leagues/" + encodeURIComponent(w.leagueId),
+      w.maxOutputBytes,
+      12,
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+      false
+    )
     w.running = true
   }
 
@@ -1677,14 +1709,16 @@ Panel {
     workerScoreboard.serial = root.requestSerial
     workerScoreboard.sportCode = sportCode
     workerScoreboard.defaultName = defaultName
-    workerScoreboard.command = ["curl", "-LfsS", "--max-time", "10", "-H", "Cache-Control: no-cache", "https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard?" + dates]
+    workerScoreboard.maxOutputBytes = 3 * 1024 * 1024
+    workerScoreboard.command = secureFetchCommand("https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard?" + dates, workerScoreboard.maxOutputBytes, 10, "", true)
     workerScoreboard.running = true
 
     workerStandings.handled = false
     workerStandings.gotData = false
     workerStandings.serial = root.requestSerial
     workerStandings.sportCode = sportCode
-    workerStandings.command = ["curl", "-LfsS", "--max-time", "10", "-H", "Cache-Control: no-cache", "https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings"]
+    workerStandings.maxOutputBytes = 2 * 1024 * 1024
+    workerStandings.command = secureFetchCommand("https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings", workerStandings.maxOutputBytes, 10, "", true)
     workerStandings.running = true
     fetchLeagueNews()
   }
@@ -1772,7 +1806,8 @@ Panel {
     workerF1Calendar.handled = false
     workerF1Calendar.gotData = false
     workerF1Calendar.serial = root.requestSerial
-    workerF1Calendar.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current.json"]
+    workerF1Calendar.maxOutputBytes = 2 * 1024 * 1024
+    workerF1Calendar.command = secureFetchCommand("https://api.jolpi.ca/ergast/f1/current.json", workerF1Calendar.maxOutputBytes, 10, "", false)
     workerF1Calendar.running = true
 
     // Jolpica documents strict rate limits — standings are cached while the
@@ -1796,7 +1831,8 @@ Panel {
     workerF1Podium.handled = false
     workerF1Podium.gotData = false
     workerF1Podium.serial = root.requestSerial
-    workerF1Podium.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/last/results.json"]
+    workerF1Podium.maxOutputBytes = 1024 * 1024
+    workerF1Podium.command = secureFetchCommand("https://api.jolpi.ca/ergast/f1/current/last/results.json", workerF1Podium.maxOutputBytes, 10, "", false)
     workerF1Podium.running = true
   }
 
@@ -1819,7 +1855,8 @@ Panel {
     workerF1Pole.handled = false
     workerF1Pole.gotData = false
     workerF1Pole.serial = root.requestSerial
-    workerF1Pole.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/last/qualifying.json"]
+    workerF1Pole.maxOutputBytes = 1024 * 1024
+    workerF1Pole.command = secureFetchCommand("https://api.jolpi.ca/ergast/f1/current/last/qualifying.json", workerF1Pole.maxOutputBytes, 10, "", false)
     workerF1Pole.running = true
   }
 
@@ -1847,7 +1884,8 @@ Panel {
     workerNews.handled = false
     workerNews.gotData = false
     workerNews.serial = root.requestSerial
-    workerNews.command = ["curl", "-LfsS", "--max-time", "10", url]
+    workerNews.maxOutputBytes = 2 * 1024 * 1024
+    workerNews.command = secureFetchCommand(url, workerNews.maxOutputBytes, 10, "", false)
     workerNews.running = true
   }
 
@@ -1874,7 +1912,8 @@ Panel {
     w.gotData = false
     w.serial = root.requestSerial
     var path = group === "Constructors" ? "constructorStandings" : "driverStandings"
-    w.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/" + path + ".json"]
+    w.maxOutputBytes = 2 * 1024 * 1024
+    w.command = secureFetchCommand("https://api.jolpi.ca/ergast/f1/current/" + path + ".json", w.maxOutputBytes, 10, "", false)
     w.running = true
   }
 
@@ -1891,7 +1930,8 @@ Panel {
     workerF1Winners.serial = root.requestSerial
     // The round-specific endpoint only returns round 1. Fetch the complete
     // current-season result set so every completed race can be decorated.
-    workerF1Winners.command = ["curl", "-LfsS", "--max-time", "10", "https://api.jolpi.ca/ergast/f1/current/results.json?limit=100"]
+    workerF1Winners.maxOutputBytes = 2 * 1024 * 1024
+    workerF1Winners.command = secureFetchCommand("https://api.jolpi.ca/ergast/f1/current/results.json?limit=100", workerF1Winners.maxOutputBytes, 10, "", false)
     workerF1Winners.running = true
   }
 
@@ -1987,49 +2027,45 @@ Panel {
   // are already on disk — without this every round re-downloaded up to 64
   // unchanged PNGs, which is how scrapers get IP-banned
   function scanLogoCache() {
-    logoScanProc.command = ["ls", "-1", logoCacheDir()]
+    logoScanProc.handled = false
+    logoScanProc.command = secureCommand(["cache-scan"])
     logoScanProc.running = true
   }
 
   // Crests outlive seasons; teams stop being relevant long before their PNG
   // does. Evict anything untouched for 90 days at startup.
   function evictStaleLogos() {
-    logoEvictProc.command = ["find", logoCacheDir(), "-name", "*.png", "-mtime", "+90", "-delete"]
+    logoEvictProc.command = secureCommand(["cache-evict", "90"])
     logoEvictProc.running = true
   }
 
-  Process {
+  SecureProcess {
     id: logoEvictProc
     onExited: function(exitCode) {
-      // `find` returns non-zero when the cache directory is missing (fresh
-      // install). Skip the warning in that one case but still log other
-      // failures so a permission issue surfaces in the quickshell logs.
-      if (exitCode !== 0 && exitCode !== 1) {
+      if (exitCode !== 0) {
         console.warn("omasports: logo eviction exited with code", exitCode)
       }
       root.scanLogoCache()
     }
   }
 
-  Process {
+  NetworkProcess {
     id: logoScanProc
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var map = {}
-        var lines = String(text || "").split("\n")
-        for (var i = 0; i < lines.length; i++) {
-          var name = lines[i].trim()
-          if (name.length > 4 && name.indexOf(".png") === name.length - 4) {
-            map[name.slice(0, -4)] = true
-          }
-        }
-        root.knownLogoKeys = map
-        root.logoScanDone = true
-        // The first data round usually finishes before this listing does;
-        // replay the download pass now that the skip-set is authoritative
-        Qt.callLater(root.downloadMissingLogos)
+    maxOutputBytes: 256 * 1024
+    onOutput: function(payload) {
+      var map = {}
+      var lines = String(payload || "").split("\n")
+      for (var i = 0; i < lines.length; i++) {
+        var key = lines[i].trim()
+        if (key) map[key] = true
       }
+      root.knownLogoKeys = map
+      root.logoScanDone = true
+      Qt.callLater(root.downloadMissingLogos)
+    }
+    onFailed: {
+      root.knownLogoKeys = ({})
+      root.logoScanDone = true
     }
   }
 
@@ -2080,18 +2116,17 @@ Panel {
 
     if (items.length === 0) return
 
-    // --fail keeps HTTP error bodies (404/rate-limit HTML) out of the cache —
-    // without it a poisoned ".png" gets marked known and never retried
-    var cmd = ["curl", "-sL", "--fail", "--parallel", "--parallel-max", "8", "--create-dirs", "--max-time", "30"]
+    // The helper caps every response, validates PNG structure/CRC, pins a
+    // SHA-256 identity in metadata, and only then atomically publishes it.
+    var cmd = secureCommand(["crest-batch"])
     var count = 0
     var pending = []
-    var cacheDir = logoCacheDir()
     for (var c = 0; c < items.length && count < 64; c++) {
       var it = items[c]
       // Skip crests already cached on disk (or fetched earlier this session)
       if (!it.url) continue
       if (root.knownLogoKeys[it.key]) continue
-      cmd.push("-o", cacheDir + it.key + ".png", it.url)
+      cmd.push(it.key, it.url)
       pending.push(it.key)
       count++
     }
@@ -2145,11 +2180,14 @@ Panel {
       proc.detailId = id
       proc.serial = requestSerial
       proc.handled = false
-      proc.command = [
-        "curl", "-LfsS", "--compressed", "--max-time", "8",
-        "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-        url
-      ]
+      proc.maxOutputBytes = 4 * 1024 * 1024
+      proc.command = secureFetchCommand(
+        url,
+        proc.maxOutputBytes,
+        8,
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        false
+      )
       proc.running = true
     }
   }
@@ -2299,7 +2337,7 @@ Panel {
     if (!match) return
     var url = Model.matchExternalUrl(match)
     if (!url) return
-    matchOpener.command = ["xdg-open", url]
+    matchOpener.command = secureToolCommand("xdg-open", [url])
     matchOpener.running = true
   }
 
@@ -2344,7 +2382,7 @@ Panel {
   Component.onCompleted: {
     evictStaleLogos()
     notificationProbe.running = true
-    stateFile.reload()
+    loadStateSecure()
   }
 
   // Symmetric cleanup on teardown so a panel destroyed mid-session (plugin
@@ -2354,70 +2392,67 @@ Panel {
   // and dispatching desktop notifications after the panel is gone.
   Component.onDestruction: {
     stopNetworkWorkers()
+    if (stateReadProc.running) stateReadProc.hardStop()
+    if (stateWriteProc.running) stateWriteProc.hardStop()
     refreshTimer.stop()
     clockTicker.stop()
     notificationQueue = []
   }
 
-  FileView {
-    id: stateFile
-    path: root.stateFilePath()
-    watchChanges: true
-    atomicWrites: true
-    printErrors: false
-    onLoaded: {
-      var str = ""
-      try { str = typeof text === "function" ? text() : String(text || "") }
-      catch (e) {
-        // A read failure (permission, ENOENT for first run is normal — that
-        // path goes through onLoadFailed instead) must surface to the user
-        // instead of silently losing saved favorites.
-        console.warn("omasports: state file read failed", e)
+  NetworkProcess {
+    id: stateReadProc
+    maxOutputBytes: 320 * 1024
+    onOutput: function(payload) {
+      try {
+        var envelope = JSON.parse(String(payload || "{}"))
+        if (envelope.home) root.secureHome = String(envelope.home)
+        if (envelope.backedUp) console.warn("omasports: corrupt state backed up securely")
+        root.applyState(String(envelope.data || ""))
+      } catch (e) {
         root.persistenceError = "Could not read OmaSports settings — defaults applied."
-        str = ""
+        root.applyState("")
       }
-      root.applyState(str)
     }
-    onLoadFailed: function(error) {
-      // 2 is a missing file (first run / reset). Anything else is a real I/O problem.
-      if (error !== 2) console.warn("omasports: state file load failed", error)
+    onFailed: {
+      root.persistenceError = "Could not read OmaSports settings — defaults applied."
       root.applyState("")
     }
-    onSaveFailed: function(error) {
-      root.ignoredStateSignature = ""
-      root.persistenceError = "Could not save OmaSports settings."
-      console.warn("omasports: state save failed", error)
-    }
-    onSaved: root.persistenceError = ""
-    onFileChanged: reload()
   }
 
-  Process { id: matchOpener }
-  Process {
-    id: stateBackupProc
+  SecureProcess {
+    id: stateWriteProc
     onExited: function(code) {
-      // `cp` failing silently would erase the user's corrupt backup before
-      // the next persist overwrites the original. Surface non-zero exits so
-      // a permission / ENOSPC issue is visible in the quickshell log.
-      if (code !== 0) console.warn("omasports: state backup failed", code)
+      if (code !== 0) {
+        root.ignoredStateSignature = ""
+        root.persistenceError = "Could not save OmaSports settings."
+        console.warn("omasports: state save failed", code)
+      } else {
+        root.persistenceError = ""
+      }
+      if (root.pendingStatePayload) Qt.callLater(root.startStateWrite)
     }
   }
-  Process {
+
+  SecureProcess { id: matchOpener; allowSessionEnvironment: true }
+  NetworkProcess {
     id: logoCacheProc
-    // Only a fully successful batch marks keys as known. A partial parallel
-    // failure triggers a rescan so files that did finish are retained.
-    onExited: function(exitCode) {
-      if (exitCode !== 0) {
-        root.pendingLogoKeys = []
+    maxOutputBytes: 64 * 1024
+    onOutput: function(payload) {
+      try {
+        var result = JSON.parse(String(payload || "{}"))
+        var map = {}
+        for (var k in root.knownLogoKeys) map[k] = root.knownLogoKeys[k]
+        var ok = Model.arrayFrom(result.ok)
+        for (var i = 0; i < ok.length; i++) map[String(ok[i])] = true
+        root.knownLogoKeys = map
+      } catch (e) {
         root.scanLogoCache()
-        return
       }
-      if (root.pendingLogoKeys.length === 0) return
-      var map = {}
-      for (var k in root.knownLogoKeys) map[k] = root.knownLogoKeys[k]
-      for (var i = 0; i < root.pendingLogoKeys.length; i++) map[root.pendingLogoKeys[i]] = true
-      root.knownLogoKeys = map
       root.pendingLogoKeys = []
+    }
+    onFailed: {
+      root.pendingLogoKeys = []
+      root.scanLogoCache()
     }
   }
   Timer {
@@ -2426,13 +2461,15 @@ Panel {
     repeat: false
     onTriggered: root.dispatchNextNotification()
   }
-  Process {
+  SecureProcess {
     id: notifierProc
+    allowSessionEnvironment: true
     onExited: notificationPacingTimer.restart()
   }
-  Process {
+  SecureProcess {
     id: notificationProbe
-    command: ["notify-send", "--version"]
+    allowSessionEnvironment: true
+    command: root.secureToolCommand("notify-send", ["--version"])
     onExited: function(exitCode) {
       root.notificationToolAvailable = exitCode === 0
       if (exitCode !== 0) root.notificationWarningShown = false
