@@ -3,3 +3,5 @@
 sports-favorites.json
 .DS_Store
 test-artifacts/
+__pycache__/
+*.py[cod]

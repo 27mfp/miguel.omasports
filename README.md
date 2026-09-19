@@ -128,7 +128,7 @@ The complete IPC contract, including safe headless-test controls, is documented 
 ## Requirements
 
 - Omarchy with its Quickshell-based desktop shell
-- `curl` for provider requests
+- Python 3 (`/usr/bin/python3`) for bounded provider requests and secure local state/cache handling
 - `xdg-open` for opening provider match pages
 - `notify-send` for desktop notifications (optional; scores still work without it)
 

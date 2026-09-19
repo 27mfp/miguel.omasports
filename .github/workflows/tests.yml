@@ -24,6 +24,12 @@ jobs:
       - name: Manifest & package contract
         run: node tests/manifest.mjs
 
+      - name: Release payload guard
+        run: node tests/release-guard.mjs
+
+      - name: Security hardening
+        run: node tests/security-hardening.mjs
+
       - name: QML cross-file contracts
         run: node tests/qml-contract.mjs
 
