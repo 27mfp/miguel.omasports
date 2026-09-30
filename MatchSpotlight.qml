@@ -144,6 +144,7 @@ Item {
           spacing: Style.space(8)
 
           Rectangle {
+            id: spotlightTagChip
             implicitWidth: spotlightTagLabel.implicitWidth + Style.space(8)
             implicitHeight: spotlightTagLabel.implicitHeight + Style.space(4)
             radius: theme.subtleRadius(3)
@@ -163,6 +164,14 @@ Item {
           }
 
           Text {
+            // The tags row and the right-anchored status pill share one line;
+            // long league names (e.g. "Major League Baseball · Started 20:00")
+            // must elide instead of pushing the broadcast chip under the pill
+            readonly property real available: spotlightTopRow.width - spotlightStatusPill.width - Style.space(8)
+              - spotlightTagChip.width - spotlightTags.spacing
+              - (spotlightBcastChip.visible ? spotlightBcastChip.width + spotlightTags.spacing : 0)
+            width: Math.max(0, Math.min(implicitWidth, available))
+            elide: Text.ElideRight
             anchors.verticalCenter: parent.verticalCenter
             text: (root.match ? root.match.leagueName : "")
               + (root.match && root.match.round ? " · " + root.match.round : "")
@@ -174,6 +183,7 @@ Item {
           }
 
           Rectangle {
+            id: spotlightBcastChip
             visible: Boolean(root.broadcast) && (root.isUpcoming || root.isLive)
             implicitWidth: spotlightBcastRow.implicitWidth + Style.space(8)
             implicitHeight: spotlightBcastRow.implicitHeight + Style.space(4)

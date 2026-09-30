@@ -13,7 +13,7 @@ const modelSrc = readFileSync(fileURLToPath(new URL("../SportsModel.js", import.
 const exported = [
   "parseEspnScoreboard", "parseEspnStandings", "parseF1Calendar",
   "parseF1DriverStandings", "parseF1ConstructorStandings",
-  "parseLeaguePage", "parseTeamPage", "espnDateRange", "parseDetails"
+  "parseLeaguePage", "parseTeamPage", "espnDateList", "mergeEspnScoreboardPayloads", "parseDetails"
 ]
 const src = modelSrc.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
 const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
@@ -77,8 +77,9 @@ try {
 for (const [sport, espnPath] of [["nba", "basketball/nba"], ["nfl", "football/nfl"], ["mlb", "baseball/mlb"], ["nhl", "hockey/nhl"]]) {
   // Mirror the production query — Panel requests the same multi-day window,
   // so goldens must protect the payload shape the app actually receives
-  const dates = Model.espnDateRange(1, 3)
-  const board = curl(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?dates=${dates}`)
+  const days = Model.espnDateList(1, 3).map(day =>
+    JSON.parse(curl(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?dates=${day}`)))
+  const board = JSON.stringify(Model.mergeEspnScoreboardPayloads(days))
   save(`espn-${sport}-scoreboard.json`, board)
   golden(`espn-${sport}-scoreboard`, Model.parseEspnScoreboard(board, sport, sport.toUpperCase()))
   const table = curl(`https://site.api.espn.com/apis/v2/sports/${espnPath}/standings`)
