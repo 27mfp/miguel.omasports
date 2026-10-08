@@ -9,7 +9,7 @@ const exported = [
   "supportedSports", "supportedLeagues", "nbaTeams", "nhlTeams", "mlbTeams",
   "nflTeams", "f1Drivers", "popularFootballClubs",
   "defaultState", "formatCountdown", "arrayFrom", "normalizeLeagueIds",
-  "normalizeTeamIds", "crestCacheKey", "espnDateRange", "formatKickoff",
+  "normalizeTeamIds", "crestCacheKey", "espnDateList", "mergeEspnScoreboardPayloads", "formatKickoff",
   "normalizeTab", "isEspnScoreboardPayload", "isEspnStandingsPayload", "isF1CalendarPayload",
   "parseState", "statePayload", "parseEspnScoreboard", "parseEspnStandings",
   "f1CountryFlag", "f1DriverFlag", "parseF1Calendar", "parseF1DriverStandings",
@@ -125,15 +125,49 @@ test("falls back to first 2 letters for single-word names or question mark if em
 })
 
 // ---------------------------------------------------------------- espn dates
-console.log("espnDateRange / formatKickoff")
-test("espnDateRange produces a YYYYMMDD-YYYYMMDD window", () => {
-  const range = Model.espnDateRange(1, 3)
-  const [from, to] = range.split("-")
-  assert.match(from, /^\d{8}$/)
-  assert.match(to, /^\d{8}$/)
-  const days = (Date.parse(`${to.slice(0,4)}-${to.slice(4,6)}-${to.slice(6,8)}`) -
-                Date.parse(`${from.slice(0,4)}-${from.slice(4,6)}-${from.slice(6,8)}`)) / 86400000
-  assert.equal(days, 4)
+console.log("espnDateList / mergeEspnScoreboardPayloads / formatKickoff")
+test("espnDateList yields consecutive single YYYYMMDD days (ESPN rejects ranges)", () => {
+  const days = Model.espnDateList(1, 3)
+  assert.equal(days.length, 5)
+  for (const d of days) assert.match(d, /^\d{8}$/)
+  const ms = days.map(d => Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8)))
+  for (let i = 1; i < ms.length; i++) assert.equal(ms[i] - ms[i - 1], 86400000)
+})
+test("espnDateList crosses month, year and DST boundaries without gaps", () => {
+  assert.deepEqual(Model.espnDateList(1, 3, new Date(2026, 8, 29, 23, 30).getTime()),
+    ["20260928", "20260929", "20260930", "20261001", "20261002"])
+  assert.deepEqual(Model.espnDateList(1, 1, new Date(2026, 11, 31, 0, 5).getTime()),
+    ["20261230", "20261231", "20270101"])
+  // Around both DST switches each local day appears exactly once
+  for (const at of [new Date(2026, 2, 8, 1).getTime(), new Date(2026, 10, 1, 1).getTime(), new Date(2026, 2, 29, 1).getTime()]) {
+    const days = Model.espnDateList(2, 2, at)
+    assert.equal(new Set(days).size, 5)
+  }
+})
+test("mergeEspnScoreboardPayloads de-dupes by id, prefers later payload, sorts by date", () => {
+  const ev = (id, date, state) => ({ id, date, status: { type: { state } } })
+  const merged = Model.mergeEspnScoreboardPayloads([
+    { leagues: [{ name: "Major League Baseball" }], events: [ev("2", "2026-09-30T18:00Z", "pre"), ev("1", "2026-09-29T23:00Z", "in")] },
+    { code: 400, message: "Failed to get events endpoint." },
+    { leagues: [{ name: "other" }], events: [ev("1", "2026-09-29T23:00Z", "post"), ev("3", "2026-10-01T18:00Z", "pre")] }
+  ])
+  assert.deepEqual(merged.events.map(e => e.id), ["1", "2", "3"])
+  assert.equal(merged.events[0].status.type.state, "post")
+  assert.equal(merged.leagues[0].name, "Major League Baseball")
+  assert.ok(Model.isEspnScoreboardPayload(merged))
+  assert.deepEqual(Model.mergeEspnScoreboardPayloads([]).events, [])
+})
+test("merged per-day payloads parse the same games as the captured window", () => {
+  const board = JSON.parse(readFileSync(new URL("./fixtures/espn-mlb-scoreboard.json", import.meta.url), "utf8"))
+  const half = Math.floor(board.events.length / 2)
+  // Overlapping split: the boundary event appears in both "days"
+  const merged = Model.mergeEspnScoreboardPayloads([
+    { leagues: board.leagues, events: board.events.slice(0, half + 1) },
+    { leagues: board.leagues, events: board.events.slice(half) }
+  ])
+  const ids = m => m.map(x => x.id).sort()
+  assert.deepEqual(ids(Model.parseEspnScoreboard(JSON.stringify(merged), "mlb", "MLB")),
+                   ids(Model.parseEspnScoreboard(JSON.stringify(board), "mlb", "MLB")))
 })
 test("formatKickoff renders local HH:mm or empty", () => {
   assert.match(Model.formatKickoff("2026-08-22T19:45:00Z"), /^\d{2}:\d{2}$/)

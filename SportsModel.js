@@ -632,19 +632,60 @@ function crestCacheKey(sport, teamId, abbr) {
   return (sp + "-" + base).replace(/[^a-z0-9_-]/g, "")
 }
 
-// ESPN scoreboard `dates=YYYYMMDD-YYYYMMDD` range covering recent results
-// plus upcoming fixtures (without it the API only returns today's events).
-function espnDateRange(daysBack, daysAhead) {
+// ESPN scoreboard `dates=YYYYMMDD` days covering recent results plus upcoming
+// fixtures (without `dates` the API only returns today's events). ESPN began
+// rejecting `dates=YYYYMMDD-YYYYMMDD` ranges with HTTP 400 in Sept 2026, so
+// the window is fetched one day per request and merged.
+function espnDateList(daysBack, daysAhead, nowMs) {
   function fmt(d) {
     var y = d.getFullYear()
     var m = ("0" + (d.getMonth() + 1)).slice(-2)
     var day = ("0" + d.getDate()).slice(-2)
     return y + m + day
   }
-  var now = Date.now()
+  var now = new Date(typeof nowMs === "number" ? nowMs : Date.now())
   var back = typeof daysBack === "number" ? daysBack : 1
   var ahead = typeof daysAhead === "number" ? daysAhead : 3
-  return fmt(new Date(now - back * 86400000)) + "-" + fmt(new Date(now + ahead * 86400000))
+  var days = []
+  for (var i = -back; i <= ahead; i++) {
+    // Calendar arithmetic (not +86400000) so DST switches never skip or
+    // repeat a local day
+    days.push(fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, 12)))
+  }
+  return days
+}
+
+// Combine per-day ESPN scoreboard payloads into one scoreboard-shaped object:
+// league metadata from the first payload, events de-duplicated by id (a late
+// game can appear on two adjacent days) and ordered by start time.
+function mergeEspnScoreboardPayloads(payloads) {
+  var list = arrayFrom(payloads)
+  var merged = { leagues: [], events: [] }
+  var seen = {}
+  for (var p = 0; p < list.length; p++) {
+    var json = list[p]
+    if (!isEspnScoreboardPayload(json)) continue
+    if (merged.leagues.length === 0 && Array.isArray(json.leagues)) merged.leagues = json.leagues
+    var events = arrayFrom(json.events)
+    for (var e = 0; e < events.length; e++) {
+      var ev = events[e]
+      if (!ev) continue
+      var id = String(ev.id || "")
+      if (id) {
+        if (seen[id] !== undefined) {
+          // Later payloads were fetched later; prefer their fresher status
+          merged.events[seen[id]] = ev
+          continue
+        }
+        seen[id] = merged.events.length
+      }
+      merged.events.push(ev)
+    }
+  }
+  merged.events.sort(function(a, b) {
+    return (Date.parse(a.date || "") || 0) - (Date.parse(b.date || "") || 0)
+  })
+  return merged
 }
 
 function formatKickoff(timeIso) {

@@ -567,6 +567,10 @@ Panel {
   property string espnSportPath: ""
   property string espnSportCode: ""
   property string espnDefaultName: ""
+  // Per-day scoreboard fetches still pending / payloads collected this round
+  property var espnDayQueue: []
+  property var espnDayPayloads: []
+  property int espnDayFailures: 0
   property int f1RetryCount: 0
   property int f1RetrySerial: 0
 
@@ -1317,6 +1321,7 @@ Panel {
     // a stale curl writing PNGs after the round has been replaced pollutes the
     // disk cache, and an in-flight notify-send from the previous sport queues a
     // bogus goal alert for a match the user no longer follows.
+    espnDayQueue = []
     var procs = [workerScoreboard, workerStandings, workerF1Calendar, workerF1Drivers,
                  workerF1Constructors, workerF1Winners, workerF1Podium, workerF1Pole,
                  workerNews, workerTeam,
@@ -1701,17 +1706,16 @@ Panel {
     espnSportCode = String(sportCode)
     espnDefaultName = String(defaultName)
     // Multi-day window so Fixtures shows recent results and upcoming games,
-    // not just today's slate
-    var dates = "dates=" + Model.espnDateRange(1, 3)
-
-    workerScoreboard.handled = false
+    // not just today's slate. ESPN rejects date ranges, so the days are
+    // fetched one after another on the same worker and merged at the end.
+    espnDayQueue = Model.espnDateList(1, 3)
+    espnDayPayloads = []
+    espnDayFailures = 0
     workerScoreboard.gotData = false
-    workerScoreboard.serial = root.requestSerial
     workerScoreboard.sportCode = sportCode
     workerScoreboard.defaultName = defaultName
     workerScoreboard.maxOutputBytes = 3 * 1024 * 1024
-    workerScoreboard.command = secureFetchCommand("https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard?" + dates, workerScoreboard.maxOutputBytes, 10, "", true)
-    workerScoreboard.running = true
+    fetchNextEspnDay(root.requestSerial)
 
     workerStandings.handled = false
     workerStandings.gotData = false
@@ -1723,39 +1727,62 @@ Panel {
     fetchLeagueNews()
   }
 
+  function fetchNextEspnDay(serial) {
+    if (serial !== root.requestSerial || espnDayQueue.length === 0) return
+    var queue = espnDayQueue.slice()
+    var day = queue.shift()
+    espnDayQueue = queue
+    workerScoreboard.handled = false
+    workerScoreboard.serial = serial
+    workerScoreboard.command = secureFetchCommand("https://site.api.espn.com/apis/site/v2/sports/" + espnSportPath + "/scoreboard?dates=" + day, workerScoreboard.maxOutputBytes, 10, "", true)
+    workerScoreboard.running = true
+  }
+
   function resolveEspnScoreboard(raw, sportCode, defaultName) {
     if (workerScoreboard.serial !== root.requestSerial || workerScoreboard.handled) return
     var payload = String(raw || "")
+    // A syntactically valid response counts as success even when the day
+    // legitimately holds zero games (off-season, pre-season): gating on
+    // non-empty output made every quiet day retry 3x and end in a bogus
+    // "check connection" error despite healthy responses.
+    var dayJson = null
     if (payload.trim()) {
-      // A syntactically valid response counts as success even when the window
-      // legitimately holds zero games (off-season, pre-season): gating on
-      // non-empty output made every quiet day retry 3x and end in a bogus
-      // "check connection" error despite healthy responses.
-      var json = null
-      try { json = JSON.parse(payload) } catch (e) { json = null }
-      if (Model.isEspnScoreboardPayload(json)) {
-        allMatches = Model.parseEspnScoreboard(payload, sportCode, defaultName)
-        var events = Model.arrayFrom(json.events)
-        var broadcasts = Object.assign({}, matchBroadcasts)
-        var leaders = Object.assign({}, matchLeaders)
-        for (var evI = 0; evI < events.length; evI++) {
-          var evObj = events[evI]
-          if (!evObj) continue
-          var evComp = (evObj.competitions && evObj.competitions[0]) || {}
-          var evId = String(evObj.id || "")
-          if (evId) {
-            var bCast = Model.parseEspnBroadcast(evComp)
-            if (bCast) broadcasts[evId] = bCast
-            var lds = Model.parseEspnGameLeaders(evComp)
-            if (lds && lds.length > 0) leaders[evId] = lds
-          }
+      try { dayJson = JSON.parse(payload) } catch (e) { dayJson = null }
+    }
+    if (Model.isEspnScoreboardPayload(dayJson)) espnDayPayloads = espnDayPayloads.concat([dayJson])
+    else espnDayFailures++
+    if (espnDayQueue.length > 0) {
+      // NetworkProcess marks itself handled right after this callback returns;
+      // start the next day on a later turn so that doesn't swallow it
+      var serial = workerScoreboard.serial
+      Qt.callLater(function() { root.fetchNextEspnDay(serial) })
+      return
+    }
+    if (espnDayPayloads.length > 0) {
+      // Show whatever days arrived, but only a complete window counts as
+      // success; a missing day (possibly today's) still triggers the retry
+      var json = Model.mergeEspnScoreboardPayloads(espnDayPayloads)
+      allMatches = Model.parseEspnScoreboard(JSON.stringify(json), sportCode, defaultName)
+      var events = Model.arrayFrom(json.events)
+      var broadcasts = Object.assign({}, matchBroadcasts)
+      var leaders = Object.assign({}, matchLeaders)
+      for (var evI = 0; evI < events.length; evI++) {
+        var evObj = events[evI]
+        if (!evObj) continue
+        var evComp = (evObj.competitions && evObj.competitions[0]) || {}
+        var evId = String(evObj.id || "")
+        if (evId) {
+          var bCast = Model.parseEspnBroadcast(evComp)
+          if (bCast) broadcasts[evId] = bCast
+          var lds = Model.parseEspnGameLeaders(evComp)
+          if (lds && lds.length > 0) leaders[evId] = lds
         }
-        matchBroadcasts = broadcasts
-        matchLeaders = leaders
-        lastUpdated = new Date()
-        loadedFromCache = false
-        workerScoreboard.gotData = true
       }
+      matchBroadcasts = broadcasts
+      matchLeaders = leaders
+      lastUpdated = new Date()
+      loadedFromCache = false
+      workerScoreboard.gotData = espnDayFailures === 0
     }
     Qt.callLater(checkEspnDone)
   }
@@ -1776,7 +1803,9 @@ Panel {
   }
 
   function checkEspnDone() {
-    if (workerScoreboard.running || workerStandings.running) return
+    // Between two day requests the worker is briefly idle; the queue says
+    // the scoreboard sequence is still in flight
+    if (workerScoreboard.running || espnDayQueue.length > 0 || workerStandings.running) return
     // Either endpoint missing data is retryable on its own; a partial outage
     // (scores ok, standings dead or vice versa) must not pass silently
     var sbOk = workerScoreboard.gotData

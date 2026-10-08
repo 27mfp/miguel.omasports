@@ -7,7 +7,7 @@ import assert from "node:assert/strict"
 
 const raw = readFileSync(new URL("../SportsModel.js", import.meta.url), "utf8")
 const exported = [
-  "supportedLeagues", "espnDateRange", "parseEspnScoreboard", "parseEspnStandings",
+  "supportedLeagues", "espnDateList", "mergeEspnScoreboardPayloads", "isEspnScoreboardPayload", "parseEspnScoreboard", "parseEspnStandings",
   "parseF1Calendar", "parseF1DriverStandings", "parseF1ConstructorStandings",
   "parseLeaguePage", "parseTeamPage", "liveMatches", "matchLine",
   "groupMatches", "featuredMatchForTeam", "matchesForTeam", "parseDetails"
@@ -131,10 +131,13 @@ for (const [sport, espnPath] of [["nba", "basketball/nba"], ["nfl", "football/nf
   if (which !== sport && which !== "all") continue
   console.log(`\n${sport.toUpperCase()} (ESPN live)`)
   await test(`${sport}: scoreboard parses events`, () => {
-    const dates = Model.espnDateRange(1, 3)
-    const raw = curl(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?${dates}`)
-    const payload = JSON.parse(raw)
-    assert.ok(Array.isArray(payload.events), "scoreboard payload has no events array")
+    // Same per-day window Panel requests; each day must be a real scoreboard
+    const days = Model.espnDateList(1, 3).map(day => {
+      const payload = JSON.parse(curl(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard?dates=${day}`))
+      assert.ok(Model.isEspnScoreboardPayload(payload), `scoreboard for ${day} rejected: ${JSON.stringify(payload).slice(0, 120)}`)
+      return payload
+    })
+    const raw = JSON.stringify(Model.mergeEspnScoreboardPayloads(days))
     const parsed = Model.parseEspnScoreboard(raw, sport, sport.toUpperCase())
     assert.ok(Array.isArray(parsed), "scoreboard parser did not return an array")
     for (const m of parsed) {
