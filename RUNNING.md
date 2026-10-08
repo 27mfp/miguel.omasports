@@ -16,14 +16,26 @@ omarchy plugin enable miguel.omasports --section right   # or left / center
 omarchy-restart-shell   # required: see below
 ```
 
-After editing code, re-run the `cp` line and then `omarchy-restart-shell`
-(the installed copy is what runs; the checkout is not live-linked).
+For a copied installation, re-run the `cp` line after editing code, then
+restart the shell to load the updated QML.
 
-**The restart is not optional.** The Omarchy shell runs with
-`QS_DISABLE_FILE_WATCHER=1`; the journal still prints `Local plugin changed,
-reloading: miguel.omasports`, but the panel keeps running the QML it was
-started with. `command cp -f` bypasses a `cp -i` alias, which otherwise
-silently skips every overwrite when no TTY is attached.
+Some development installations link the plugin directory to the checkout.
+Check with:
+
+```bash
+ls -ld "$HOME/.config/omarchy/plugins/miguel.omasports"
+readlink -f "$HOME/.config/omarchy/plugins/miguel.omasports"
+```
+
+If the plugin directory points to this checkout, skip `mkdir` and `cp`.
+Validate the resolved checkout path, rescan plugins, and restart the shell.
+The plugin validator rejects a symlink passed as the plugin folder even
+when its target validates successfully.
+
+When the shell runs with `QS_DISABLE_FILE_WATCHER=1`, a rescan alone may
+leave the panel running its previous QML. Restart the shell after source
+updates in that setup. `command cp -f` bypasses an interactive `cp` alias
+for copied installations.
 
 Remove with `omarchy plugin remove miguel.omasports`.
 

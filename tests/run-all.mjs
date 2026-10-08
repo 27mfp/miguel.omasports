@@ -20,6 +20,11 @@ const steps = [
     cmd: "node tests/sportsmodel.test.mjs"
   },
   {
+    name: "ESPN Request Sequencing",
+    file: "tests/espn-sequence.mjs",
+    cmd: "node tests/espn-sequence.mjs"
+  },
+  {
     name: "Offline Provider Goldens",
     file: "tests/offline.mjs",
     cmd: "node tests/offline.mjs"

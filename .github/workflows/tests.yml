@@ -18,6 +18,9 @@ jobs:
       - name: Unit suite (parsers, state, catalogs)
         run: node tests/sportsmodel.test.mjs
 
+      - name: ESPN request sequencing
+        run: node tests/espn-sequence.mjs
+
       - name: Offline regression (frozen fixtures vs goldens)
         run: node tests/offline.mjs
 
