@@ -9,7 +9,7 @@
     <a href="#development">Development</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/version-1.4.0-38bdf8" alt="Version 1.4.0">
+    <img src="https://img.shields.io/badge/version-1.5.0-38bdf8" alt="Version 1.5.0">
     <img src="https://img.shields.io/badge/platform-Linux-f59e0b" alt="Linux">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license"></a>
   </p>
@@ -36,6 +36,12 @@ It supports football, basketball, Formula 1, American football, baseball, and ic
 - **Match detail cards** — See broadcast information, venues, leaders, form, events, possession, and period scores when the provider supplies them.
 - **Keyboard and IPC control** — Navigate without a mouse or script the panel with `omarchy-shell`.
 - **Resilient caching** — Team crests use a local cache with remote and monogram fallbacks.
+
+### New in 1.5.0
+
+The spotlight now starts compact, with optional match details. Recent results show a three-game preview with expansion, and fixture controls support keyboard navigation with contextual hints. ESPN refreshes prioritize today's games and cache surrounding dates and standings. Notification cancellation, postponed-game labels, inning updates, and kickoff countdowns also received fixes.
+
+See [the changelog](CHANGELOG.md) for release notes and [RUNNING.md](RUNNING.md) for update instructions.
 
 ## Supported sports
 

@@ -22,7 +22,11 @@ TL;DR: Keep Omarchy theme integration, improve keyboard navigation and dense-dat
 - Future-only kickoff selection with clock rollover; exceptional ESPN statuses avoid misleading final scores.
 - Today-first ESPN fetching, short freshness for live/today and longer TTLs for surrounding days/standings; failed-day retries retain successful responses.
 
-## Further design ideas
+## Research follow-up
+
+Compact spotlight details, collapsible recent results, and contextual keyboard hints were implemented after this research. Targeted scale captures also passed. Full light/dark-theme comparisons remain outstanding.
+
+## Original design ideas
 
 1. Add a compact sticky live summary only if it improves scanning without duplicating the spotlight and live tab.
 2. Consider collapsible recent-result groups, with persistent counts and keyboard controls. Keep live matches visible by default.

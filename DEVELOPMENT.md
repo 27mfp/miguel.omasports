@@ -89,7 +89,7 @@ Executes the local quality gates across pure JS logic, goldens, manifest/package
 node tests/run-all.mjs           # standard full verification (includes live E2E and visual diff)
 node tests/run-all.mjs --quick   # non-desktop logic gates
 node tests/run-all.mjs --quick --interactive # opt-in safe headless interaction gate
-node tests/run-all.mjs --full    # exhaustive run across all 6 sports and tabs
+node tests/run-all.mjs --full --runtime # all sports/tabs plus isolated runtime gate
 ```
 
 ### B. Unit Tests (Pure Model Engine)
@@ -104,7 +104,7 @@ Verifies parser output against frozen real-world provider payloads without touch
 ```bash
 node tests/offline.mjs
 ```
-*Current status: 13 tests passing (100%).*
+Use the suite output for the current case count.
 > **Note**: Only update goldens via `node tests/capture-fixtures.mjs` if you are intentionally updating data schemas.
 
 ### D. QML Cross-File Contract Suite
@@ -118,35 +118,35 @@ Verifies resilience against penalty shootouts, extra time (`AET`), red cards, HT
 ```bash
 node tests/scenarios.mjs
 ```
-*Current status: 6 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### F. Safe Headless Interaction Suite
 Tests real-time UI state toggling only on a dedicated virtual monitor with confirmed focus suppression:
 ```bash
 node tests/interaction.mjs
 ```
-*Current status: 6 tests passing (100%) when run on a dedicated headless monitor.*
+The suite provisions a dedicated headless monitor and restores its saved session state.
 
 ### G. Notification & Delivery Suite
 Validates desktop notification diffing, goal alerts, anti-spoiler concealment, lifecycle transitions, crest key sanitization, queue capping, 500ms toast pacing, and `notify-send` argument escaping:
 ```bash
 node tests/notifications.mjs
 ```
-*Current status: 9 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### H. Crest Cache Resilience & Fallback Suite
 Validates monogram derivation, cold cache resilience, broken CDN recovery (404/500/corrupt bytes), and system log hygiene:
 ```bash
 node tests/crest-resilience.mjs
 ```
-*Current status: 8 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### I. Burn-In & Memory Stability Suite
 Simulates 100 consecutive mock polling cycles, verifies array and queue bounds (`detailQueue ≤ 8`, `notificationQueue ≤ 5`), tests `seenMap` TTL pruning (6h), and measures heap stability:
 ```bash
 node tests/burnin.mjs
 ```
-*Current status: 3 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### J. Isolated Quickshell runtime check
 
@@ -163,16 +163,16 @@ omarchy plugin validate .
 ```
 *Must always exit with return code 0.*
 
-### K. Live Provider E2E Integration
+### L. Live Provider E2E Integration
 Hits real provider APIs (FotMob, ESPN, Jolpica) to verify parsers work against live data. Requires network access; only runs in standard and `--full` modes:
 ```bash
 node tests/live.mjs football   # football only (default in standard mode)
 node tests/live.mjs all        # all 6 sports (used in --full mode)
 ```
-*Current status: 8 tests passing (football). ~20 tests across all sports.*
+Case counts and skips depend on provider availability; inspect the current suite output.
 > **Note**: Excluded from `--quick` / pre-commit to avoid blocking commits on third-party network issues.
 
-### L. Autonomous Perceptual Visual Diffing
+### M. Autonomous Perceptual Visual Diffing
 Runs pixel-level visual regression testing **headlessly in the background** against deterministic runtime mock data, supporting HiDPI scaling and viewport height constraints (≤ 72% screen height). It temporarily enables and restores the runtime-only mock override:
 ```bash
 # Compare against approved visual baselines
@@ -180,8 +180,10 @@ node tests/visual.mjs --sport=f1 --tab=standings
 node tests/visual.mjs --sport=football --tab=all
 
 # Test with HiDPI and responsive scales
-node tests/visual.mjs --sport=f1 --tab=standings --scale=1.0
-node tests/visual.mjs --sport=f1 --tab=standings --scale=2.0
+node tests/visual.mjs --sport=mlb --tab=fixtures --scale=1
+node tests/visual.mjs --sport=mlb --tab=fixtures --scale=1.5
+node tests/visual.mjs --sport=mlb --tab=fixtures --expanded
+# Non-default scales and expanded states have separate baseline filenames.
 
 # Update visual golden baselines when design changes are intentional (headless only)
 node tests/visual.mjs --sport=f1 --tab=standings --update-goldens
