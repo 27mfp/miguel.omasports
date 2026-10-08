@@ -13,11 +13,11 @@ mkdir -p "$install_dir"
 command cp -f -- *.qml *.py SportsModel.js manifest.json icon.svg icon.png "$install_dir/"
 omarchy-shell shell rescanPlugins
 omarchy plugin enable miguel.omasports --section right   # or left / center
-omarchy-restart-shell   # required: see below
+# Restart only if your host does not reload changed components; see below.
 ```
 
 For a copied installation, re-run the `cp` line after editing code, then
-restart the shell to load the updated QML.
+rescan plugins to load the updated QML.
 
 Some development installations link the plugin directory to the checkout.
 Check with:
@@ -28,14 +28,16 @@ readlink -f "$HOME/.config/omarchy/plugins/miguel.omasports"
 ```
 
 If the plugin directory points to this checkout, skip `mkdir` and `cp`.
-Validate the resolved checkout path, rescan plugins, and restart the shell.
+Validate the resolved checkout path and rescan plugins.
 The plugin validator rejects a symlink passed as the plugin folder even
 when its target validates successfully.
 
-When the shell runs with `QS_DISABLE_FILE_WATCHER=1`, a rescan alone may
-leave the panel running its previous QML. Restart the shell after source
-updates in that setup. `command cp -f` bypasses an interactive `cp` alias
-for copied installations.
+`rescanPlugins` unloads and remounts plugins, but component-cache clearing
+is host/version dependent. On the tested host it still served previous QML;
+`omarchy-restart-shell` was needed to load source changes. The visual suite
+checks a source revision before capturing, so it refuses to test stale code.
+Rescanning can close plugin panels, and restarting briefly redraws the bar.
+`command cp -f` bypasses an interactive `cp` alias for copied installations.
 
 Remove with `omarchy plugin remove miguel.omasports`.
 

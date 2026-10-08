@@ -119,6 +119,7 @@ Column {
     Repeater {
       model: controller.liveList
       delegate: LiveRow {
+        latestMatchesById: controller.latestMatchesById
         activeSport: controller.activeSport
         activeSportIcon: controller.activeSportIcon
         fgColor: root.fgColor

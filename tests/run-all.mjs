@@ -20,6 +20,11 @@ const steps = [
     cmd: "node tests/sportsmodel.test.mjs"
   },
   {
+    name: "Controller Regressions",
+    file: "tests/controller-regressions.mjs",
+    cmd: "node tests/controller-regressions.mjs"
+  },
+  {
     name: "ESPN Request Sequencing",
     file: "tests/espn-sequence.mjs",
     cmd: "node tests/espn-sequence.mjs"
@@ -75,6 +80,10 @@ const steps = [
     cmd: "omarchy plugin validate ."
   }
 ]
+
+if (ARGS.includes("--runtime")) {
+  steps.push({ name: "Offscreen Quickshell Lifecycle", file: "tests/runtime.mjs", cmd: "node tests/runtime.mjs" })
+}
 
 if (!QUICK) {
   steps.push({

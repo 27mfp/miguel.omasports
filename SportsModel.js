@@ -851,7 +851,7 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
       if (item.homeAway === "home") {
         home = tObj
         homeScore = parseInt(item.score, 10) || 0
-      } else {
+      } else if (item.homeAway === "away") {
         away = tObj
         awayScore = parseInt(item.score, 10) || 0
       }
@@ -861,12 +861,14 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
     var stType = st.type || {}
     var stateStr = String(stType.state || "pre").toLowerCase()
     var status = "upcoming"
-    if (stateStr === "in") status = "live"
+    var statusName = String(stType.name || "").toUpperCase()
+    if (/CANCEL|POSTPON/.test(statusName)) status = "cancelled"
+    else if (/SUSPEND|DELAY/.test(statusName)) status = stateStr === "in" ? "live" : "upcoming"
+    else if (stateStr === "in") status = "live"
     else if (stateStr === "post") status = "finished"
-    else if (stType.name && String(stType.name).toUpperCase().indexOf("CANCEL") !== -1) status = "cancelled"
 
     var scoreText = ""
-    if (status !== "upcoming") {
+    if (status === "live" || status === "finished") {
       scoreText = homeScore + "–" + awayScore
     }
 
@@ -878,11 +880,13 @@ function parseEspnScoreboard(raw, sportName, defaultLeagueName) {
     var homeLines = []
     var awayLines = []
     for (var cl = 0; cl < competitors.length; cl++) {
-      if (competitors[cl].homeAway === "home" && competitors[cl].linescores) {
-        homeLines = arrayFrom(competitors[cl].linescores).map(function(l) { return l.value })
-      } else if (competitors[cl].linescores) {
-        awayLines = arrayFrom(competitors[cl].linescores).map(function(l) { return l.value })
-      }
+      var competitor = competitors[cl]
+      if (!competitor || typeof competitor !== "object") continue
+      var lines = arrayFrom(competitor.linescores).map(function(l) {
+        return l && typeof l.value === "number" && isFinite(l.value) ? l.value : null
+      })
+      if (competitor.homeAway === "home") homeLines = lines
+      else if (competitor.homeAway === "away") awayLines = lines
     }
 
     var leagueTitle = (json.leagues && json.leagues[0] && json.leagues[0].name) || defaultLeagueName
@@ -1694,6 +1698,10 @@ function mergeLeaguePages(existing, updates) {
 // mid-session (to exercise goal notifications).
 var mockAnchor = 0
 
+function resetMockClock(nowMs) {
+  mockAnchor = Number(nowMs) || 0
+}
+
 function mockMinuteClock(kickoffMs, nowMs) {
   // Football clock simulation: returns { state, liveTime, minute }
   var elapsed = Math.floor((nowMs - kickoffMs) / 60000)
@@ -1724,7 +1732,7 @@ function mockRound(sport, nowMs) {
       if (elapsed >= 61) homeScore = 2
     }
     return {
-      id: id, sport: "football", leagueId: "47", leagueName: "Premier League",
+      id: id, sport: "football", leagueId: homeId === "9825" ? "47" : "61", leagueName: homeId === "9825" ? "Premier League" : "Liga Portugal",
       round: round || "",
       home: { id: homeId, name: homeName, shortName: homeName, logo: "https://images.fotmob.com/image_resources/logo/teamlogo/" + homeId + ".png" },
       away: { id: awayId, name: awayName, shortName: awayName, logo: "https://images.fotmob.com/image_resources/logo/teamlogo/" + awayId + ".png" },
@@ -1746,6 +1754,10 @@ function mockRound(sport, nowMs) {
       home: { id: homeId, name: homeName, shortName: homeAbbr, abbr: homeAbbr, record: "10-4", logo: cdn + homeAbbr + ".png" },
       away: { id: awayId, name: awayName, shortName: awayAbbr, abbr: awayAbbr, record: "9-5", logo: cdn + awayAbbr + ".png" },
       status: state,
+      linescores: state === "upcoming" ? { home: [], away: [] } : (sportName === "mlb"
+        ? { home: [1, 0, 0, 2, 0, 1, 0], away: [0, 1, 0, 0, 2, 1, 0] }
+        : (sportName === "nba" ? { home: [32, 34, 32], away: [30, 33, 32] }
+          : (sportName === "nfl" ? { home: [7, 10], away: [3, 7] } : { home: [1, 1], away: [0, 2] }))),
       homeScore: state === "upcoming" ? 0 : score[0],
       awayScore: state === "upcoming" ? 0 : score[1],
       scoreText: state === "upcoming" ? "" : score[0] + "\u2013" + score[1],
@@ -1830,20 +1842,20 @@ function mockRound(sport, nowMs) {
       espnMatch("mock-nfl-1", "nfl", "NFL", "2", "BUF", "Buffalo Bills", "3", "CHI", "Chicago Bears", -20 * HOUR, "finished", [27, 24], "Final"),
       espnMatch("mock-nfl-2", "nfl", "NFL", "1", "ATL", "Atlanta Falcons", "2", "BUF", "Buffalo Bills", 6 * HOUR, "upcoming", [0, 0], "")
     ]
-    standings = { "AFC": mockEspnTable("nfl", [["2", "BUF", "Buffalo Bills"]]), "NFC": mockEspnTable("nfl", [["3", "CHI", "Chicago Bears"], ["1", "ATL", "Atlanta Falcons"]]) }
+    standings = { "American Football Conference": mockEspnTable("nfl", [["2", "BUF", "Buffalo Bills"]]), "National Football Conference": mockEspnTable("nfl", [["3", "CHI", "Chicago Bears"], ["1", "ATL", "Atlanta Falcons"]]) }
   } else if (s === "mlb") {
     matches = [
       espnMatch("mock-mlb-0", "mlb", "MLB", "2", "BOS", "Boston Red Sox", "10", "NYY", "New York Yankees", -90 * MIN, "live", [4, 4], "7th"),
       espnMatch("mock-mlb-1", "mlb", "MLB", "10", "NYY", "New York Yankees", "2", "BOS", "Boston Red Sox", -3 * HOUR, "finished", [5, 3], "Final"),
       espnMatch("mock-mlb-2", "mlb", "MLB", "1", "BAL", "Baltimore Orioles", "10", "NYY", "New York Yankees", 4 * HOUR, "upcoming", [0, 0], "")
     ]
-    standings = { "American League": mockEspnTable("mlb", [["10", "NYY", "New York Yankees"], ["2", "BOS", "Boston Red Sox"], ["1", "BAL", "Baltimore Orioles"]]), "National League": mockEspnTable("mlb", []) }
+    standings = { "American League": mockEspnTable("mlb", [["10", "NYY", "New York Yankees"], ["2", "BOS", "Boston Red Sox"], ["1", "BAL", "Baltimore Orioles"]]), "National League": mockEspnTable("mlb", [["19", "LAD", "Los Angeles Dodgers"], ["21", "NYM", "New York Mets"]]) }
   } else if (s === "nhl") {
     matches = [
       espnMatch("mock-nhl-1", "nhl", "NHL", "1", "BOS", "Boston Bruins", "5", "DET", "Detroit Red Wings", -2 * HOUR, "live", [2, 2], "2nd 12:00"),
       espnMatch("mock-nhl-2", "nhl", "NHL", "2", "BUF", "Buffalo Sabres", "1", "BOS", "Boston Bruins", 7 * HOUR, "upcoming", [0, 0], "")
     ]
-    standings = { "Atlantic": mockEspnTable("nhl", [["1", "BOS", "Boston Bruins"], ["2", "BUF", "Buffalo Sabres"], ["5", "DET", "Detroit Red Wings"]]) }
+    standings = { "Eastern Conference": mockEspnTable("nhl", [["1", "BOS", "Boston Bruins"], ["2", "BUF", "Buffalo Sabres"], ["5", "DET", "Detroit Red Wings"]]), "Western Conference": mockEspnTable("nhl", [["24", "ANA", "Anaheim Ducks"], ["25", "DAL", "Dallas Stars"]]) }
   }
 
   return { matches: matches, standings: standings }
@@ -2239,7 +2251,7 @@ function matchStatusText(match) {
   if (!match) return ""
   if (match.status === "live") return match.liveTime || "LIVE"
   if (match.status === "finished") return "FT"
-  if (match.status === "cancelled") return "Postponed"
+  if (match.status === "cancelled") return match.statusReason || "Cancelled"
   return formatMatchDate(match.time)
 }
 
@@ -2688,6 +2700,7 @@ function sameMatches(a, b) {
         || String(x.status || "") !== String(y.status || "")
         || Number(x.homeScore || 0) !== Number(y.homeScore || 0)
         || Number(x.awayScore || 0) !== Number(y.awayScore || 0)
+        || String(x.statusReason || "") !== String(y.statusReason || "")
         || String(x.scoreText || "") !== String(y.scoreText || "")
         || String(x.liveTime || "") !== String(y.liveTime || "")
         || String(x.time || "") !== String(y.time || "")

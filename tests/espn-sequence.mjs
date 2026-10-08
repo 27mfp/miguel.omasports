@@ -13,7 +13,7 @@ vm.runInContext(modelSource.replace(/^\.pragma library\s*$/m, ""), Model)
 // Panel's top-level functions end at a two-space closing brace.
 const names = [
   "startEspnRound", "fetchNextEspnDay", "resolveEspnScoreboard",
-  "resolveEspnStandings", "checkEspnDone", "stopNetworkWorkers"
+  "resolveEspnStandings", "finishEspnScoreboard", "checkEspnDone", "stopNetworkWorkers"
 ]
 const functions = names.map(name => {
   const match = panel.match(new RegExp(`^  function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?^  \\}`, "m"))
@@ -28,13 +28,14 @@ function harness() {
   const state = {
     Model, requestSerial: 1, espnDayQueue: [], espnDayPayloads: [],
     espnDayFailures: 0, espnRetryCount: 0, espnRetrySerial: 0,
+    espnScoreCache: {}, espnStandingsCache: {}, espnCurrentDay: "", activeSport: "mlb",
     loading: true, errorMessage: "", activeSportMeta: { label: "MLB" },
     allMatches: [], matchBroadcasts: {}, matchLeaders: {},
     workerScoreboard: { running: false, handled: false },
     workerStandings: { running: false, handled: false },
     retryDelay: { stop() {} }, teamRetryDelay: { stop() {} },
     retries: 0, completions: 0,
-    espnRetryDelay: { restart() { state.retries++ } },
+    espnRetryDelay: { running: false, restart() { this.running = true; state.retries++ } },
     Qt: { callLater(fn) { deferred.push(fn) } },
     secureFetchCommand(url) { requests.push(url); return url },
     fetchLeagueNews() {}, ensureStandingsSelection() {},
@@ -43,7 +44,7 @@ function harness() {
   }
   // Keep dates deterministic while using the real parser/merge helpers.
   state.Model = Object.create(Model)
-  state.Model.espnDateList = () => dayList.slice()
+  state.Model.espnDateList = (back, ahead) => back === 0 && ahead === 0 ? ["20261008"] : dayList.slice()
   const workers = panel.match(/var procs = \[([\s\S]*?)\]/)[1].match(/\b\w+\b/g)
   for (const name of workers) {
     state[name] ??= { running: false, handled: false }
@@ -52,6 +53,13 @@ function harness() {
   state.root = state
   vm.createContext(state)
   vm.runInContext(functions, state)
+  const retryBlock = panel.match(/id: espnRetryDelay[\s\S]*?\n  \}/)[0]
+  const predicate = retryBlock.match(/predicate: (function\(\) \{[\s\S]*?\n    \})/)[1]
+  const callback = retryBlock.match(/callback: (function\(\) \{[\s\S]*?\n    \})/)[1]
+  state.fireRetry = () => {
+    state.espnRetryDelay.running = false
+    if (vm.runInContext(`(${predicate})()`, state)) vm.runInContext(`(${callback})()`, state)
+  }
 
   function drain() {
     let count = 0
@@ -100,7 +108,7 @@ test("next day starts after handled is set; standings cannot finish between days
   assert.equal(h.state.completions, 1)
   assert.equal(h.state.loading, false)
   assert.deepEqual(h.requests.filter(url => url.includes("/scoreboard?")).map(url =>
-    url.split("dates=")[1]), h.dayList)
+    url.split("dates=")[1]), ["20261008", "20261007", "20261009", "20261010", "20261011"])
 })
 
 test("scoreboard waits for standings when it finishes first", () => {
@@ -122,7 +130,7 @@ test("valid empty days count as success and duplicate games merge once", () => {
   assert.equal(h.state.retries, 0)
 })
 
-test("failed middle day preserves partial results and retries a fresh window", () => {
+test("failed middle day preserves partial results and retries only that day", () => {
   const h = harness()
   h.standings()
   for (const raw of [gameDay, "", '{"events":[]}', '{"events":[]}', '{"events":[]}'])
@@ -132,14 +140,14 @@ test("failed middle day preserves partial results and retries a fresh window", (
   assert.equal(h.state.workerScoreboard.gotData, false)
   assert.equal(h.state.retries, 1)
   assert.equal(h.state.completions, 0)
-  h.state.startEspnRound("baseball/mlb", "mlb", "MLB")
+  h.state.fireRetry()
   assert.equal(h.state.espnDayFailures, 0)
-  assert.equal(h.state.espnDayPayloads.length, 0)
+  assert.equal(h.state.espnDayPayloads.length, 4)
   h.standings()
-  for (let i = 0; i < 5; i++) h.deliver()
+  h.deliver()
   assert.equal(h.state.workerScoreboard.gotData, true)
   assert.equal(h.state.completions, 1)
-  assert.equal(h.requests.filter(url => url.includes("/scoreboard?")).length, 10)
+  assert.equal(h.requests.filter(url => url.includes("/scoreboard?")).length, 6)
 })
 
 test("malformed and provider-error responses fail and stop at the retry limit", () => {
@@ -170,6 +178,53 @@ test("sport switch cancels a deferred next day and ignores late old output", () 
   assert.equal(h.state.completions, 0)
   assert.equal(h.state.retries, 0)
   assert.equal(h.state.allMatches.length, 0)
+})
+
+test("fresh score and standings caches avoid all network requests", () => {
+  const h = harness()
+  h.state.espnStandingsCache.mlb = { at: Date.now(), rows: {} }
+  h.standings()
+  for (let i = 0; i < 5; i++) h.deliver()
+  const before = h.requests.length
+  h.state.loading = true
+  h.state.startEspnRound("baseball/mlb", "mlb", "MLB")
+  h.drain()
+  assert.equal(h.requests.length, before)
+  assert.equal(h.state.completions, 2)
+})
+test("expired surrounding days remain cached while today's slate refreshes", () => {
+  const h = harness()
+  h.standings()
+  for (let i = 0; i < 5; i++) h.deliver()
+  for (const entry of Object.values(h.state.espnScoreCache)) entry.at -= 20000
+  h.state.espnStandingsCache.mlb = { at: Date.now(), rows: {} }
+  const before = h.requests.length
+  h.state.loading = true
+  h.state.startEspnRound("baseball/mlb", "mlb", "MLB")
+  assert.equal(h.requests.length, before + 1)
+  assert.ok(h.requests.at(-1).endsWith("dates=20261008"))
+  h.deliver()
+  assert.equal(h.state.completions, 2)
+})
+test("other sports retain current-window cache entries and obsolete days are pruned", () => {
+  const h = harness()
+  h.standings()
+  for (let i = 0; i < 5; i++) h.deliver()
+  h.state.espnScoreCache["nba:20261008"] = { at: Date.now(), payload: { events: [] } }
+  h.state.espnScoreCache["nba:20250101"] = { at: 0, payload: { events: [] } }
+  h.state.loading = true
+  h.state.startEspnRound("baseball/mlb", "mlb", "MLB")
+  assert.ok(h.state.espnScoreCache["nba:20261008"])
+  assert.equal(h.state.espnScoreCache["nba:20250101"], undefined)
+})
+
+test("actual retry predicate rejects a canceled request generation", () => {
+  const h = harness()
+  h.state.espnRetrySerial = h.state.requestSerial
+  h.state.requestSerial++
+  const before = h.requests.length
+  h.state.fireRetry()
+  assert.equal(h.requests.length, before)
 })
 
 test("handled guard suppresses duplicate completion signals for a day", () => {

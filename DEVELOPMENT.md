@@ -97,7 +97,7 @@ Always run before committing changes to `SportsModel.js`:
 ```bash
 node tests/sportsmodel.test.mjs
 ```
-*Current status: 91 tests passing (100%).*
+Use the suite output for the current case count; new regressions are added as bugs are fixed.
 
 ### C. Offline Golden Regression Tests
 Verifies parser output against frozen real-world provider payloads without touching the network:
@@ -148,7 +148,15 @@ node tests/burnin.mjs
 ```
 *Current status: 3 tests passing (100%).*
 
-### J. Omarchy Plugin Validation
+### J. Isolated Quickshell runtime check
+
+```bash
+node tests/runtime.mjs
+```
+
+This opt-in suite runs an offscreen Quickshell process. It checks the real network worker's completion and restart behavior without attaching to the Omarchy shell or opening a window. It requires Quickshell locally and is separate from hosted syntax checks.
+
+### K. Omarchy Plugin Validation
 Validates QML syntax, plugin structure, and manifest integrity:
 ```bash
 omarchy plugin validate .

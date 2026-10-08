@@ -27,9 +27,14 @@ def crop_card(src_path, dst_path):
         right = max(x for x in range(w) if im.getpixel((x, top_y))[2] > 190 and im.getpixel((x, top_y))[1] > 130)
         
         # Trace down left border to find bottom
-        col_x = min(w - 1, left + 2)
-        bottom_candidates = [y for y in range(top_y, h) if im.getpixel((col_x, y))[2] > 190 and im.getpixel((col_x, y))[1] > 130]
-        bottom = max(bottom_candidates) if bottom_candidates else min(h - 50, top_y + 500)
+        col_x = left
+        bottom = top_y
+        # Follow the contiguous panel edge, not similarly colored wallpaper.
+        for y in range(top_y + 1, h):
+            pixel = im.getpixel((col_x, y))
+            if pixel[2] <= 190 or pixel[1] <= 130:
+                break
+            bottom = y
         
     box = (max(0, left - 1), max(0, top_y if top_y else 38), min(w, right + 2), min(h, bottom + 2))
     cropped = im.crop(box)

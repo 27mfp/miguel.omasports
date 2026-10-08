@@ -339,6 +339,25 @@ test("parseEspnScoreboard maps live/finished events with scores", () => {
   assert.equal(done.status, "finished")
   assert.equal(done.sport, "nfl")
 })
+test("ESPN exceptional statuses never fabricate a completed result", () => {
+  for (const name of ["STATUS_POSTPONED", "STATUS_CANCELED", "STATUS_DELAYED", "STATUS_SUSPENDED"]) {
+    const board = JSON.parse(espnScoreboard)
+    board.events[0].status = { type: { name, state: "post", shortDetail: name } }
+    const match = Model.parseEspnScoreboard(JSON.stringify(board), "mlb", "MLB")[0]
+    assert.notEqual(match.status, "finished", name)
+    assert.equal(match.scoreText, "", name)
+    assert.equal(match.statusReason, name)
+  }
+})
+test("ESPN null competitors and malformed linescores cannot abort the slate", () => {
+  const board = JSON.parse(espnScoreboard)
+  board.events[0].competitions[0].competitors.push(null)
+  board.events[0].competitions[0].competitors[0].linescores = [null, {}, { value: 0 }, { value: 2 }]
+  const matches = Model.parseEspnScoreboard(JSON.stringify(board), "mlb", "MLB")
+  assert.equal(matches.length, 2)
+  assert.ok(Object.values(matches[0].linescores).some(lines => JSON.stringify(lines) === "[null,null,0,2]"))
+})
+
 test("parseEspnScoreboard tolerates empty payloads", () => {
   assert.deepEqual(Model.parseEspnScoreboard("", "nba", "NBA"), [])
   assert.deepEqual(Model.parseEspnScoreboard("{}", "nba", "NBA"), [])
@@ -672,7 +691,8 @@ test("extractPageProps supports both HTML Next.js scripts and direct JSON", () =
 })
 test("matchStatusText and shortTournamentName", () => {
   assert.equal(Model.matchStatusText({ status: "finished" }), "FT")
-  assert.equal(Model.matchStatusText({ status: "cancelled" }), "Postponed")
+  assert.equal(Model.matchStatusText({ status: "cancelled" }), "Cancelled")
+  assert.equal(Model.matchStatusText({ status: "cancelled", statusReason: "Postponed" }), "Postponed")
   assert.equal(Model.matchStatusText({ status: "live", liveTime: "45'" }), "45'")
   assert.equal(Model.shortTournamentName("UEFA Champions League"), "Champions Lg")
   assert.equal(Model.shortTournamentName("Primeira Liga"), "Liga Portugal")

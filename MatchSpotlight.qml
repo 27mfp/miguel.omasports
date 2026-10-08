@@ -8,6 +8,7 @@ Item {
   id: root
   Theme { id: theme }
 
+  property bool detailsExpanded: false
   property var featuredMatch: null
   property var fallbackMatch: null
   property bool isF1: false
@@ -41,7 +42,9 @@ Item {
   width: parent.width
   implicitHeight: spotlightSurface.implicitHeight
 
-  readonly property var match: featuredMatch || fallbackMatch
+  property var latestMatchesById: ({})
+  readonly property var selectedMatch: featuredMatch || fallbackMatch
+  readonly property var match: selectedMatch ? (latestMatchesById[String(selectedMatch.id)] || selectedMatch) : null
   readonly property bool isLive: match && match.status === "live"
   readonly property string syncedLiveTime: Model.cleanLiveTime(Model.interpolateLiveTime(root.match, root.nowMs, root.fetchedAtMs)) || "LIVE"
   readonly property bool isUpcoming: match && match.status === "upcoming"
@@ -428,7 +431,7 @@ Item {
           // F1 3-Step Podium Showcase & Pole Position
           Rectangle {
             id: podiumCard
-            visible: root.isF1 && Boolean(root.f1Podium && root.f1Podium.length >= 3)
+            visible: root.detailsExpanded && root.isF1 && Boolean(root.f1Podium && root.f1Podium.length >= 3)
             width: parent.width
             implicitHeight: podiumCol.implicitHeight + Style.space(12)
             radius: theme.subtleRadius(4)
@@ -656,6 +659,8 @@ Item {
               font.pixelSize: Style.font.title
               font.bold: true
               horizontalAlignment: Text.AlignRight
+              wrapMode: Text.WordWrap
+              maximumLineCount: 2
               elide: Text.ElideRight
             }
 
@@ -673,7 +678,7 @@ Item {
             Row {
               anchors.right: parent.right
               spacing: Style.space(3)
-              visible: Boolean(root.matchForm && root.matchForm.home && root.matchForm.home.length > 0)
+              visible: root.detailsExpanded && Boolean(root.matchForm && root.matchForm.home && root.matchForm.home.length > 0)
               Repeater {
                 model: root.matchForm && root.matchForm.home ? root.matchForm.home : []
                 delegate: Rectangle {
@@ -811,6 +816,8 @@ Item {
               font.pixelSize: Style.font.title
               font.bold: true
               horizontalAlignment: Text.AlignLeft
+              wrapMode: Text.WordWrap
+              maximumLineCount: 2
               elide: Text.ElideRight
             }
 
@@ -828,7 +835,7 @@ Item {
             Row {
               anchors.left: parent.left
               spacing: Style.space(3)
-              visible: Boolean(root.matchForm && root.matchForm.away && root.matchForm.away.length > 0)
+              visible: root.detailsExpanded && Boolean(root.matchForm && root.matchForm.away && root.matchForm.away.length > 0)
               Repeater {
                 model: root.matchForm && root.matchForm.away ? root.matchForm.away : []
                 delegate: Rectangle {
@@ -854,7 +861,7 @@ Item {
       // Football Goal Scorers & Red Cards Timeline
       Rectangle {
         id: eventsCard
-        visible: !root.isF1 && !root.scoreHidden
+        visible: root.detailsExpanded && !root.isF1 && !root.scoreHidden
           && Boolean(root.matchEvents)
           && ((root.matchEvents.goals && root.matchEvents.goals.length > 0)
               || (root.matchEvents.redCards && root.matchEvents.redCards.length > 0))
@@ -969,7 +976,7 @@ Item {
       // Key Stats Gauge (Possession & xG)
       Rectangle {
         id: statsCard
-        visible: !root.isF1 && !root.scoreHidden && Boolean(root.matchStats) && Boolean(root.matchStats.possession)
+        visible: root.detailsExpanded && !root.isF1 && !root.scoreHidden && Boolean(root.matchStats) && Boolean(root.matchStats.possession)
         width: parent.width
         implicitHeight: statsCol.implicitHeight + Style.space(10)
         radius: theme.subtleRadius(4)
@@ -1045,7 +1052,7 @@ Item {
       // Game Top Performers / Leaders (US Sports)
       Rectangle {
         id: leadersCard
-        visible: !root.isF1 && !root.scoreHidden && Boolean(root.gameLeaders && root.gameLeaders.length > 0)
+        visible: root.detailsExpanded && !root.isF1 && !root.scoreHidden && Boolean(root.gameLeaders && root.gameLeaders.length > 0)
         width: parent.width
         implicitHeight: leadersCol.implicitHeight + Style.space(10)
         radius: theme.subtleRadius(4)
@@ -1122,7 +1129,7 @@ Item {
       // Linescore Box for US Sports (NBA/NFL quarters, NHL periods, MLB innings)
       Rectangle {
         id: spotlightLinescoreBox
-        visible: !root.isF1 && !root.scoreHidden
+        visible: root.detailsExpanded && !root.isF1 && !root.scoreHidden
           && Boolean(root.match && root.match.linescores)
           && Boolean(root.match.linescores.home && root.match.linescores.away)
           && (root.match.linescores.home.length > 0 || root.match.linescores.away.length > 0)

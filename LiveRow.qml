@@ -10,6 +10,8 @@ Item {
 
   required property var modelData
   required property int index
+  property var latestMatchesById: ({})
+  readonly property var match: latestMatchesById[String(modelData.id)] || modelData
 
   property string activeSport: "football"
   property string activeSportIcon: "⚽"
@@ -28,23 +30,23 @@ Item {
   property var revealedMatchIds: ({})
   property var toggleRevealScore: null // function(matchId)
   property var selectedTeamIds: []
-  readonly property bool isScoreRevealed: Boolean(root.revealedMatchIds && root.revealedMatchIds[String(root.modelData.id)])
+  readonly property bool isScoreRevealed: Boolean(root.revealedMatchIds && root.revealedMatchIds[String(root.match.id)])
   readonly property bool scoreHidden: root.antiSpoiler && !root.isScoreRevealed
 
-  readonly property string favTeamId: Model.teamIdForMatch(root.modelData, root.selectedTeamIds)
-  readonly property string favLiveState: Model.teamLiveState(root.modelData, root.favTeamId)
-  readonly property int scoreHome: parseInt(root.modelData.homeScore, 10) || 0
-  readonly property int scoreAway: parseInt(root.modelData.awayScore, 10) || 0
+  readonly property string favTeamId: Model.teamIdForMatch(root.match, root.selectedTeamIds)
+  readonly property string favLiveState: Model.teamLiveState(root.match, root.favTeamId)
+  readonly property int scoreHome: parseInt(root.match.homeScore, 10) || 0
+  readonly property int scoreAway: parseInt(root.match.awayScore, 10) || 0
   readonly property bool homeLeading: !root.scoreHidden && scoreHome > scoreAway
   readonly property bool awayLeading: !root.scoreHidden && scoreAway > scoreHome
   readonly property bool isTied: !root.scoreHidden && scoreHome === scoreAway
 
   // Provider minute ticked forward between polls (capped stoppage buffer)
   readonly property string syncedLiveTime:
-    Model.interpolateLiveTime(root.modelData, root.nowMs, root.fetchedAtMs) || "LIVE"
+    Model.interpolateLiveTime(root.match, root.nowMs, root.fetchedAtMs) || "LIVE"
 
-  readonly property string leagueName: Model.leagueLabel(root.modelData.leagueId).toUpperCase()
-  readonly property var details: root.matchDetails[String(root.modelData.id)] || null
+  readonly property string leagueName: Model.leagueLabel(root.match.leagueId).toUpperCase()
+  readonly property var details: root.matchDetails[String(root.match.id)] || null
   readonly property string halfTimeText: {
     if (!root.details || !root.details.halftimeScore) return ""
     if (root.scoreHidden) return "••••"
@@ -63,9 +65,9 @@ Item {
     radius: theme.subtleRadius(8)
     Accessible.role: Accessible.Button
     Accessible.name: {
-      var h = (root.modelData.home && (root.modelData.home.name || root.modelData.home.shortName)) || ""
-      var a = (root.modelData.away && (root.modelData.away.name || root.modelData.away.shortName)) || ""
-      return h + " versus " + a + ", live, " + (root.modelData.scoreText || "") + ", " + root.syncedLiveTime
+      var h = (root.match.home && (root.match.home.name || root.match.home.shortName)) || ""
+      var a = (root.match.away && (root.match.away.name || root.match.away.shortName)) || ""
+      return h + " versus " + a + ", live, " + (root.match.scoreText || "") + ", " + root.syncedLiveTime
     }
     color: liveMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
@@ -150,7 +152,7 @@ Item {
           }
 
           Text {
-            readonly property string roundStr: String(root.modelData && root.modelData.round || "").trim()
+            readonly property string roundStr: String(root.match && root.match.round || "").trim()
             visible: roundStr !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: /^\d+$/.test(roundStr) ? ("· Round " + roundStr) : ("· " + roundStr)
@@ -160,7 +162,7 @@ Item {
           }
 
           Text {
-            readonly property string koTime: Model.formatKickoff(root.modelData && root.modelData.time)
+            readonly property string koTime: Model.formatKickoff(root.match && root.match.time)
             visible: koTime !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: "· Started " + koTime
@@ -229,11 +231,11 @@ Item {
             id: liveHomeCrest
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            sport: root.modelData.sport || "football"
-            teamId: root.modelData.home.id
-            teamName: root.modelData.home.name
-            abbr: root.modelData.home.abbr || ""
-            source: root.modelData.home.logo || ""
+            sport: root.match.sport || "football"
+            teamId: root.match.home.id
+            teamName: root.match.home.name
+            abbr: root.match.home.abbr || ""
+            source: root.match.home.logo || ""
             crestSize: Style.space(26)
           }
 
@@ -244,11 +246,11 @@ Item {
             anchors.rightMargin: Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
             text: {
-              var n = (root.modelData.home && (root.modelData.home.name || root.modelData.home.shortName)) || ""
-              var sn = (root.modelData.home && root.modelData.home.shortName) || ""
+              var n = (root.match.home && (root.match.home.name || root.match.home.shortName)) || ""
+              var sn = (root.match.home && root.match.home.shortName) || ""
               return (n.length > 15 && sn) ? sn : n
             }
-            color: root.favTeamId === String(root.modelData.home && root.modelData.home.id)
+            color: root.favTeamId === String(root.match.home && root.match.home.id)
               ? Color.accent
               : (root.homeLeading ? root.fgColor : (root.awayLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
@@ -286,12 +288,12 @@ Item {
             anchors.centerIn: parent
             text: {
               if (root.scoreHidden) return "••••"
-              var raw = String(root.modelData && root.modelData.scoreText || "")
+              var raw = String(root.match && root.match.scoreText || "")
               var m = raw.match(/^(\d+)\s*[-–:]\s*(\d+)$/)
               if (m) return m[1] + " – " + m[2]
               if (raw) return raw
-              if (root.modelData && typeof root.modelData.homeScore === "number" && typeof root.modelData.awayScore === "number") {
-                return root.modelData.homeScore + " – " + root.modelData.awayScore
+              if (root.match && typeof root.match.homeScore === "number" && typeof root.match.awayScore === "number") {
+                return root.match.homeScore + " – " + root.match.awayScore
               }
               return "0 – 0"
             }
@@ -312,7 +314,7 @@ Item {
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: {
-              if (root.toggleRevealScore) root.toggleRevealScore(root.modelData.id)
+              if (root.toggleRevealScore) root.toggleRevealScore(root.match.id)
             }
           }
         }
@@ -330,11 +332,11 @@ Item {
             id: liveAwayCrest
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            sport: root.modelData.sport || "football"
-            teamId: root.modelData.away.id
-            teamName: root.modelData.away.name
-            abbr: root.modelData.away.abbr || ""
-            source: root.modelData.away.logo || ""
+            sport: root.match.sport || "football"
+            teamId: root.match.away.id
+            teamName: root.match.away.name
+            abbr: root.match.away.abbr || ""
+            source: root.match.away.logo || ""
             crestSize: Style.space(26)
           }
 
@@ -345,11 +347,11 @@ Item {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             text: {
-              var n = (root.modelData.away && (root.modelData.away.name || root.modelData.away.shortName)) || ""
-              var sn = (root.modelData.away && root.modelData.away.shortName) || ""
+              var n = (root.match.away && (root.match.away.name || root.match.away.shortName)) || ""
+              var sn = (root.match.away && root.match.away.shortName) || ""
               return (n.length > 15 && sn) ? sn : n
             }
-            color: root.favTeamId === String(root.modelData.away && root.modelData.away.id)
+            color: root.favTeamId === String(root.match.away && root.match.away.id)
               ? Color.accent
               : (root.awayLeading ? root.fgColor : (root.homeLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
@@ -411,13 +413,13 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Style.space(8)
         visible: root.activeSport !== "football"
-          && Boolean(root.modelData.linescores)
-          && Boolean(root.modelData.linescores.home)
-          && Boolean(root.modelData.linescores.away)
-          && (root.modelData.linescores.home.length > 0 || root.modelData.linescores.away.length > 0)
+          && Boolean(root.match.linescores)
+          && Boolean(root.match.linescores.home)
+          && Boolean(root.match.linescores.away)
+          && (root.match.linescores.home.length > 0 || root.match.linescores.away.length > 0)
 
-        readonly property var homeScores: (root.modelData.linescores && root.modelData.linescores.home) || []
-        readonly property var awayScores: (root.modelData.linescores && root.modelData.linescores.away) || []
+        readonly property var homeScores: (root.match.linescores && root.match.linescores.home) || []
+        readonly property var awayScores: (root.match.linescores && root.match.linescores.away) || []
         readonly property int periodCount: Math.max(homeScores.length, awayScores.length)
 
         Repeater {
@@ -476,7 +478,7 @@ Item {
           anchors.right: liveLinkText.left
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          text: (root.matchSubline && root.matchSubline(root.modelData)) ? root.matchSubline(root.modelData) : "● Live in progress"
+          text: (root.matchSubline && root.matchSubline(root.match)) ? root.matchSubline(root.match) : "● Live in progress"
           color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -502,6 +504,6 @@ Item {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: if (root.openMatch) root.openMatch(root.modelData)
+    onClicked: if (root.openMatch) root.openMatch(root.match)
   }
 }

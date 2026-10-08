@@ -23,6 +23,8 @@ const ON_SCREEN = Boolean(getArg("on-screen", false))
 const UPDATE_GOLDENS = Boolean(getArg("update-goldens", false))
 const TOLERANCE = parseFloat(getArg("tolerance", "0.5"))
 const TARGET_SCALE = parseFloat(getArg("scale", "1.25"))
+const EXPANDED = Boolean(getArg("expanded", false))
+const CAPTURE_SUFFIX = (TARGET_SCALE === 1.25 ? "" : `-scale-${TARGET_SCALE}`) + (EXPANDED ? "-expanded" : "")
 const VALID_TABS = new Set(["live", "fixtures", "standings", "settings", "news", "results"])
 const VALID_SPORTS = new Set(["football", "f1", "nba", "nfl", "mlb", "nhl"])
 
@@ -177,18 +179,23 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
     await sleep(2500)
   }
 
-  if (tabName === "results") {
-    ipc("route", "fixtures")
-    ipc("scheduleSection", "results")
-  } else if (tabName === "news") {
-    ipc("route", "fixtures")
-    ipc("scheduleSection", "news")
-  } else {
-    ipc("route", tabName)
-  }
+  // Allow the shared mutation throttle to settle before selecting a route.
+  await sleep(350)
+  ipc("route", tabName)
   await sleep(DELAY_MS)
+  const expectedRoute = ["results", "news"].includes(tabName) ? "fixtures" : tabName
+  if (ipc("getRoute") !== expectedRoute) throw new Error(`Route verification failed: expected ${expectedRoute}, got ${ipc("getRoute")}`)
+  if (tabName === "fixtures") {
+    await sleep(350)
+    ipc("scheduleSection", "all")
+    await sleep(350)
+  }
+  if (sport && ipc("getActiveSport") !== sport) throw new Error(`Sport verification failed: expected ${sport}`)
+  await setBoolean("setSpotlightDetails", "getSpotlightDetails", EXPANDED)
+  await setBoolean("setRecentExpanded", "getRecentExpanded", EXPANDED)
+  await sleep(350)
 
-  const filename = `tab-${sport ? `${sport}-` : ""}${tabName}.png`
+  const filename = `tab-${sport ? `${sport}-` : ""}${tabName}${CAPTURE_SUFFIX}.png`
   const filepath = join(ARTIFACTS_DIR, filename)
   const goldenPath = join(GOLDENS_DIR, filename)
   const diffFilename = `diff-${filename}`
@@ -305,6 +312,7 @@ async function run() {
   console.log("  OMASports Autonomous Visual & Perceptual Diff Runner")
   console.log("==================================================")
 
+  if (ipc("getUiRevision") !== "audit-ui-20261008-v2") throw new Error("Changed plugin source is not loaded; reload the shell before visual testing.")
   const initialSport = ipc("getActiveSport") || "football"
   const initialRoute = ipc("getRoute") || "fixtures"
   const initialSection = ipc("getScheduleSection") || "all"
@@ -318,6 +326,8 @@ async function run() {
   const initialNewsWire = String(ipc("getNewsWire")).trim().toLowerCase() === "true"
   const initialNotifications = String(ipc("getNotifications")).trim().toLowerCase() === "true"
   const initialMockMode = String(ipc("getMockMode")).trim().toLowerCase() === "true"
+  const initialSpotlightDetails = ipc("getSpotlightDetails").trim().toLowerCase() === "true"
+  const initialRecentExpanded = ipc("getRecentExpanded").trim().toLowerCase() === "true"
   console.log(`  📌 Initial active sport: ${initialSport}`)
   if (UPDATE_GOLDENS) console.log("  🌟 MODE: Updating baseline visual goldens")
 
@@ -337,7 +347,7 @@ async function run() {
       const missing = []
       for (const sport of sportsToTest) {
         for (const tab of tabsToTest) {
-          const filename = `tab-${sport ? `${sport}-` : ""}${tab}.png`
+          const filename = `tab-${sport ? `${sport}-` : ""}${tab}${CAPTURE_SUFFIX}.png`
           if (!existsSync(join(GOLDENS_DIR, filename))) missing.push(filename)
         }
       }
@@ -346,6 +356,8 @@ async function run() {
       }
     }
 
+    await setBoolean("setSpotlightDetails", "getSpotlightDetails", EXPANDED)
+    await setBoolean("setRecentExpanded", "getRecentExpanded", EXPANDED)
     // Screenshots must not depend on the user's persisted display toggles.
     // Normalize them temporarily, then restore every value in finally.
     if (!initialMockMode) {
@@ -417,6 +429,8 @@ async function run() {
         console.error(`  ⚠️ Cleanup failed — ${label}: ${error.message}`)
       }
     }
+    cleanup("spotlight details", () => ipc("setSpotlightDetails", String(initialSpotlightDetails)))
+    cleanup("recent expansion", () => ipc("setRecentExpanded", String(initialRecentExpanded)))
     cleanup("close", () => ipc("close"))
     await sleep(400)
     await cleanupAsync("anti-spoiler", () => ensureToggle("getAntiSpoiler", "toggleSpoiler", initialAntiSpoiler))

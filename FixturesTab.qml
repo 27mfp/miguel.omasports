@@ -20,6 +20,12 @@ Column {
   Theme { id: theme }
 
   property bool upcomingExpanded: false
+  property bool recentExpanded: false
+  property bool spotlightExpanded: false
+  readonly property bool spotlightVisible: spotlightCard.visible
+
+  function toggleRecent() { recentExpanded = !recentExpanded }
+  function toggleSpotlightDetails() { spotlightExpanded = !spotlightExpanded }
 
   readonly property var liveGroup: {
     var groups = controller.matchGroups || []
@@ -76,6 +82,22 @@ Column {
     // "all"
     return controller.matchGroups || []
   }
+
+  function moveSubSection(delta) {
+    var options = root.subSectionOptions
+    var current = 0
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].key === controller.scheduleSubSection) current = i
+    }
+    controller.scheduleSubSection = options[(current + delta + options.length) % options.length].key
+  }
+
+  readonly property var visibleMatchGroups: filteredMatchGroups.map(function(group) {
+    var matches = group.matches || []
+    if (group.key === "upcoming" && controller.scheduleSubSection === "all" && !root.upcomingExpanded) matches = matches.slice(0, 6)
+    if (group.key === "recent" && !root.recentExpanded) matches = matches.slice(0, 3)
+    return { key: group.key, label: group.label, matches: matches }
+  })
 
   width: parent.width
   spacing: Style.space(12)
@@ -447,9 +469,12 @@ Column {
 
   // ---- Spotlight Featured Card ----------------------------------
   MatchSpotlight {
+    id: spotlightCard
+    detailsExpanded: root.spotlightExpanded
     visible: controller.showSpotlight
       && (controller.scheduleSubSection === "all" || controller.scheduleSubSection === "upcoming" || !controller.scheduleSubSection)
       && controller.allMatches.length > 0 && (controller.featuredMatch !== null || fallbackMatch !== null)
+    latestMatchesById: controller.latestMatchesById
     featuredMatch: controller.featuredMatch
     fallbackMatch: controller.allMatches.length > 0 ? Model.featuredMatchForTeam(controller.allMatches) : null
     isF1: controller.activeSport === "f1"
@@ -477,6 +502,42 @@ Column {
     toggleRevealScore: controller.toggleRevealScore
     listVisible: controller.opened && controller.tabIndex === 0
     rowFocused: controller.focusSection === controller.sectionIndex("spotlight")
+  }
+
+  Rectangle {
+    visible: spotlightCard.visible
+    width: parent.width
+    implicitHeight: Style.space(30)
+    radius: theme.subtleRadius(4)
+    color: detailMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : theme.mutedColor(root.fgColor, 0.035)
+    border.width: 1
+    border.color: activeFocus || controller.focusSection === controller.sectionIndex("spotlightDetails") ? Color.accent : theme.mutedColor(root.fgColor, 0.12)
+    Accessible.role: Accessible.Button
+    Accessible.name: root.spotlightExpanded ? "Hide match details" : "Show match details"
+    Accessible.onPressAction: root.toggleSpotlightDetails()
+    activeFocusOnTab: true
+    Keys.onReturnPressed: root.toggleSpotlightDetails()
+    Keys.onSpacePressed: root.toggleSpotlightDetails()
+    Text {
+      anchors.centerIn: parent
+      text: root.spotlightExpanded ? "Hide match details ▴" : "Show match details ▾"
+      color: Color.accent
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+    }
+    MouseArea { id: detailMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleSpotlightDetails() }
+  }
+
+  Text {
+    width: parent.width
+    visible: controller.hasData
+    text: controller.focusSection === controller.sectionIndex("sections")
+      ? "← → change section · Enter next section"
+      : "↑ ↓ navigate · Enter activate · R refresh · S spoiler shield"
+    wrapMode: Text.WordWrap
+    color: theme.mutedColor(root.fgColor, 0.65)
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
   }
 
   // ---- Schedule Header with Filter -----------------------------
@@ -547,13 +608,23 @@ Column {
           required property int index
 
           readonly property bool isSelected: (controller.scheduleSubSection || "all") === modelData.key
+          readonly property bool keyboardFocused: isSelected && controller.focusSection === controller.sectionIndex("sections")
+          Accessible.role: Accessible.PageTab
+          Accessible.name: modelData.label + ", " + modelData.count
+          Accessible.selected: isSelected
+          Accessible.onPressAction: controller.scheduleSubSection = modelData.key
+          activeFocusOnTab: true
+          Keys.onReturnPressed: controller.scheduleSubSection = modelData.key
+          Keys.onSpacePressed: controller.scheduleSubSection = modelData.key
+          Keys.onLeftPressed: root.moveSubSection(-1)
+          Keys.onRightPressed: root.moveSubSection(1)
           width: (subSectionRow.width - (root.subSectionOptions.length - 1) * Style.space(4)) / root.subSectionOptions.length
           implicitHeight: Style.space(26)
           radius: theme.subtleRadius(4)
           color: isSelected
             ? Util.alpha(Color.accent, 0.20)
             : (pillMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.06) : "transparent")
-          border.width: 1
+          border.width: keyboardFocused || activeFocus ? 2 : 1
           border.color: isSelected
             ? Color.accent
             : (pillMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.12) : "transparent")
@@ -800,7 +871,7 @@ Column {
     visible: controller.scheduleSubSection !== "news"
 
     Repeater {
-      model: root.filteredMatchGroups
+      model: root.visibleMatchGroups
 
       delegate: Column {
         id: groupDelegate
@@ -810,7 +881,7 @@ Column {
         readonly property int rowOffset: {
           var s = 0
           for (var g = 0; g < index; g++) {
-            s += (root.filteredMatchGroups[g].matches || []).length
+            s += (root.visibleMatchGroups[g].matches || []).length
           }
           return s
         }
@@ -849,14 +920,7 @@ Column {
           spacing: Style.space(6)
 
           Repeater {
-            model: {
-              var matches = modelData.matches || []
-              if ((controller.scheduleSubSection === "all" || !controller.scheduleSubSection)
-                  && modelData.key === "upcoming" && !root.upcomingExpanded) {
-                return matches.slice(0, 6)
-              }
-              return matches
-            }
+            model: modelData.matches || []
             delegate: MatchRow {
               activeSport: controller.activeSport
               fgColor: root.fgColor
@@ -877,10 +941,40 @@ Column {
             }
           }
 
+          Rectangle {
+            visible: modelData.key === "recent" && root.recentMatchesCount > 3
+            width: parent.width
+            implicitHeight: Style.space(30)
+            radius: theme.subtleRadius(4)
+            color: recentMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : theme.mutedColor(root.fgColor, 0.035)
+            border.width: 1
+            border.color: activeFocus || controller.focusSection === controller.sectionIndex("recentExpand") ? Color.accent : theme.mutedColor(root.fgColor, 0.12)
+            Accessible.role: Accessible.Button
+            Accessible.name: root.recentExpanded ? "Show fewer results" : "Show all loaded results"
+            Accessible.onPressAction: root.toggleRecent()
+            activeFocusOnTab: true
+            Keys.onReturnPressed: root.toggleRecent()
+            Keys.onSpacePressed: root.toggleRecent()
+            Text {
+              anchors.centerIn: parent
+              text: root.recentExpanded ? "Show fewer results ▴" : "Show " + (root.recentMatchesCount - 3) + " more results ▾"
+              color: Color.accent
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+            MouseArea { id: recentMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleRecent() }
+          }
+
           // "Show more upcoming fixtures" Accordion Expander
           Rectangle {
+            Accessible.role: Accessible.Button
+            Accessible.name: root.upcomingExpanded ? "Show fewer upcoming fixtures" : "Show all upcoming fixtures"
+            Accessible.onPressAction: root.upcomingExpanded = !root.upcomingExpanded
+            activeFocusOnTab: true
+            Keys.onReturnPressed: root.upcomingExpanded = !root.upcomingExpanded
+            Keys.onSpacePressed: root.upcomingExpanded = !root.upcomingExpanded
             visible: (controller.scheduleSubSection === "all" || !controller.scheduleSubSection)
-              && modelData.key === "upcoming" && (modelData.matches || []).length > 6
+              && modelData.key === "upcoming" && root.upcomingMatchesCount > 6
             width: parent.width
             implicitHeight: expandUpcomingRow.implicitHeight + Style.space(12)
             radius: theme.subtleRadius(4)
@@ -888,7 +982,7 @@ Column {
               ? Style.hoverFillFor(root.fgColor, Color.accent)
               : theme.mutedColor(root.fgColor, 0.035)
             border.width: 1
-            border.color: expandUpcomingMouse.containsMouse
+            border.color: expandUpcomingMouse.containsMouse || activeFocus || controller.focusSection === controller.sectionIndex("expand")
               ? Color.accent
               : theme.mutedColor(root.fgColor, 0.08)
 
@@ -911,7 +1005,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.upcomingExpanded
                   ? "Show fewer upcoming fixtures"
-                  : ("Show " + (modelData.matches.length - 6) + " more upcoming fixtures")
+                  : ("Show " + (root.upcomingMatchesCount - 6) + " more upcoming fixtures")
                 color: Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption

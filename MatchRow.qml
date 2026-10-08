@@ -468,7 +468,7 @@ Item {
                                  : (root.generalOutcome === "draw"
                                     ? ("DRAW · " + root.ftReason)
                                     : ("🏁 " + root.ftReason))))))
-                    : ("⏱ " + Model.formatKickoff(modelData.time)))
+                    : (modelData.status === "cancelled" ? Model.matchStatusText(modelData) : ("⏱ " + (modelData.statusReason || Model.formatKickoff(modelData.time)))))
               color: root.isLive
                 ? root.urgentColor
                 : (root.isFinished
@@ -545,7 +545,7 @@ Item {
             id: homeScoreText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            visible: !root.isUpcoming || root.scoreHidden
+            visible: root.isLive || root.isFinished || root.scoreHidden
             text: root.scoreHidden
               ? "••••"
               : (root.isUpcoming ? "" : String(modelData.homeScore !== undefined ? modelData.homeScore : "–"))
@@ -622,7 +622,7 @@ Item {
             id: awayScoreText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            visible: !root.isUpcoming || root.scoreHidden
+            visible: root.isLive || root.isFinished || root.scoreHidden
             text: root.scoreHidden
               ? "••••"
               : (root.isUpcoming ? "" : String(modelData.awayScore !== undefined ? modelData.awayScore : "–"))

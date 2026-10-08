@@ -110,6 +110,8 @@ async function run() {
     backgroundUpdates: bool(ipc("getBackgroundUpdates")),
     barTicker: bool(ipc("getBarTicker")),
     spotlight: bool(ipc("getSpotlight")),
+    spotlightDetails: bool(ipc("getSpotlightDetails")),
+    recentExpanded: bool(ipc("getRecentExpanded")),
     newsWire: bool(ipc("getNewsWire")),
     suppressFocus: bool(ipc("getSuppressFocus")),
     targetScreen: ipc("getTargetScreen") || "",
@@ -149,6 +151,17 @@ async function run() {
         await sleep(100)
         assert.equal(ipc("getRoute"), route)
       }
+    })
+
+    await test("Spotlight details and results expansion round-trip", async () => {
+      ipc("setSpotlightDetails", "true")
+      ipc("setRecentExpanded", "true")
+      assert.equal(bool(ipc("getSpotlightDetails")), true)
+      assert.equal(bool(ipc("getRecentExpanded")), true)
+      ipc("setSpotlightDetails", "false")
+      ipc("setRecentExpanded", "false")
+      assert.equal(bool(ipc("getSpotlightDetails")), false)
+      assert.equal(bool(ipc("getRecentExpanded")), false)
     })
 
     await test("Panel open/close/toggle lifecycle", async () => {
@@ -201,6 +214,8 @@ async function run() {
 
     // Close before restoring routing so no test popup remains visible. The
     // original visibility is restored at the end of cleanup.
+    attempt("spotlight details", () => ipc("setSpotlightDetails", String(initial.spotlightDetails)))
+    attempt("recent expansion", () => ipc("setRecentExpanded", String(initial.recentExpanded)))
     attempt("close", () => ipc("close"))
     await sleep(400)
     attempt("anti-spoiler", () => restoreToggle("getAntiSpoiler", "toggleSpoiler", initial.antiSpoiler))

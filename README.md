@@ -62,14 +62,7 @@ The plugin appears in the center section of the Omarchy bar. Open it from the ba
 
 ### From a local checkout
 
-```bash
-omarchy plugin validate .
-install_dir="$HOME/.config/omarchy/plugins/miguel.omasports"
-mkdir -p "$install_dir"
-cp -- *.qml *.py SportsModel.js manifest.json icon.svg icon.png "$install_dir/"
-omarchy-shell shell rescanPlugins
-omarchy plugin enable miguel.omasports --section center
-```
+Follow [Running OmaSports from source](RUNNING.md#install-the-working-tree-into-the-live-bar) for installation and updates. It covers copied installations, linked development checkouts, validation, and when to restart the shell.
 
 To remove it:
 
