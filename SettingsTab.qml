@@ -20,24 +20,37 @@ Column {
   spacing: Style.space(12)
   visible: controller.showingSettings
 
+  component PreferenceToggle: Toggle {
+    titleSize: Style.font.body
+    borderSpec: activeFocus || hasCursor ? Border.controlSpec("focus", foreground, accent) : Border.none()
+  }
+
   // ---- 1. Score & Match Notifications Card ------------------------
   Rectangle {
     width: parent.width
     implicitHeight: notifCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: notifCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      Toggle {
+      Text {
+        text: "ALERTS & UPDATES"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
         label: "Desktop Notifications"
         description: "Alerts for kickoff, goals, half-time, and final scores for followed teams"
@@ -132,7 +145,7 @@ Column {
       }
 
       // Background Polling Toggle
-      Toggle {
+      PreferenceToggle {
         width: parent.width
         label: "Background Polling"
         description: "Keep updating live scores and delivering goal notifications even when the panel is closed"
@@ -149,22 +162,30 @@ Column {
     width: parent.width
     implicitHeight: spoilerCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: spoilerCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Toggle {
+      Text {
+        text: "SCORE PRIVACY"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
-        label: "Anti-Spoiler Shield"
-        description: "Conceal live and final scores until clicked or uncovered (Shortcut: S)"
+        label: "Hide scores"
+        description: "Reveal a live or final score when you click it · S to toggle"
         checked: controller.antiSpoiler
         accent: Color.accent
         foreground: root.fgColor
@@ -178,22 +199,30 @@ Column {
     width: parent.width
     implicitHeight: barDisplayCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: barDisplayCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      Toggle {
+      Text {
+        text: "DISPLAY"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
-        label: "Live Score on Status Bar"
-        description: "Display live match score ticker next to the icon on the Omarchy bar (e.g. ⚽ BEN 2-1 SPO 74')"
+        label: "Bar ticker"
+        description: "Show your followed team’s live score beside the bar icon"
         checked: controller.showBarTicker
         accent: Color.accent
         foreground: root.fgColor
@@ -206,10 +235,10 @@ Column {
         color: theme.mutedColor(root.fgColor, 0.06)
       }
 
-      Toggle {
+      PreferenceToggle {
         width: parent.width
-        label: "Featured Match Spotlight Card"
-        description: "Display the large featured match hero card at the top of the schedule tab"
+        label: "Match spotlight"
+        description: "Highlight your next or live match above the schedule"
         checked: controller.showSpotlight
         accent: Color.accent
         foreground: root.fgColor
@@ -223,19 +252,27 @@ Column {
     width: parent.width
     implicitHeight: wireCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: wireCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Toggle {
+      Text {
+        text: "NEWS"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
         label: "League Wire & Breaking News"
         description: "Display top stories, paddock updates, and breaking headlines"
@@ -252,16 +289,15 @@ Column {
     width: parent.width
     implicitHeight: cadenceCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: cadenceCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(12)
 
       // Header row
@@ -280,7 +316,7 @@ Column {
           spacing: Style.space(2)
 
           Text {
-            text: "Live Refresh Cadence & Speed"
+            text: "Update frequency"
             color: root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.body
@@ -288,7 +324,7 @@ Column {
           }
 
           Text {
-            text: "Fastest safe delays tuned per provider to strictly avoid rate limits"
+            text: "Refresh intervals respect each provider’s limits"
             color: theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -488,16 +524,15 @@ Column {
     width: parent.width
     implicitHeight: favCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: favCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
       Item {
@@ -569,16 +604,15 @@ Column {
     width: parent.width
     implicitHeight: syncCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: syncCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
       Item {

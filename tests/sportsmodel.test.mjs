@@ -396,6 +396,44 @@ test("parseEspnStandings uses sport-specific playoff cutoffs", () => {
   assert.equal(nhl[1].zone, "europe")
   assert.equal(nhl[2].zone, "")
 })
+test("ESPN standings separate games behind, total difference, and percentage", () => {
+  const raw = JSON.stringify({ children: [{ name: "American League", standings: { entries: [{
+    team: { id: "1", displayName: "Leader" },
+    stats: [
+      { name: "wins", displayValue: "98" }, { name: "losses", displayValue: "64" },
+      { name: "points", displayValue: "17.0" },
+      { name: "gamesBehind", value: 0, displayValue: "-" },
+      { name: "differential", displayValue: "+0.5" },
+      { name: "pointDifferential", displayValue: "+81" },
+      { name: "winPercent", displayValue: ".605" },
+      { name: "playoffSeed", displayValue: "1" }
+    ]
+  }] } }] })
+  const [row] = Model.parseEspnStandings(raw, "mlb")["American League"]
+  assert.equal(row.gb, "-")
+  assert.equal(row.gd, "+81")
+  assert.equal(row.pct, ".605")
+})
+test("ESPN seed order preserves division winners ahead of wild cards", () => {
+  const data = JSON.parse(espnStandings([["National League", [4, 3]]]))
+  data.children[0].standings.entries[0].stats[0].displayValue = "95"
+  data.children[0].standings.entries[1].stats[0].displayValue = "91"
+  const rows = Model.parseEspnStandings(JSON.stringify(data), "mlb")["National League"]
+  assert.deepEqual(rows.map(row => row.pos), ["3", "4"])
+  assert.deepEqual(rows.map(row => row.wins), [91, 95])
+})
+test("NFL fallback percentage counts ties as half a win", () => {
+  const data = JSON.parse(espnStandings([["AFC", [1]]]))
+  data.children[0].standings.entries[0].stats.push({ name: "ties", displayValue: "1" })
+  const [row] = Model.parseEspnStandings(JSON.stringify(data), "nfl")["AFC"]
+  assert.equal(row.pct, ".656")
+  assert.equal(row.gb, "–", "missing games behind must not use points or wins")
+})
+test("standings equality notices percentage and games-behind updates", () => {
+  const row = Model.parseEspnStandings(espnStandings([["AFC", [1]]]), "nfl")["AFC"][0]
+  assert.equal(Model.sameRows([row], [{ ...row, gb: "2.0" }]), false)
+  assert.equal(Model.sameRows([row], [{ ...row, pct: ".700" }]), false)
+})
 
 // ---------------------------------------------------------------- F1
 console.log("Formula 1")
@@ -602,6 +640,13 @@ test("liveMatches filters out full-time details and sorts by time", () => {
   const live = Model.liveMatches(sampleMatches, { b: { statusLong: "Full-Time" } })
   assert.equal(live.length, 0)
   assert.equal(Model.liveMatches(sampleMatches, {}).length, 1)
+})
+test("liveMatches uses the supplied clock for deterministic football previews", () => {
+  const now = Date.parse("2026-10-08T18:00:00Z")
+  const match = { id: "mock-live", sport: "football", status: "live", time: new Date(now - 25 * 60000).toISOString() }
+  assert.equal(Model.liveMatches([match], {}, now).length, 1)
+  assert.equal(Model.liveMatches([match], {}, now + 3 * 3600000).length, 0)
+  assert.equal(Model.liveMatches([match], { "mock-live": { finished: true } }, now).length, 0)
 })
 test("liveMatches places invalid timestamps after valid ones", () => {
   const valid = { ...sampleMatches[1], id: "valid" }

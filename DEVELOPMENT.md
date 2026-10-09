@@ -172,28 +172,38 @@ node tests/live.mjs all        # all 6 sports (used in --full mode)
 Case counts and skips depend on provider availability; inspect the current suite output.
 > **Note**: Excluded from `--quick` / pre-commit to avoid blocking commits on third-party network issues.
 
-### M. Autonomous Perceptual Visual Diffing
-Runs pixel-level visual regression testing **headlessly in the background** against deterministic runtime mock data, supporting HiDPI scaling and viewport height constraints (≤ 72% screen height). It temporarily enables and restores the runtime-only mock override:
+### M. Isolated visual and interaction checks
+
+Use the private host for UI development; installing or reloading the plugin in
+the user's desktop shell is unnecessary:
+
 ```bash
-# Compare against approved visual baselines
-node tests/visual.mjs --sport=f1 --tab=standings
-node tests/visual.mjs --sport=football --tab=all
-
-# Test with HiDPI and responsive scales
-node tests/visual.mjs --sport=mlb --tab=fixtures --scale=1
-node tests/visual.mjs --sport=mlb --tab=fixtures --scale=1.5
-node tests/visual.mjs --sport=mlb --tab=fixtures --expanded
-# Non-default scales and expanded states have separate baseline filenames.
-
-# Update visual golden baselines when design changes are intentional (headless only)
-node tests/visual.mjs --sport=f1 --tab=standings --update-goldens
-
-# Inspect the generated 3-way comparative visual report
-xdg-open test-artifacts/visual-report.html
+node tests/ui-session.mjs
+node tests/ui-session.mjs -- node tests/interaction.mjs
+node tests/ui-session.mjs -- node tests/visual.mjs --sport=football --tab=all --capture-only
+node tests/ui-session.mjs --palette=light -- node tests/visual.mjs --sport=football --tab=all --capture-only --artifacts=test-artifacts/light-ui
+node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --expanded --scale=1.5 --capture-only
+node tests/ui-session.mjs --source-ref=HEAD --empty -- node tests/visual.mjs --sport=football --tab=fixtures --capture-only
 ```
-The visual runner fails closed for missing or unmeasurable baselines; only approve
-new goldens after reviewing the headless capture. Full `--sport=all --tab=all`
-coverage requires a committed golden for every requested sport/view.
+
+`ui-session.mjs` copies the installed Commons/Ui kit and the current production
+components into a temporary directory. Only its staged secure helper uses a
+private home. The test host disables cross-display dismissal windows, which
+otherwise intercept physical-screen clicks even with keyboard focus suppressed.
+Sessions serialize compositor mutations with `flock`. The runner restores state and removes its headless monitor; the host is stopped
+and its staging directory removed in `finally`.
+
+The session seeds representative favorites for every sport. `--empty` exercises
+onboarding/empty selections. Palette overrides apply only in the private process.
+Captures use `getPanelGeometry` and the requested output scale, so neither the
+wallpaper nor a particular border color affects cropping. Pillow is required;
+the runner uses the system Python if the default interpreter lacks it.
+
+`--capture-only` writes candidates marked REVIEW without modifying baselines.
+After inspecting candidates, use `--update-goldens` or copy the reviewed captures
+into `tests/fixtures/visual-goldens`. Expanded and non-default-scale states have
+separate filenames. Compare approved baselines with the default session command.
+The report is `test-artifacts/visual-report.html` (or the `--artifacts` directory).
 
 ### M. Automated Git Pre-Commit Quality Gate
 A git pre-commit hook runs the `--quick` suite (~6.5s) before every commit. If any test fails, the commit is rejected:

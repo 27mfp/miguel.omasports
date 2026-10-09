@@ -49,9 +49,9 @@ Item {
   readonly property bool expanded: root.expandedIds[String(modelData.id)] === true
 
   readonly property string favTeamId: Model.teamIdForMatch(modelData, root.selectedTeamIds)
-  readonly property string favOutcome: Model.teamOutcome(modelData, favTeamId)
-  readonly property string favLiveState: Model.teamLiveState(modelData, favTeamId)
-  readonly property string generalOutcome: Model.generalMatchOutcome(modelData)
+  readonly property string favOutcome: root.scoreHidden ? "" : Model.teamOutcome(modelData, favTeamId)
+  readonly property string favLiveState: root.scoreHidden ? "" : Model.teamLiveState(modelData, favTeamId)
+  readonly property string generalOutcome: root.scoreHidden ? "" : Model.generalMatchOutcome(modelData)
   readonly property string ftReason: modelData.sport && modelData.sport !== "football"
     ? (modelData.statusReason ? modelData.statusReason.toUpperCase() : "FINAL")
     : (modelData.statusReason === "AET" ? "AET" : (modelData.statusReason === "PEN" ? "PEN" : "FT"))
@@ -76,19 +76,27 @@ Item {
     }
     color: matchMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
-      : theme.mutedColor(root.fgColor, 0.02)
-    border.width: (root.rowFocused || root.favLiveState !== "") ? 1.5 : 1
+      : "transparent"
+    border.width: (root.rowFocused || matchMouse.containsMouse) ? 1 : 0
     border.color: matchMouse.containsMouse
       ? Color.accent
       : (root.rowFocused
          ? Color.accent
          : (root.favLiveState === "leading"
-            ? Util.alpha("#22c55e", 0.35)
+            ? Util.alpha(theme.positiveColor, 0.35)
             : (root.favLiveState === "trailing"
-               ? Util.alpha("#ef4444", 0.35)
+               ? Util.alpha(theme.negativeColor, 0.35)
                : (root.favLiveState === "tied"
-                  ? Util.alpha("#f59e0b", 0.35)
+                  ? Util.alpha(theme.warningColor, 0.35)
                   : (root.isLive ? Util.alpha(Color.accent, 0.25) : theme.mutedColor(root.fgColor, 0.06))))))
+
+    Rectangle {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      height: 1
+      color: theme.mutedColor(root.fgColor, 0.08)
+    }
 
     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
@@ -102,12 +110,12 @@ Item {
       radius: width / 2
       visible: root.isLive || (root.isFinished && (root.favOutcome !== "" || (root.isF1 && Boolean(modelData.winner))))
       color: root.isLive
-        ? (root.favLiveState === "leading" ? "#22c55e" : (root.favLiveState === "trailing" ? "#ef4444" : (root.favLiveState === "tied" ? "#f59e0b" : Color.accent)))
+        ? (root.favLiveState === "leading" ? theme.positiveColor : (root.favLiveState === "trailing" ? theme.negativeColor : (root.favLiveState === "tied" ? theme.warningColor : Color.accent)))
         : (root.favOutcome === "win"
-           ? "#22c55e"
+           ? theme.positiveColor
            : (root.favOutcome === "loss"
-              ? "#ef4444"
-              : (root.favOutcome === "draw" ? "#f59e0b" : (root.isF1 && modelData.winner ? "#eab308" : theme.mutedColor(root.fgColor, 0.2)))))
+              ? theme.negativeColor
+              : (root.favOutcome === "draw" ? theme.warningColor : (root.isF1 && modelData.winner ? theme.podiumColor : theme.mutedColor(root.fgColor, 0.2)))))
     }
 
     // F1 Grand Prix Container Layout (with sessions dropdown)
@@ -196,13 +204,13 @@ Item {
             color: root.isLive
               ? Util.alpha(root.urgentColor, 0.14)
               : (root.isFinished
-                 ? (modelData.winner ? Util.alpha("#eab308", 0.18) : theme.mutedColor(root.fgColor, 0.08))
+                 ? (modelData.winner ? Util.alpha(theme.podiumColor, 0.18) : theme.mutedColor(root.fgColor, 0.08))
                  : Util.alpha(Color.accent, 0.15))
             border.width: 1
             border.color: root.isLive
               ? Util.alpha(root.urgentColor, 0.3)
               : (root.isFinished
-                 ? (modelData.winner ? Util.alpha("#eab308", 0.45) : theme.mutedColor(root.fgColor, 0.12))
+                 ? (modelData.winner ? Util.alpha(theme.podiumColor, 0.45) : theme.mutedColor(root.fgColor, 0.12))
                  : Util.alpha(Color.accent, 0.3))
 
             Text {
@@ -214,7 +222,7 @@ Item {
               color: root.isLive
                 ? theme.onUrgent(root.urgentColor)
                 : (root.isFinished
-                   ? (modelData.winner ? "#eab308" : theme.mutedColor(root.fgColor, 0.65))
+                   ? (modelData.winner ? theme.podiumColor : theme.mutedColor(root.fgColor, 0.65))
                    : Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -410,11 +418,11 @@ Item {
                ? (root.scoreHidden
                   ? theme.mutedColor(root.fgColor, 0.08)
                   : (root.favOutcome === "win"
-                     ? Util.alpha("#22c55e", 0.16)
+                     ? Util.alpha(theme.positiveColor, 0.16)
                      : (root.favOutcome === "loss"
-                        ? Util.alpha("#ef4444", 0.16)
+                        ? Util.alpha(theme.negativeColor, 0.16)
                         : (root.favOutcome === "draw" || root.generalOutcome === "draw"
-                           ? Util.alpha("#f59e0b", 0.16)
+                           ? Util.alpha(theme.warningColor, 0.16)
                            : theme.mutedColor(root.fgColor, 0.08)))))
                : Util.alpha(Color.accent, 0.14))
           border.width: 1
@@ -424,11 +432,11 @@ Item {
                ? (root.scoreHidden
                   ? theme.mutedColor(root.fgColor, 0.15)
                   : (root.favOutcome === "win"
-                     ? Util.alpha("#22c55e", 0.45)
+                     ? Util.alpha(theme.positiveColor, 0.45)
                      : (root.favOutcome === "loss"
-                        ? Util.alpha("#ef4444", 0.45)
+                        ? Util.alpha(theme.negativeColor, 0.45)
                         : (root.favOutcome === "draw" || root.generalOutcome === "draw"
-                           ? Util.alpha("#f59e0b", 0.45)
+                           ? Util.alpha(theme.warningColor, 0.45)
                            : theme.mutedColor(root.fgColor, 0.15)))))
                : Util.alpha(Color.accent, 0.3))
 
@@ -475,11 +483,11 @@ Item {
                    ? (root.scoreHidden
                       ? theme.mutedColor(root.fgColor, 0.75)
                       : (root.favOutcome === "win"
-                         ? "#22c55e"
+                         ? theme.positiveColor
                          : (root.favOutcome === "loss"
-                            ? "#ef4444"
+                            ? theme.negativeColor
                             : (root.favOutcome === "draw" || root.generalOutcome === "draw"
-                               ? "#f59e0b"
+                               ? theme.warningColor
                                : theme.mutedColor(root.fgColor, 0.75)))))
                    : Color.accent)
               font.family: Style.font.family
@@ -514,7 +522,7 @@ Item {
               teamName: modelData.home.name
               abbr: modelData.home.abbr || ""
               source: modelData.home.logo || ""
-              crestSize: Style.space(18)
+              crestSize: Style.space(22)
               anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -553,21 +561,21 @@ Item {
               ? theme.mutedColor(root.fgColor, 0.5)
               : (root.isLive
                  ? (root.favLiveState === "leading" && root.favIsHome
-                    ? "#22c55e"
+                    ? theme.positiveColor
                     : (root.favLiveState === "trailing" && root.favIsHome
-                       ? "#ef4444"
+                       ? theme.negativeColor
                        : (Number(modelData.homeScore) > Number(modelData.awayScore)
-                          ? "#22c55e"
+                          ? theme.positiveColor
                           : (Number(modelData.homeScore) < Number(modelData.awayScore) ? theme.mutedColor(root.fgColor, 0.55) : root.fgColor))))
                  : (root.isFinished
                     ? (Number(modelData.homeScore) > Number(modelData.awayScore)
-                       ? "#22c55e"
+                       ? theme.positiveColor
                        : (Number(modelData.homeScore) === Number(modelData.awayScore)
-                          ? "#f59e0b"
+                          ? theme.warningColor
                           : theme.mutedColor(root.fgColor, 0.45)))
                     : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.title
             font.bold: true
           }
         }
@@ -591,7 +599,7 @@ Item {
               teamName: modelData.away.name
               abbr: modelData.away.abbr || ""
               source: modelData.away.logo || ""
-              crestSize: Style.space(18)
+              crestSize: Style.space(22)
               anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -630,21 +638,21 @@ Item {
               ? theme.mutedColor(root.fgColor, 0.5)
               : (root.isLive
                  ? (root.favLiveState === "leading" && root.favIsAway
-                    ? "#22c55e"
+                    ? theme.positiveColor
                     : (root.favLiveState === "trailing" && root.favIsAway
-                       ? "#ef4444"
+                       ? theme.negativeColor
                        : (Number(modelData.awayScore) > Number(modelData.homeScore)
-                          ? "#22c55e"
+                          ? theme.positiveColor
                           : (Number(modelData.awayScore) < Number(modelData.homeScore) ? theme.mutedColor(root.fgColor, 0.55) : root.fgColor))))
                  : (root.isFinished
                     ? (Number(modelData.awayScore) > Number(modelData.homeScore)
-                       ? "#22c55e"
+                       ? theme.positiveColor
                        : (Number(modelData.awayScore) === Number(modelData.homeScore)
-                          ? "#f59e0b"
+                          ? theme.warningColor
                           : theme.mutedColor(root.fgColor, 0.45)))
                     : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.title
             font.bold: true
           }
         }

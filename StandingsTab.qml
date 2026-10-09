@@ -17,7 +17,7 @@ Column {
   Theme { id: theme }
 
   function tableHeaderColor() {
-    return theme.mutedColor(root.fgColor, 0.6)
+    return theme.mutedColor(root.fgColor, 0.75)
   }
 
   function tableFont() {
@@ -40,8 +40,12 @@ Column {
     Text {
       id: tableTitle
       anchors.left: parent.left
+      anchors.right: standingsScope.left
+      anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
-      text: controller.activeSportMeta.label.toUpperCase() + " STANDINGS"
+      elide: Text.ElideRight
+      text: controller.activeSport === "football" ? "LEAGUE TABLE"
+        : (controller.activeSport === "f1" ? "CHAMPIONSHIP" : "PLAYOFF SEEDING")
       color: theme.mutedColor(root.fgColor, 0.55)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -53,16 +57,16 @@ Column {
       id: standingsScope
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(230)
+      width: Math.min(Style.space(230), parent.width * 0.58)
       height: standingsPicker.implicitHeight
       visible: controller.standingsOptions.length > 1
 
-      Dropdown {
+      SelectionDropdown {
         id: standingsPicker
         anchors.fill: parent
         label: ""
         showLabel: false
-        value: controller.standingsLeagueId
+        selectedValue: controller.standingsLeagueId
         options: controller.standingsOptions
         hasCursor: controller.focusSection === controller.sectionIndex("standings")
         foreground: root.fgColor
@@ -131,9 +135,8 @@ Column {
     implicitHeight: tableCardCol.implicitHeight + Style.space(16)
     visible: controller.standingsRows.length > 0
     radius: Style.cornerRadius
-    color: theme.mutedColor(root.fgColor, 0.02)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: tableCardCol
@@ -151,12 +154,14 @@ Column {
         // Football Header
         Row {
           visible: controller.activeSport === "football"
-          width: parent.width
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(8)
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(216); text: "CLUB"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          Text { width: parent.width - Style.space(260); text: "CLUB"; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(26); text: "P"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(26); text: "D"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
@@ -168,61 +173,69 @@ Column {
         // NBA / MLB Header (W, L, PCT, DIFF, GB)
         Row {
           visible: controller.activeSport === "nba" || controller.activeSport === "mlb"
-          width: parent.width
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(8)
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(190); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          Text { width: parent.width - Style.space(274); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(36); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(34); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(36); text: "GB"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(44); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(40); text: "GB"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // NHL Header (W, L, OTL, DIFF, PTS)
         Row {
           visible: controller.activeSport === "nhl"
-          width: parent.width
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(8)
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(190); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          Text { width: parent.width - Style.space(274); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(36); text: "OTL"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(34); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(36); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(44); text: "OTL"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(40); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // NFL Header (W, L, T, PCT, DIFF)
         Row {
           visible: controller.activeSport === "nfl"
-          width: parent.width
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(8)
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(182); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          Text { width: parent.width - Style.space(256); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(26); text: "T"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(38); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(38); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(44); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // F1 Drivers Header
         Row {
           visible: controller.activeSport === "f1" && (controller.standingsLeagueId === "Drivers" || controller.standingsLeagueId === "" || controller.standingsLeagueId.indexOf("Construct") === -1)
-          width: parent.width
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(8)
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
           Text { width: Style.space(190); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: parent.width - Style.space(330); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: parent.width - Style.space(365); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(42); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(65); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
@@ -230,13 +243,15 @@ Column {
         // F1 Constructors Header
         Row {
           visible: controller.activeSport === "f1" && (controller.standingsLeagueId === "Constructors" || controller.standingsLeagueId.indexOf("Construct") !== -1)
-          width: parent.width
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(8)
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(28); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
           Text { width: Style.space(180); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: parent.width - Style.space(320); text: "COUNTRY"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: parent.width - Style.space(355); text: "COUNTRY"; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(42); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
           Text { width: Style.space(65); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
@@ -268,88 +283,49 @@ Column {
     }
   }
 
-  // Legend
-  Row {
-    visible: controller.standingsRows.length > 0
+  // Only explain zones present in this table, using the same semantic colours.
+  Flow {
+    width: parent.width
     spacing: Style.space(16)
-    anchors.left: parent.left
-    anchors.leftMargin: Style.space(4)
+    visible: controller.standingsRows.length > 0
 
-    Row {
-      spacing: Style.space(5)
-      Rectangle {
-        width: Style.space(8)
-        height: Style.space(8)
-        radius: 2
-        color: Color.accent
-        anchors.verticalCenter: parent.verticalCenter
+    Repeater {
+      model: {
+        var zones = {}
+        for (var i = 0; i < controller.standingsRows.length; i++)
+          zones[controller.standingsRows[i].zone] = true
+        var items = []
+        if (zones.europe) items.push({ label: controller.activeSport === "f1" ? "Championship leader"
+          : (controller.activeSport === "football" ? "European places" : "Playoff places"), color: theme.zoneColor })
+        if (zones.playin) items.push({ label: controller.activeSport === "f1" ? "2nd–3rd"
+          : "Play-in", color: theme.warningColor })
+        if (zones.relegation) items.push({ label: "Relegation", color: theme.negativeColor })
+        return items
       }
-      Text {
-        text: controller.activeSport === "f1" ? "Podium / P1" : "Playoffs / Europe"
-        color: theme.mutedColor(root.fgColor, 0.55)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        anchors.verticalCenter: parent.verticalCenter
+      delegate: Row {
+        required property var modelData
+        spacing: Style.space(5)
+        Rectangle {
+          width: Style.space(8)
+          height: width
+          radius: 2
+          color: modelData.color
+          anchors.verticalCenter: parent.verticalCenter
+        }
+        Text {
+          text: modelData.label
+          color: theme.mutedColor(root.fgColor, 0.75)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
       }
     }
 
-    Row {
-      visible: controller.standingsHasPlayin
-      spacing: Style.space(5)
-      Rectangle {
-        width: Style.space(8)
-        height: Style.space(8)
-        radius: 2
-        color: Util.alpha(Color.accent, 0.08)
-        border.width: 1
-        border.color: Util.alpha(Color.accent, 0.35)
-        anchors.verticalCenter: parent.verticalCenter
-      }
-      Text {
-        text: controller.activeSport === "f1" ? "Podium places" : "Play-in"
-        color: theme.mutedColor(root.fgColor, 0.55)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        anchors.verticalCenter: parent.verticalCenter
-      }
-    }
-
-    Row {
-      spacing: Style.space(5)
-      Text {
-        text: "★"
-        color: Color.accent
-        font.pixelSize: Style.font.caption
-        anchors.verticalCenter: parent.verticalCenter
-      }
-      Text {
-        text: "Favorite"
-        color: theme.mutedColor(root.fgColor, 0.55)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        anchors.verticalCenter: parent.verticalCenter
-      }
-    }
-
-    // Relegation/danger zones were previously encoded by red fill
-    // alone — document the third zone so the encoding is readable
-    Row {
-      visible: controller.activeSport === "football"
-      spacing: Style.space(5)
-      Rectangle {
-        width: Style.space(8)
-        height: Style.space(8)
-        radius: 2
-        color: root.urgentColor
-        anchors.verticalCenter: parent.verticalCenter
-      }
-      Text {
-        text: "Relegation"
-        color: theme.mutedColor(root.fgColor, 0.55)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        anchors.verticalCenter: parent.verticalCenter
-      }
+    Text {
+      text: "★ Favorite"
+      color: Color.accent
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
     }
   }
 }

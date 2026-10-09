@@ -9,6 +9,8 @@ Item {
   Theme { id: theme }
 
   property bool detailsExpanded: false
+  property bool detailsFocused: false
+  signal toggleDetails()
   property var featuredMatch: null
   property var fallbackMatch: null
   property bool isF1: false
@@ -59,8 +61,8 @@ Item {
           ? String(match.away.name || match.away.shortName || root.selectedTeamName)
           : root.selectedTeamName))
     : root.selectedTeamName
-  readonly property string outcome: match ? Model.teamOutcome(match, root.favoriteMatchTeamId) : ""
-  readonly property string liveState: match ? Model.teamLiveState(match, root.favoriteMatchTeamId) : ""
+  readonly property string outcome: !root.scoreHidden && match ? Model.teamOutcome(match, root.favoriteMatchTeamId) : ""
+  readonly property string liveState: !root.scoreHidden && match ? Model.teamLiveState(match, root.favoriteMatchTeamId) : ""
   readonly property string ftReason: match && match.sport && match.sport !== "football"
     ? (match.statusReason ? match.statusReason.toUpperCase() : "FINAL")
     : (match && match.statusReason === "AET" ? "AET" : (match && match.statusReason === "PEN" ? "PEN" : "FT"))
@@ -70,7 +72,7 @@ Item {
   Rectangle {
     id: spotlightSurface
     width: parent.width
-    implicitHeight: spotlightCol.implicitHeight + Style.space(20)
+    implicitHeight: spotlightCol.implicitHeight + Style.space(24)
     radius: Style.cornerRadius
     color: spotlightMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
@@ -81,11 +83,11 @@ Item {
       : (root.rowFocused
          ? Color.accent
          : (root.liveState === "leading"
-            ? Util.alpha("#22c55e", 0.4)
+            ? Util.alpha(theme.positiveColor, 0.4)
             : (root.liveState === "trailing"
-               ? Util.alpha("#ef4444", 0.4)
+               ? Util.alpha(theme.negativeColor, 0.4)
                : (root.liveState === "tied"
-                  ? Util.alpha("#f59e0b", 0.35)
+                  ? Util.alpha(theme.warningColor, 0.35)
                   : (root.isLive ? Util.alpha(Color.accent, 0.3) : theme.mutedColor(root.fgColor, 0.12))))))
     // When there's no match to announce, the surface is an empty card, not a
     // button — mirror that in accessibility so screen readers don't claim an
@@ -116,18 +118,19 @@ Item {
       radius: width / 2
       visible: Boolean(root.match) && (root.isLive || (root.isFinished && (root.outcome !== "" || (root.isF1 && root.match && root.match.winner))))
       color: root.isLive
-        ? (root.liveState === "leading" ? "#22c55e" : (root.liveState === "trailing" ? "#ef4444" : (root.liveState === "tied" ? "#f59e0b" : Color.accent)))
+        ? (root.liveState === "leading" ? theme.positiveColor : (root.liveState === "trailing" ? theme.negativeColor : (root.liveState === "tied" ? theme.warningColor : Color.accent)))
         : (root.isF1 && root.match && root.match.winner
-           ? "#eab308"
+           ? theme.podiumColor
            : (root.outcome === "win"
-              ? "#22c55e"
+              ? theme.positiveColor
               : (root.outcome === "loss"
-                 ? "#ef4444"
-                 : (root.outcome === "draw" ? "#f59e0b" : theme.mutedColor(root.fgColor, 0.2)))))
+                 ? theme.negativeColor
+                 : (root.outcome === "draw" ? theme.warningColor : theme.mutedColor(root.fgColor, 0.2)))))
     }
 
     Column {
       id: spotlightCol
+      z: 1
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
@@ -151,13 +154,13 @@ Item {
             implicitWidth: spotlightTagLabel.implicitWidth + Style.space(8)
             implicitHeight: spotlightTagLabel.implicitHeight + Style.space(4)
             radius: theme.subtleRadius(3)
-            color: Util.alpha(Color.accent, 0.18)
+            color: "transparent"
             anchors.verticalCenter: parent.verticalCenter
 
             Text {
               id: spotlightTagLabel
               anchors.centerIn: parent
-              text: root.isF1 ? "GRAND PRIX" : (root.favoriteMatchTeamId !== "" ? "SPOTLIGHT" : "FEATURED MATCH")
+              text: root.isF1 ? "GRAND PRIX" : (root.isLive ? "LIVE NOW" : (root.isUpcoming ? "UP NEXT" : "LATEST RESULT"))
               color: Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -178,7 +181,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: (root.match ? root.match.leagueName : "")
               + (root.match && root.match.round ? " · " + root.match.round : "")
-              + (root.isLive && Model.formatKickoff(root.match && root.match.time) ? " · Started " + Model.formatKickoff(root.match.time) : "")
+              + (root.detailsExpanded && root.isLive && Model.formatKickoff(root.match && root.match.time) ? " · Started " + Model.formatKickoff(root.match.time) : "")
             color: theme.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -226,13 +229,13 @@ Item {
                ? (root.scoreHidden
                   ? theme.mutedColor(root.fgColor, 0.08)
                   : (root.isF1 && root.match.winner
-                     ? Util.alpha("#eab308", 0.18)
+                     ? Util.alpha(theme.podiumColor, 0.18)
                      : (root.outcome === "win"
-                        ? Util.alpha("#22c55e", 0.18)
+                        ? Util.alpha(theme.positiveColor, 0.18)
                         : (root.outcome === "loss"
-                           ? Util.alpha("#ef4444", 0.18)
+                           ? Util.alpha(theme.negativeColor, 0.18)
                            : (root.outcome === "draw"
-                              ? Util.alpha("#f59e0b", 0.18)
+                              ? Util.alpha(theme.warningColor, 0.18)
                               : theme.mutedColor(root.fgColor, 0.08))))))
                : Util.alpha(Color.accent, 0.14))
           border.width: 1
@@ -242,13 +245,13 @@ Item {
                ? (root.scoreHidden
                   ? theme.mutedColor(root.fgColor, 0.15)
                   : (root.isF1 && root.match.winner
-                     ? Util.alpha("#eab308", 0.45)
+                     ? Util.alpha(theme.podiumColor, 0.45)
                      : (root.outcome === "win"
-                        ? Util.alpha("#22c55e", 0.45)
+                        ? Util.alpha(theme.positiveColor, 0.45)
                         : (root.outcome === "loss"
-                           ? Util.alpha("#ef4444", 0.45)
+                           ? Util.alpha(theme.negativeColor, 0.45)
                            : (root.outcome === "draw"
-                              ? Util.alpha("#f59e0b", 0.45)
+                              ? Util.alpha(theme.warningColor, 0.45)
                               : theme.mutedColor(root.fgColor, 0.15))))))
                : Util.alpha(Color.accent, 0.3))
 
@@ -299,13 +302,13 @@ Item {
                    ? (root.scoreHidden
                       ? theme.mutedColor(root.fgColor, 0.75)
                       : (root.isF1 && root.match.winner
-                         ? "#eab308"
+                         ? theme.podiumColor
                          : (root.outcome === "win"
-                            ? "#22c55e"
+                            ? theme.positiveColor
                             : (root.outcome === "loss"
-                               ? "#ef4444"
+                               ? theme.negativeColor
                                : (root.outcome === "draw"
-                                  ? "#f59e0b"
+                                  ? theme.warningColor
                                   : theme.mutedColor(root.fgColor, 0.75))))))
                    : Color.accent)
               font.family: Style.font.family
@@ -622,123 +625,35 @@ Item {
         implicitHeight: Math.max(homeBounding.implicitHeight, awayBounding.implicitHeight, centerScoreBadge.implicitHeight)
         visible: !root.isF1
 
-        // Left Side (Home)
-        Item {
+        SpotlightTeam {
           id: homeBounding
           anchors.left: parent.left
           anchors.right: centerScoreBadge.left
           anchors.rightMargin: Style.space(10)
           anchors.verticalCenter: parent.verticalCenter
-          implicitHeight: Math.max(homeCrest.height, homeTextCol.implicitHeight)
-
-          TeamCrest {
-            id: homeCrest
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            sport: root.match ? root.match.sport : "football"
-            teamId: root.match ? root.match.home.id : ""
-            teamName: root.match ? root.match.home.name : ""
-            abbr: root.match && root.match.home.abbr ? root.match.home.abbr : ""
-            source: root.match && root.match.home.logo ? root.match.home.logo : ""
-            crestSize: Style.space(32)
-          }
-
-          Column {
-            id: homeTextCol
-            anchors.left: parent.left
-            anchors.right: homeCrest.left
-            anchors.rightMargin: Style.space(8)
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-
-            Text {
-              width: parent.width
-              text: root.match ? root.match.home.name || root.match.home.shortName : ""
-              color: (root.favoriteMatchTeamId !== "" && String(root.match && root.match.home.id) === String(root.favoriteMatchTeamId)) ? Color.accent : root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-              horizontalAlignment: Text.AlignRight
-              wrapMode: Text.WordWrap
-              maximumLineCount: 2
-              elide: Text.ElideRight
-            }
-
-            Text {
-              width: parent.width
-              text: root.match && root.match.home.record ? root.match.home.record : ((root.favoriteMatchTeamId !== "" && String(root.match && root.match.home.id) === String(root.favoriteMatchTeamId)) ? "HOME · FAVORITE" : "HOME")
-              color: theme.mutedColor(root.fgColor, 0.45)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              horizontalAlignment: Text.AlignRight
-              elide: Text.ElideRight
-            }
-
-            // 5-match recent form badges (Home)
-            Row {
-              anchors.right: parent.right
-              spacing: Style.space(3)
-              visible: root.detailsExpanded && Boolean(root.matchForm && root.matchForm.home && root.matchForm.home.length > 0)
-              Repeater {
-                model: root.matchForm && root.matchForm.home ? root.matchForm.home : []
-                delegate: Rectangle {
-                  required property string modelData
-                  width: Style.space(12)
-                  height: Style.space(12)
-                  radius: Style.space(2)
-                  color: modelData === "W" ? "#22c55e" : (modelData === "D" ? theme.mutedColor(root.fgColor, 0.25) : root.urgentColor)
-                  Text {
-                    anchors.centerIn: parent
-                    text: modelData
-                    font.pixelSize: 8
-                    font.bold: true
-                    color: "#ffffff"
-                  }
-                }
-              }
-            }
-          }
+          team: root.match ? root.match.home : null
+          sport: root.match ? root.match.sport : "football"
+          homeSide: true
+          favoriteTeamId: root.favoriteMatchTeamId
+          fgColor: root.fgColor
+          urgentColor: root.urgentColor
+          detailsExpanded: root.detailsExpanded
+          recentForm: root.matchForm && root.matchForm.home ? root.matchForm.home : []
         }
-
         // Center Score Box
         Item {
           id: centerScoreBadge
           anchors.centerIn: parent
-          width: Style.space(80)
-          height: Style.space(32)
+          width: Style.space(92)
+          height: Style.space(42)
 
           Rectangle {
             anchors.centerIn: parent
             width: parent.width
             height: parent.height
             radius: theme.subtleRadius(5)
-            color: root.isLive
-              ? (root.liveState === "leading"
-                 ? Util.alpha("#22c55e", 0.16)
-                 : (root.liveState === "trailing"
-                    ? Util.alpha("#ef4444", 0.16)
-                    : (root.liveState === "tied" ? Util.alpha("#f59e0b", 0.16) : theme.mutedColor(root.fgColor, 0.06))))
-              : (!root.scoreHidden && root.isFinished
-                 ? (root.outcome === "win"
-                    ? Util.alpha("#22c55e", 0.16)
-                    : (root.outcome === "loss"
-                       ? Util.alpha("#ef4444", 0.16)
-                       : (root.outcome === "draw" ? Util.alpha("#f59e0b", 0.16) : theme.mutedColor(root.fgColor, 0.06))))
-                 : theme.mutedColor(root.fgColor, 0.06))
-            border.width: 1
-            border.color: root.isLive
-              ? (root.liveState === "leading"
-                 ? "#22c55e"
-                 : (root.liveState === "trailing"
-                    ? "#ef4444"
-                    : (root.liveState === "tied" ? "#f59e0b" : theme.mutedColor(root.fgColor, 0.14))))
-              : (!root.scoreHidden && root.isFinished
-                 ? (root.outcome === "win"
-                    ? Util.alpha("#22c55e", 0.45)
-                    : (root.outcome === "loss"
-                       ? Util.alpha("#ef4444", 0.45)
-                       : (root.outcome === "draw" ? Util.alpha("#f59e0b", 0.45) : theme.mutedColor(root.fgColor, 0.12))))
-                 : theme.mutedColor(root.fgColor, 0.12))
+            color: "transparent"
+            border.width: 0
 
             Text {
               anchors.centerIn: parent
@@ -749,21 +664,21 @@ Item {
                    : (root.kickoffTime(root.match) || "VS"))
               color: root.isLive
                 ? (root.liveState === "leading"
-                   ? "#22c55e"
+                   ? theme.positiveColor
                    : (root.liveState === "trailing"
-                      ? "#ef4444"
-                      : (root.liveState === "tied" ? "#f59e0b" : root.fgColor)))
+                      ? theme.negativeColor
+                      : (root.liveState === "tied" ? theme.warningColor : root.fgColor)))
                 : (root.isUpcoming
                    ? Color.accent
                    : (!root.scoreHidden && root.isFinished
                       ? (root.outcome === "win"
-                         ? "#22c55e"
+                         ? theme.positiveColor
                          : (root.outcome === "loss"
-                            ? "#ef4444"
-                            : (root.outcome === "draw" ? "#f59e0b" : root.fgColor)))
+                            ? theme.negativeColor
+                            : (root.outcome === "draw" ? theme.warningColor : root.fgColor)))
                       : root.fgColor))
               font.family: Style.font.family
-              font.pixelSize: Style.font.body
+              font.pixelSize: root.isUpcoming || root.scoreHidden ? Style.font.title : Style.font.heading
               font.bold: true
             }
 
@@ -779,83 +694,22 @@ Item {
           }
         }
 
-        // Right Side (Away)
-        Item {
+        SpotlightTeam {
           id: awayBounding
+          anchors.right: parent.right
           anchors.left: centerScoreBadge.right
           anchors.leftMargin: Style.space(10)
-          anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          implicitHeight: Math.max(awayCrest.height, awayTextCol.implicitHeight)
-
-          TeamCrest {
-            id: awayCrest
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            sport: root.match ? root.match.sport : "football"
-            teamId: root.match ? root.match.away.id : ""
-            teamName: root.match ? root.match.away.name : ""
-            abbr: root.match && root.match.away.abbr ? root.match.away.abbr : ""
-            source: root.match && root.match.away.logo ? root.match.away.logo : ""
-            crestSize: Style.space(32)
-          }
-
-          Column {
-            id: awayTextCol
-            anchors.left: awayCrest.right
-            anchors.leftMargin: Style.space(8)
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-
-            Text {
-              width: parent.width
-              text: root.match ? root.match.away.name || root.match.away.shortName : ""
-              color: (root.favoriteMatchTeamId !== "" && String(root.match && root.match.away.id) === String(root.favoriteMatchTeamId)) ? Color.accent : root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-              horizontalAlignment: Text.AlignLeft
-              wrapMode: Text.WordWrap
-              maximumLineCount: 2
-              elide: Text.ElideRight
-            }
-
-            Text {
-              width: parent.width
-              text: root.match && root.match.away.record ? root.match.away.record : ((root.favoriteMatchTeamId !== "" && String(root.match && root.match.away.id) === String(root.favoriteMatchTeamId)) ? "AWAY · FAVORITE" : "AWAY")
-              color: theme.mutedColor(root.fgColor, 0.45)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              horizontalAlignment: Text.AlignLeft
-              elide: Text.ElideRight
-            }
-
-            // 5-match recent form badges (Away)
-            Row {
-              anchors.left: parent.left
-              spacing: Style.space(3)
-              visible: root.detailsExpanded && Boolean(root.matchForm && root.matchForm.away && root.matchForm.away.length > 0)
-              Repeater {
-                model: root.matchForm && root.matchForm.away ? root.matchForm.away : []
-                delegate: Rectangle {
-                  required property string modelData
-                  width: Style.space(12)
-                  height: Style.space(12)
-                  radius: Style.space(2)
-                  color: modelData === "W" ? "#22c55e" : (modelData === "D" ? theme.mutedColor(root.fgColor, 0.25) : root.urgentColor)
-                  Text {
-                    anchors.centerIn: parent
-                    text: modelData
-                    font.pixelSize: 8
-                    font.bold: true
-                    color: "#ffffff"
-                  }
-                }
-              }
-            }
-          }
+          team: root.match ? root.match.away : null
+          sport: root.match ? root.match.sport : "football"
+          homeSide: false
+          favoriteTeamId: root.favoriteMatchTeamId
+          fgColor: root.fgColor
+          urgentColor: root.urgentColor
+          detailsExpanded: root.detailsExpanded
+          recentForm: root.matchForm && root.matchForm.away ? root.matchForm.away : []
         }
+
       }
 
       // Football Goal Scorers & Red Cards Timeline
@@ -1210,12 +1064,12 @@ Item {
       // Bottom Details Line
       Item {
         width: parent.width
-        implicitHeight: Math.max(metaTextSub.implicitHeight, fotmobTextLink.implicitHeight)
+        implicitHeight: Style.space(28)
 
         Text {
           id: metaTextSub
           anchors.left: parent.left
-          anchors.right: fotmobTextLink.left
+          anchors.right: detailControl.left
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           text: root.isF1
@@ -1231,21 +1085,47 @@ Item {
           elide: Text.ElideRight
         }
 
-        Text {
-          id: fotmobTextLink
+        Rectangle {
+          id: detailControl
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: (root.activeSport === "football" ? "FotMob" : "Official") + " 󰌹"
-          color: Color.accent
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
+          width: detailLabel.implicitWidth + Style.space(16)
+          implicitHeight: Style.space(28)
+          radius: theme.subtleRadius(4)
+          z: 1
+          color: detailMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : "transparent"
+          border.width: activeFocus || root.detailsFocused ? 2 : 0
+          border.color: Color.accent
+          Accessible.role: Accessible.Button
+          Accessible.name: root.detailsExpanded ? "Hide match details" : "Show match details"
+          Accessible.onPressAction: root.toggleDetails()
+          activeFocusOnTab: true
+          Keys.onReturnPressed: root.toggleDetails()
+          Keys.onSpacePressed: root.toggleDetails()
+
+          Text {
+            anchors.centerIn: parent
+            id: detailLabel
+            text: root.detailsExpanded ? "Less ▴" : "Details ▾"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: detailMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.toggleDetails()
+          }
         }
       }
     }
 
     MouseArea {
       id: spotlightMouse
+      z: 0
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor

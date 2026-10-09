@@ -34,7 +34,7 @@ Item {
   readonly property bool scoreHidden: root.antiSpoiler && !root.isScoreRevealed
 
   readonly property string favTeamId: Model.teamIdForMatch(root.match, root.selectedTeamIds)
-  readonly property string favLiveState: Model.teamLiveState(root.match, root.favTeamId)
+  readonly property string favLiveState: root.scoreHidden ? "" : Model.teamLiveState(root.match, root.favTeamId)
   readonly property int scoreHome: parseInt(root.match.homeScore, 10) || 0
   readonly property int scoreAway: parseInt(root.match.awayScore, 10) || 0
   readonly property bool homeLeading: !root.scoreHidden && scoreHome > scoreAway
@@ -67,31 +67,31 @@ Item {
     Accessible.name: {
       var h = (root.match.home && (root.match.home.name || root.match.home.shortName)) || ""
       var a = (root.match.away && (root.match.away.name || root.match.away.shortName)) || ""
-      return h + " versus " + a + ", live, " + (root.match.scoreText || "") + ", " + root.syncedLiveTime
+      return h + " versus " + a + ", live, " + (root.scoreHidden ? "result hidden" : (root.match.scoreText || "")) + ", " + root.syncedLiveTime
     }
     color: liveMouse.containsMouse
       ? Style.hoverFillFor(root.fgColor, Color.accent)
       : (root.favLiveState === "leading"
-         ? Util.alpha("#22c55e", 0.05)
+         ? Util.alpha(theme.positiveColor, 0.05)
          : (root.favLiveState === "trailing"
-            ? Util.alpha("#ef4444", 0.05)
+            ? Util.alpha(theme.negativeColor, 0.05)
             : (root.favLiveState === "tied"
-               ? Util.alpha("#f59e0b", 0.05)
+               ? Util.alpha(theme.warningColor, 0.05)
                : theme.mutedColor(root.fgColor, 0.025))))
     Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-    border.width: (root.rowFocused || root.favLiveState !== "") ? 1.5 : 1
+    border.width: root.rowFocused || liveMouse.containsMouse ? 1 : 0
     border.color: liveMouse.containsMouse
       ? Color.accent
       : (root.rowFocused
          ? Color.accent
          : (root.favLiveState === "leading"
-            ? Util.alpha("#22c55e", 0.35)
+            ? Util.alpha(theme.positiveColor, 0.35)
             : (root.favLiveState === "trailing"
-               ? Util.alpha("#ef4444", 0.35)
+               ? Util.alpha(theme.negativeColor, 0.35)
                : (root.favLiveState === "tied"
-                  ? Util.alpha("#f59e0b", 0.35)
+                  ? Util.alpha(theme.warningColor, 0.35)
                   : theme.mutedColor(root.fgColor, 0.08)))))
 
     Rectangle {
@@ -102,10 +102,10 @@ Item {
       width: Style.space(3)
       radius: width / 2
       color: root.favLiveState === "leading"
-        ? "#22c55e"
+        ? theme.positiveColor
         : (root.favLiveState === "trailing"
-           ? "#ef4444"
-           : (root.favLiveState === "tied" ? "#f59e0b" : Color.accent))
+           ? theme.negativeColor
+           : (root.favLiveState === "tied" ? theme.warningColor : Color.accent))
 
       SequentialAnimation on opacity {
         running: root.listVisible
@@ -269,19 +269,19 @@ Item {
           height: Style.space(32)
           radius: theme.subtleRadius(5)
           color: root.favLiveState === "leading"
-            ? Util.alpha("#22c55e", 0.16)
+            ? Util.alpha(theme.positiveColor, 0.16)
             : (root.favLiveState === "trailing"
-               ? Util.alpha("#ef4444", 0.16)
+               ? Util.alpha(theme.negativeColor, 0.16)
                : (root.favLiveState === "tied"
-                  ? Util.alpha("#f59e0b", 0.16)
+                  ? Util.alpha(theme.warningColor, 0.16)
                   : theme.mutedColor(root.fgColor, 0.05)))
           border.width: root.favLiveState !== "" ? 1.5 : 1
           border.color: root.favLiveState === "leading"
-            ? "#22c55e"
+            ? theme.positiveColor
             : (root.favLiveState === "trailing"
-               ? "#ef4444"
+               ? theme.negativeColor
                : (root.favLiveState === "tied"
-                  ? "#f59e0b"
+                  ? theme.warningColor
                   : theme.mutedColor(root.fgColor, 0.14)))
 
           Text {
@@ -298,11 +298,11 @@ Item {
               return "0 – 0"
             }
             color: root.favLiveState === "leading"
-              ? "#22c55e"
+              ? theme.positiveColor
               : (root.favLiveState === "trailing"
-                 ? "#ef4444"
+                 ? theme.negativeColor
                  : (root.favLiveState === "tied"
-                    ? "#f59e0b"
+                    ? theme.warningColor
                     : root.fgColor))
             font.family: Style.font.family
             font.pixelSize: root.scoreHidden ? Style.font.caption : Style.font.heading
@@ -399,10 +399,10 @@ Item {
           }
           radius: 1.5
           color: root.favLiveState === "leading"
-            ? "#22c55e"
+            ? theme.positiveColor
             : (root.favLiveState === "trailing"
-               ? "#ef4444"
-               : (root.favLiveState === "tied" ? "#f59e0b" : Color.accent))
+               ? theme.negativeColor
+               : (root.favLiveState === "tied" ? theme.warningColor : Color.accent))
         }
       }
 

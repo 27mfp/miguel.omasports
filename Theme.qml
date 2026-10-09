@@ -16,6 +16,14 @@ import qs.Commons
 // as a child of their single root Item — do not `import "Theme.qml"`
 // (that is a directory import and fails at runtime).
 QtObject {
+  // Semantic states keep their meaning while remaining legible on light themes.
+  readonly property bool lightBackground: 0.299 * Color.background.r + 0.587 * Color.background.g + 0.114 * Color.background.b > 0.6
+  readonly property color positiveColor: lightBackground ? "#187a3d" : "#22c55e"
+  readonly property color negativeColor: lightBackground ? "#b92f3a" : "#ef4444"
+  readonly property color warningColor: lightBackground ? "#956000" : "#f59e0b"
+  readonly property color zoneColor: lightBackground ? "#08785d" : "#10b981"
+  readonly property color podiumColor: lightBackground ? "#956000" : "#eab308"
+
   function mutedColor(c, a) {
     return Qt.rgba(c.r, c.g, c.b, a)
   }

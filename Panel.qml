@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -392,7 +393,7 @@ Panel {
     var groups = Model.groupMatches(fx)
     if (!Model.sameGroups(matchGroups, groups)) matchGroups = groups
 
-    var live = Model.liveMatches(allMatches, matchDetails)
+    var live = Model.liveMatches(allMatches, matchDetails, root.mockModeOverride ? root.nowMs : Date.now())
     if (!Model.sameMatches(liveList, live)) liveList = live
 
     // Standings table for the active selection
@@ -424,16 +425,23 @@ Panel {
   onTeamMatchesRawChanged: Qt.callLater(refreshDerivedLists)
   onSelectedTeamIdsChanged: Qt.callLater(refreshDerivedLists)
   onFixtureFilterIdChanged: Qt.callLater(refreshDerivedLists)
-  onActiveSportChanged: Qt.callLater(refreshDerivedLists)
+  onActiveSportChanged: {
+    focusSection = 0
+    resetContentScroll()
+    Qt.callLater(refreshDerivedLists)
+  }
   onMatchDetailsChanged: Qt.callLater(refreshDerivedLists)
   onMultiSportStandingsChanged: Qt.callLater(refreshDerivedLists)
   onLastPagesChanged: Qt.callLater(refreshDerivedLists)
-  onStandingsLeagueIdChanged: Qt.callLater(refreshDerivedLists)
+  onStandingsLeagueIdChanged: {
+    resetContentScroll()
+    Qt.callLater(refreshDerivedLists)
+  }
 
   readonly property string activeFixtureHeader: {
-    if (activeSport === "f1") return "FIA FORMULA 1 WORLD CHAMPIONSHIP · CALENDAR"
+    if (activeSport === "f1") return "RACE CALENDAR"
     if (fixtureFilterId === "team" && selectedTeamIds.length > 0) return "MATCH SCHEDULE"
-    if (fixtureFilterId === "all") return "ALL " + activeSportMeta.label.toUpperCase() + " FIXTURES"
+    if (fixtureFilterId === "all") return "SCHEDULE"
     var lName = Model.leagueLabel(fixtureFilterId).toUpperCase()
     var list = Model.matchesForLeague(allMatches, fixtureFilterId)
     var nextRound = ""
@@ -459,7 +467,14 @@ Panel {
     showingSettings = !showingSettings
   }
 
+  function resetContentScroll() {
+    if (scroll) scroll.contentY = 0
+  }
+
+  onShowingSettingsChanged: resetContentScroll()
+
   onTabIndexChanged: {
+    resetContentScroll()
     focusSection = 0
     if (stateLoaded) persistState()
   }
@@ -844,6 +859,29 @@ Panel {
     return root.focusSections.length + root.rowSectionCount
   }
 
+  // Keep the panel's keyboard cursor in view while the fixed header stays put.
+  function ensureFocusedControlVisible() {
+    function findCursor(item) {
+      if (!item || item.visible === false) return null
+      if (item.rowFocused === true || item.hasCursor === true || item.keyboardFocused === true) return item
+      var children = item.children || []
+      for (var i = 0; i < children.length; i++) {
+        var found = findCursor(children[i])
+        if (found) return found
+      }
+      return null
+    }
+    var item = findCursor(panelBody)
+    if (!item || scroll.height <= 0) return
+    var top = item.mapToItem(scroll.contentItem, 0, 0).y
+    var bottom = top + item.height
+    if (top < scroll.contentY) scroll.contentY = top
+    else if (bottom > scroll.contentY + scroll.height) scroll.contentY = bottom - scroll.height
+    scroll.contentY = Math.max(0, Math.min(scroll.contentY, Math.max(0, scroll.contentHeight - scroll.height)))
+  }
+
+  onFocusSectionChanged: Qt.callLater(ensureFocusedControlVisible)
+
   function moveFocus(delta) {
     var count = focusableControlCount()
     if (count <= 0) return
@@ -895,13 +933,8 @@ Panel {
       return
     }
     var name = root.focusSections[focusSection]
-    if (name === "sports") {
-      var sportsList = Model.sports()
-      var current = 0
-      for (var i = 0; i < sportsList.length; i++) {
-        if (sportsList[i].value === root.activeSport) { current = i; break }
-      }
-      root.switchSport(sportsList[(current + 1) % sportsList.length].value)
+    if (name === "sports" && panelHeader) {
+      panelHeader.toggleSport()
     } else if (name === "tabs") root.tabIndex = (root.tabIndex + 1) % root.tabOptions.length
     else if (name === "refresh") root.refresh()
     else if (name === "settings") root.toggleSettingsTab()
@@ -2277,7 +2310,7 @@ Panel {
   function startDetailFetch() {
     if (activeSport !== "football") return
     var wanted = []
-    var live = Model.liveMatches(allMatches, matchDetails)
+    var live = Model.liveMatches(allMatches, matchDetails, root.mockModeOverride ? root.nowMs : Date.now())
     for (var i = 0; i < live.length && wanted.length < 8; i++) {
       var lid = String(live[i].id)
       if (wanted.indexOf(lid) === -1) wanted.push(lid)
@@ -2922,7 +2955,10 @@ Panel {
     function setTargetScreen(screenName: string): void { root.targetScreenName = screenName }
     function getActiveSport(): string { return root.activeSport }
     function getMockMode(): bool { return root.mockMode }
-    function getUiRevision(): string { return "audit-ui-20261008-v2" }
+    function getPanelGeometry(): string {
+      return JSON.stringify({ x: panel.cardOrigin.x, y: panel.cardOrigin.y, width: panel.contentWidth, height: panel.contentHeight })
+    }
+    function getUiRevision(): string { return "native-ui-20261008-v4" }
     function getSpotlightDetails(): bool { return fixturesTab.spotlightExpanded }
     function setSpotlightDetails(expanded: bool): void { fixturesTab.spotlightExpanded = expanded }
     function getRecentExpanded(): bool { return fixturesTab.recentExpanded }
@@ -2996,7 +3032,7 @@ Panel {
     centerOnBar: root.shouldCenterOnBar || Boolean(root.targetScreenName)
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(530))
-    contentHeight: panel.fittedContentHeight(Math.min(sportsColumn.implicitHeight + Style.space(16), root.maxPanelContentHeight))
+    contentHeight: panel.fittedContentHeight(Math.min(panelHeader.implicitHeight + Style.space(10) + sportsColumn.implicitHeight + Style.space(16), root.maxPanelContentHeight))
     WlrLayershell.keyboardFocus: (root.opened && !root.suppressFocus)
       ? (panel.focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
       : WlrKeyboardFocus.None
@@ -3020,14 +3056,35 @@ Panel {
         else if (text === "s" || text === "S") root.toggleSpoiler()
       }
 
+      PanelHeader {
+        id: panelHeader
+        controller: root
+        x: Style.space(16)
+        width: parent.width - Style.space(32)
+      }
+
       Flickable {
         id: scroll
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: panelHeader.bottom
+        anchors.topMargin: Style.space(10)
+        anchors.bottom: parent.bottom
         contentWidth: width
         contentHeight: sportsColumn.implicitHeight + Style.space(16)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar {
+          policy: ScrollBar.AsNeeded
+          width: Style.space(4)
+          contentItem: Rectangle {
+            implicitWidth: Style.space(3)
+            implicitHeight: Style.space(20)
+            radius: width / 2
+            color: Util.alpha(root.fgColor, 0.35)
+          }
+        }
 
         Column {
           id: sportsColumn
@@ -3042,11 +3099,6 @@ Panel {
             spacing: Style.space(10)
 
             opacity: 1.0
-
-            PanelHeader {
-              id: panelHeader
-              controller: root
-            }
 
             FixturesTab {
               id: fixturesTab

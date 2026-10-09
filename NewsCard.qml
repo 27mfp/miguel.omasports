@@ -20,9 +20,8 @@ Rectangle {
   width: parent.width
   implicitHeight: contentCol.implicitHeight + Style.space(20)
   radius: Style.cornerRadius
-  color: theme.mutedColor(root.fgColor, 0.035)
-  border.width: 1
-  border.color: theme.mutedColor(root.fgColor, 0.08)
+  color: "transparent"
+  border.width: 0
 
   function formatTimeAgo(iso) {
     if (!iso) return ""
@@ -49,49 +48,20 @@ Rectangle {
     // Header Row
     Item {
       width: parent.width
-      implicitHeight: Math.max(headerLeft.implicitHeight, headerRight.implicitHeight)
+      implicitHeight: headerRight.implicitHeight
 
-      Row {
-        id: headerLeft
+      Text {
         anchors.left: parent.left
+        anchors.right: headerRight.left
+        anchors.rightMargin: Style.space(8)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(8)
-
-        Rectangle {
-          implicitWidth: wireTag.implicitWidth + Style.space(8)
-          implicitHeight: wireTag.implicitHeight + Style.space(4)
-          radius: theme.subtleRadius(3)
-          color: Util.alpha(Color.accent, 0.18)
-          anchors.verticalCenter: parent.verticalCenter
-
-          Text {
-            id: wireTag
-            anchors.centerIn: parent
-            text: "LEAGUE WIRE"
-            color: Color.accent
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            font.letterSpacing: 0.8
-          }
-        }
-
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          text: {
-            if (root.activeSport === "football") return "Top Football Headlines"
-            if (root.activeSport === "f1") return "Formula 1 Paddock News"
-            if (root.activeSport === "nba") return "NBA Buzz & Coverage"
-            if (root.activeSport === "nfl") return "NFL News & Updates"
-            if (root.activeSport === "mlb") return "MLB Diamond Wire"
-            if (root.activeSport === "nhl") return "NHL Puck Headlines"
-            return "Headlines & News"
-          }
-          color: theme.mutedColor(root.fgColor, 0.65)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
-        }
+        text: "LEAGUE NEWS"
+        color: theme.mutedColor(root.fgColor, 0.65)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+        elide: Text.ElideRight
       }
 
       Row {

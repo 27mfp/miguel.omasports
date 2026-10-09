@@ -943,7 +943,13 @@ function parseEspnStandings(raw, sportName) {
       var ties = parseInt((statMap.ties && statMap.ties.displayValue) || (statMap.otLosses && statMap.otLosses.displayValue) || (statMap.ties && statMap.ties.value), 10) || 0
       var played = wins + losses + ties
       var pts = (statMap.pts && statMap.pts.displayValue) || (statMap.points && statMap.points.displayValue) || (statMap.winPercent && statMap.winPercent.displayValue) || (wins + "W")
-      var diff = (statMap.differential && statMap.differential.displayValue) || (statMap.pointDifferential && statMap.pointDifferential.displayValue) || (statMap.runDifferential && statMap.runDifferential.displayValue) || (statMap.gamesBehind && statMap.gamesBehind.displayValue) || "-"
+      // Total points/runs/goals difference, not the per-game average.
+      var diff = (statMap.pointDifferential && statMap.pointDifferential.displayValue) || (statMap.runDifferential && statMap.runDifferential.displayValue) || (statMap.pointsDiff && statMap.pointsDiff.displayValue) || (statMap.differential && statMap.differential.displayValue) || "-"
+      var pct = (statMap.winPercent && statMap.winPercent.displayValue)
+        || (played > 0 ? ((wins + ties * 0.5) / played).toFixed(3) : ".000")
+      var gb = statMap.gamesBehind
+        ? String(statMap.gamesBehind.displayValue !== undefined ? statMap.gamesBehind.displayValue : statMap.gamesBehind.value)
+        : "–"
       var seed = parseInt((statMap.playoffSeed && statMap.playoffSeed.displayValue), 10) || (e + 1)
       var logoUrl = (team.logos && team.logos[0] && team.logos[0].href) || (team.logo) || ""
 
@@ -972,6 +978,8 @@ function parseEspnStandings(raw, sportName) {
         draws: ties,
         losses: losses,
         gd: String(diff),
+        pct: String(pct).replace(/^0\./, "."),
+        gb: gb,
         pts: String(pts),
         zone: zone
       })
@@ -1894,7 +1902,7 @@ function mockEspnTable(sport, teams) {
       pos: String(i + 1), id: t[0], name: t[2], shortName: t[2], abbr: t[1],
       logo: "https://a.espncdn.com/i/teamlogos/" + sport + "/500/" + t[1] + ".png",
       played: 12, wins: 8, draws: 0, losses: 4,
-      gd: "+6", pts: String(8 - i) + "W", zone: zone
+      gd: "+6", pct: ".667", gb: i === 0 ? "–" : String(i), pts: sport === "nhl" ? "16" : String(8 - i) + "W", zone: zone
     })
   }
   return rows
@@ -1915,7 +1923,7 @@ function mockF1Drivers() {
       pos: d[0], id: d[1], name: d[2], shortName: d[3], abbr: d[3],
       flag: d[4], teamId: d[5], teamName: d[6],
       played: 11, wins: i === 0 ? 5 : 1, draws: 0, losses: 0,
-      gd: d[6], pts: d[7], zone: i < 3 ? "europe" : ""
+      gd: d[6], pts: d[7], zone: i === 0 ? "europe" : (i < 3 ? "playin" : "")
     })
   }
   return rows
@@ -2572,11 +2580,11 @@ function reconcileMatchDetails(matches, detailsMap) {
   return result
 }
 
-function liveMatches(matches, detailsMap) {
+function liveMatches(matches, detailsMap, nowMs) {
   var result = []
   var source = arrayFrom(matches)
   var map = detailsMap || {}
-  var now = Date.now()
+  var now = typeof nowMs === "number" && isFinite(nowMs) ? nowMs : Date.now()
   for (var i = 0; i < source.length; i++) {
     var m = source[i]
     if (!m || m.status !== "live") continue
@@ -2737,6 +2745,8 @@ function sameRows(a, b) {
         || String(x.teamName || "") !== String(y.teamName || "")
         || String(x.pts || "") !== String(y.pts || "")
         || String(x.gd || "") !== String(y.gd || "")
+        || String(x.pct || "") !== String(y.pct || "")
+        || String(x.gb || "") !== String(y.gb || "")
         || Number(x.played || 0) !== Number(y.played || 0)
         || Number(x.wins || 0) !== Number(y.wins || 0)
         || Number(x.draws || 0) !== Number(y.draws || 0)

@@ -97,8 +97,8 @@ if (!QUICK) {
     name: "Perceptual Visual Regression",
     file: "tests/visual.mjs",
     cmd: FULL
-      ? "node tests/visual.mjs --sport=all --tab=all"
-      : "node tests/visual.mjs --sport=f1 --tab=standings"
+      ? "node tests/ui-session.mjs -- node tests/visual.mjs --sport=all --tab=all"
+      : "node tests/ui-session.mjs -- node tests/visual.mjs --sport=f1 --tab=standings"
   })
 }
 
@@ -108,7 +108,7 @@ if (INTERACTIVE) {
   steps.splice(3, 0, {
     name: "Safe Headless Interaction Suite",
     file: "tests/interaction.mjs",
-    cmd: "node tests/interaction.mjs"
+    cmd: "node tests/ui-session.mjs -- node tests/interaction.mjs"
   })
 }
 
