@@ -20,35 +20,48 @@ The plugin uses a clean decoupled architecture: **pure JavaScript data engine** 
 ```
 miguel.omasports/
 ├── SportsModel.js         # Core data engine: parsers, caching, catalogs, state management (pure JS, 0 QML deps)
-├── Panel.qml              # Main panel coordinator, IPC target "miguel.omasports", layout & focus management
-├── PanelHeader.qml        # Header bar: sport selector (⚽, 🏀, 🏎, 🏈, ⚾, 🏒), live indicators, settings toggle
-├── FixturesTab.qml        # Schedule tab: multi-competition fixtures, team filters, match spotlight card
+├── Panel.qml              # Main panel coordinator, IPC target "miguel.omasports", layout, fixed header & focus management
+├── PanelHeader.qml        # Fixed header: compact sport picker, tabs, live indicators, refresh & settings
+├── FixturesTab.qml        # Schedule tab: spotlight, recent/upcoming sections with expansion, team filters
 ├── LiveTab.qml            # Dedicated live score feed, live count badge, idle fallback card
 ├── StandingsTab.qml       # League tables: Football, US sports (NBA/NFL/MLB/NHL), F1 (Drivers & Constructors)
-├── SettingsTab.qml        # Preferences: desktop notifications, anti-spoiler shield, refresh cadence, team follow
-├── NewsCard.qml            # Collapsible league wire & breaking news headlines card
-├── MatchSpotlight.qml     # Hero card showcasing followed team's live/upcoming match
-├── MatchRow.qml           # Fixture list row with kickoff time, stadium info, and score pills
-├── LiveRow.qml            # Real-time match row with progress bar, minute counter, HT score, and click-to-reveal
-├── StandingsRow.qml       # Table row with rank badges (🥇, 🥈, 🥉), crests, and sport-specific statistics
+├── SettingsTab.qml        # Grouped preferences: notifications, anti-spoiler, refresh cadence, followed teams
+├── NewsCard.qml           # Collapsible league wire & breaking news headlines card
+├── MatchSpotlight.qml     # Compact spotlight for the followed team's next/live match, optional details
+├── SpotlightTeam.qml      # Shared home/away block for the spotlight: crest, two-line name, record, form
+├── MatchRow.qml           # Fixture list row with kickoff time, status and score
+├── LiveRow.qml            # Real-time match row with minute counter, period scores and click-to-reveal
+├── StandingsRow.qml       # Table row with crests, aligned sport-specific columns and zone colours
+├── SelectionDropdown.qml  # Native dropdown that restores its controller binding after a choice
 ├── TeamCrest.qml          # Crest loader: local disk cache → remote URL fallback → monogram canvas fallback
+├── Theme.qml              # Shared visual helpers (muted colours, theme-aware tints)
+├── NetworkProcess.qml     # argv-based provider request wrapper: one output/failure signal, no stale callbacks
+├── SecureProcess.qml      # Process wrapper with explicit environment and process-group hardStop()
+├── RetryTimer.qml         # Coalesced, guarded retry timer shared by provider retry slots
+├── secure_io.py           # Hardened I/O boundary: atomic, symlink-safe writes and public network reads
 ├── BarWidget.qml          # Omarchy top bar widget: live score ticker, sport icon, and live pulsing dot
 ├── manifest.json          # Omarchy plugin manifest
 └── tests/
-    ├── run-all.mjs        # Unified S-Tier master test orchestrator
-    ├── visual.mjs         # Headless visual test runner with perceptual diff comparisons
-    ├── diff.py            # Perceptual diffing engine (pixel mismatch % & neon magenta heatmaps)
-    ├── crop.py            # Automated popup card bounding-box auto-crop tool
-    ├── interaction.mjs    # Safe opt-in headless interaction tests (routing, toggles, lifecycle)
+    ├── run-all.mjs        # Unified test orchestrator (--quick / --full / --runtime)
+    ├── sportsmodel.test.mjs # Unit tests covering the pure JS functions
+    ├── controller-regressions.mjs # Panel controller regressions (notifications, kickoff, mock state)
+    ├── espn-sequence.mjs  # ESPN day sequencing, today-first ordering, cache and retry cases
+    ├── offline.mjs        # Offline golden tests against frozen provider payloads
     ├── scenarios.mjs      # Chaos & edge-case scenario tests (429 rate limit, shootouts, red cards)
-    ├── notifications.mjs  # 9 notification delivery, 500ms pacing & security tests
-    ├── crest-resilience.mjs # 8 crest cache resilience & 404/corrupt fallback tests
-    ├── burnin.mjs         # 3 burn-in & memory stability tests (100 mock cycles, TTL pruning)
-    ├── sportsmodel.test.mjs # 91 unit tests covering all pure JS functions
-    ├── offline.mjs        # 13 offline golden tests against frozen provider payloads
-    ├── live.mjs           # Live E2E integration tests against real provider APIs
+    ├── notifications.mjs  # Notification delivery, pacing & security tests
+    ├── crest-resilience.mjs # Crest cache resilience & 404/corrupt fallback tests
+    ├── burnin.mjs         # Burn-in & memory stability tests (mock cycles, TTL pruning)
+    ├── security-hardening.mjs # Process/file hardening checks
+    ├── release-guard.mjs  # Version/manifest/README consistency checks
     ├── manifest.mjs       # Manifest/package structure contract checks
     ├── qml-contract.mjs   # Static cross-file QML wiring and harness contracts
+    ├── runtime.mjs        # Opt-in offscreen Quickshell process-lifecycle test (uses runtime/shell.qml)
+    ├── ui-session.mjs     # Private Quickshell host with temporary preferences for UI tests
+    ├── interaction.mjs    # Opt-in headless interaction tests (routing, toggles, lifecycle)
+    ├── visual.mjs         # Headless visual test runner with perceptual diff comparisons
+    ├── diff.py            # Perceptual diffing engine (pixel mismatch % & heatmaps)
+    ├── crop.py            # Popup card crop from IPC-reported geometry
+    ├── live.mjs           # Live E2E integration tests against real provider APIs
     ├── capture-fixtures.mjs # Captures new real-world payloads for offline testing (network required)
     └── fixtures/
         ├── goldens.json   # Frozen JSON payloads and parser golden results
