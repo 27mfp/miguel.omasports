@@ -40,6 +40,14 @@ Item {
     return theme.mutedColor(root.rowFg, 0.7)
   }
 
+  // Positive differences carry an explicit sign in every sport's table.
+  function formatDiff(gd) {
+    if (gd === undefined || gd === null || gd === "") return "-"
+    var s = String(gd).trim()
+    var n = Number(s)
+    return !isNaN(n) && n > 0 && s.charAt(0) !== "+" ? "+" + s : s
+  }
+
   function gdTextColor(gd) {
     var s = String(gd || "").trim()
     if (!s || s === "-") return theme.mutedColor(root.rowFg, 0.7)
@@ -176,7 +184,7 @@ Item {
     Text {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
-      text: (root.modelData.gd !== undefined && root.modelData.gd !== null && root.modelData.gd !== "") ? String(root.modelData.gd) : "-"
+      text: root.formatDiff(root.modelData.gd)
       color: root.gdTextColor(root.modelData.gd)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -272,7 +280,7 @@ Item {
     Text {
       width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
-      text: (root.modelData.gd !== undefined && root.modelData.gd !== null && root.modelData.gd !== "") ? String(root.modelData.gd) : "-"
+      text: root.formatDiff(root.modelData.gd)
       color: root.gdTextColor(root.modelData.gd)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -366,7 +374,7 @@ Item {
     Text {
       width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
-      text: (root.modelData.gd !== undefined && root.modelData.gd !== null && root.modelData.gd !== "") ? String(root.modelData.gd) : "-"
+      text: root.formatDiff(root.modelData.gd)
       color: root.gdTextColor(root.modelData.gd)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -409,7 +417,7 @@ Item {
     }
 
     Item {
-      width: Style.space(190)
+      width: Style.space(180)
       height: Style.space(20)
       anchors.verticalCenter: parent.verticalCenter
 
@@ -442,7 +450,7 @@ Item {
     }
 
     Text {
-      width: parent.width - Style.space(365)
+      width: parent.width - Style.space(338)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || root.modelData.teamName || ""
       color: theme.mutedColor(root.rowFg, 0.7)
@@ -452,7 +460,7 @@ Item {
     }
 
     Text {
-      width: Style.space(42)
+      width: Style.space(40)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
       color: theme.mutedColor(root.rowFg, 0.8)
@@ -462,7 +470,7 @@ Item {
     }
 
     Text {
-      width: Style.space(65)
+      width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.pts || "0").replace(/\s*PTS$/i, "")
       color: root.isFavorite ? Color.accent : root.rowFg

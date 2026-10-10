@@ -19,6 +19,17 @@ Column {
 
   Theme { id: theme }
 
+  // F1 lists races, not matches; other sports keep the model's group labels.
+  function groupTitle(group) {
+    if (!group) return ""
+    if (controller.activeSport === "f1") {
+      if (group.key === "live") return "Live now"
+      if (group.key === "upcoming") return "Upcoming races"
+      if (group.key === "recent") return "Recent races"
+    }
+    return group.label || ""
+  }
+
   property bool upcomingExpanded: false
   property bool recentExpanded: false
   property bool spotlightExpanded: false
@@ -124,9 +135,9 @@ Column {
         text: {
           var teams = controller.selectedTeamIds.length
           var leagues = controller.activeSport === "football" ? controller.selectedLeagueIds.length : 0
-          if (teams === 0 && leagues === 0) return "Follow teams to personalise your schedule"
+          if (teams === 0 && leagues === 0) return controller.activeSport === "f1" ? "Follow drivers to personalise your schedule" : "Follow teams to personalise your schedule"
           var summary = teams === 1 ? controller.teamNameFor(controller.selectedTeamIds[0]) : teams + " followed"
-          if (teams === 0) summary = "Following"
+          if (teams === 0) summary = "No teams followed"
           if (leagues > 0) summary += " · " + leagues + (leagues === 1 ? " league" : " leagues")
           return "★ " + summary
         }
@@ -441,7 +452,7 @@ Column {
   // ---- Schedule Header with Filter -----------------------------
   Item {
     width: parent.width
-    implicitHeight: Math.max(schedTitle.implicitHeight, fixtureFilterScope.implicitHeight)
+    implicitHeight: Math.max(schedTitle.implicitHeight, fixtureFilterScope.visible ? fixtureFilterScope.height : 0)
     visible: controller.hasData
 
     Text {
@@ -806,15 +817,15 @@ Column {
 
         Item {
           width: parent.width
-          visible: root.filteredMatchGroups.length > 1 || modelData.label !== "Upcoming Fixtures"
+          visible: root.filteredMatchGroups.length > 1 || modelData.key !== "upcoming"
           implicitHeight: visible ? (groupLabel.implicitHeight + Style.space(4)) : 0
 
           Text {
             id: groupLabel
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: modelData.label.toUpperCase()
-            color: modelData.label === "Live Matches" ? root.urgentColor : theme.mutedColor(root.fgColor, 0.55)
+            text: root.groupTitle(modelData).toUpperCase()
+            color: modelData.key === "live" ? root.urgentColor : theme.mutedColor(root.fgColor, 0.55)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true

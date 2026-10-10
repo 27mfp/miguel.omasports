@@ -51,6 +51,13 @@ Item {
   readonly property string syncedLiveTime: Model.cleanLiveTime(Model.interpolateLiveTime(root.match, root.nowMs, root.fetchedAtMs)) || "LIVE"
   readonly property bool isUpcoming: match && match.status === "upcoming"
   readonly property bool isFinished: match && match.status === "finished"
+  // Footer fallback when no venue is known; the league already heads the card.
+  readonly property string kickoffLine: {
+    var kick = Model.formatKickoff(match && match.time)
+    if (!kick) return ""
+    if (isLive) return "⏱ Started " + kick
+    return "⏱ " + Model.formatMatchDate(match.time) + " · " + kick
+  }
   readonly property string favoriteMatchTeamId: match
     ? Model.teamIdForMatch(match, root.selectedTeamIds)
     : ""
@@ -181,7 +188,6 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: (root.match ? root.match.leagueName : "")
               + (root.match && root.match.round ? " · " + root.match.round : "")
-              + (root.detailsExpanded && root.isLive && Model.formatKickoff(root.match && root.match.time) ? " · Started " + Model.formatKickoff(root.match.time) : "")
             color: theme.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -607,7 +613,7 @@ Item {
               }
 
               Text {
-                text: "★ " + root.favoriteMatchTeamName + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
+                text: "★ " + ((root.favoriteDriverStanding && root.favoriteDriverStanding.name) || root.favoriteMatchTeamName) + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
                 color: Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -1078,7 +1084,7 @@ Item {
                 : (root.match && root.match.sessions && root.match.sessions.length > 0
                     ? ("🏁 Grand Prix Weekend · " + root.match.sessions.length + " Sessions")
                     : "🏁 FIA Formula 1 World Championship"))
-            : ((root.matchSubline && root.matchSubline(root.match)) ? root.matchSubline(root.match) : (root.match && root.match.leagueName ? "🏆 " + root.match.leagueName : "Matchday Details"))
+            : ((root.matchSubline && root.matchSubline(root.match)) ? root.matchSubline(root.match) : root.kickoffLine)
           color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption

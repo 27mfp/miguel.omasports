@@ -41,6 +41,17 @@ Item {
   readonly property bool awayLeading: !root.scoreHidden && scoreAway > scoreHome
   readonly property bool isTied: !root.scoreHidden && scoreHome === scoreAway
 
+  // F1 "matches" are races: show the Grand Prix and circuit, not two teams.
+  readonly property bool isF1: String(root.match.sport || root.activeSport) === "f1"
+  readonly property string homeFullName: (root.match.home && (root.match.home.name || root.match.home.shortName)) || ""
+  readonly property string awayFullName: (root.match.away && (root.match.away.name || root.match.away.shortName)) || ""
+  // Shorten both sides together so one long name never leaves a mismatched pair.
+  readonly property bool useShortNames: !root.isF1 && (homeFullName.length > 15 || awayFullName.length > 15)
+  function sideName(team, fullName) {
+    var sn = (team && team.shortName) || ""
+    return root.useShortNames && sn ? sn : fullName
+  }
+
   // Provider minute ticked forward between polls (capped stoppage buffer)
   readonly property string syncedLiveTime:
     Model.interpolateLiveTime(root.match, root.nowMs, root.fetchedAtMs) || "LIVE"
@@ -236,25 +247,25 @@ Item {
             teamName: root.match.home.name
             abbr: root.match.home.abbr || ""
             source: root.match.home.logo || ""
-            crestSize: Style.space(26)
+            visible: !root.isF1
+            crestSize: root.isF1 ? 0 : Style.space(26)
           }
 
           Text {
             id: liveHomeText
             anchors.left: parent.left
             anchors.right: liveHomeCrest.left
-            anchors.rightMargin: Style.space(8)
+            anchors.rightMargin: root.isF1 ? 0 : Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
             text: {
-              var n = (root.match.home && (root.match.home.name || root.match.home.shortName)) || ""
-              var sn = (root.match.home && root.match.home.shortName) || ""
-              return (n.length > 15 && sn) ? sn : n
+              if (root.isF1) return (root.match.countryFlag ? root.match.countryFlag + " " : "") + (root.match.raceName || root.homeFullName)
+              return root.sideName(root.match.home, root.homeFullName)
             }
             color: root.favTeamId === String(root.match.home && root.match.home.id)
               ? Color.accent
               : (root.homeLeading ? root.fgColor : (root.awayLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: text.length > 14 ? Style.font.body : Style.font.title
+            font.pixelSize: (liveHomeText.text.length > 14 || liveAwayText.text.length > 14) ? Style.font.body : Style.font.title
             font.bold: true
             horizontalAlignment: Text.AlignRight
             elide: Text.ElideRight
@@ -337,25 +348,26 @@ Item {
             teamName: root.match.away.name
             abbr: root.match.away.abbr || ""
             source: root.match.away.logo || ""
-            crestSize: Style.space(26)
+            visible: !root.isF1
+            crestSize: root.isF1 ? 0 : Style.space(26)
           }
 
           Text {
             id: liveAwayText
             anchors.left: liveAwayCrest.right
-            anchors.leftMargin: Style.space(8)
+            anchors.leftMargin: root.isF1 ? 0 : Style.space(8)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             text: {
-              var n = (root.match.away && (root.match.away.name || root.match.away.shortName)) || ""
-              var sn = (root.match.away && root.match.away.shortName) || ""
-              return (n.length > 15 && sn) ? sn : n
+              if (root.isF1) return root.match.circuitName || root.awayFullName
+              return root.sideName(root.match.away, root.awayFullName)
             }
-            color: root.favTeamId === String(root.match.away && root.match.away.id)
+            color: root.isF1 ? theme.mutedColor(root.fgColor, 0.7)
+              : root.favTeamId === String(root.match.away && root.match.away.id)
               ? Color.accent
               : (root.awayLeading ? root.fgColor : (root.homeLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
-            font.pixelSize: text.length > 14 ? Style.font.body : Style.font.title
+            font.pixelSize: (liveHomeText.text.length > 14 || liveAwayText.text.length > 14) ? Style.font.body : Style.font.title
             font.bold: true
             horizontalAlignment: Text.AlignLeft
             elide: Text.ElideRight
@@ -412,7 +424,9 @@ Item {
         id: linescoreGrid
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Style.space(8)
+        // Period scores reveal the result, so they follow the score privacy setting.
         visible: root.activeSport !== "football"
+          && !root.scoreHidden
           && Boolean(root.match.linescores)
           && Boolean(root.match.linescores.home)
           && Boolean(root.match.linescores.away)
@@ -421,6 +435,38 @@ Item {
         readonly property var homeScores: (root.match.linescores && root.match.linescores.home) || []
         readonly property var awayScores: (root.match.linescores && root.match.linescores.away) || []
         readonly property int periodCount: Math.max(homeScores.length, awayScores.length)
+        // Quarters for NBA/NFL, periods for NHL, plain inning numbers for MLB.
+        function periodLabel(i) {
+          var sport = String(root.match.sport || root.activeSport)
+          if (sport === "mlb") return String(i + 1)
+          var regular = sport === "nhl" ? 3 : 4
+          if (i >= regular) return i === regular ? "OT" : "OT" + (i - regular + 1)
+          return (sport === "nhl" ? "P" : "Q") + (i + 1)
+        }
+
+        // Row labels: which line belongs to which team.
+        Column {
+          spacing: Style.space(2)
+          Text {
+            text: " "
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+          Text {
+            text: (root.match.home && (root.match.home.abbr || root.match.home.shortName)) || "HOME"
+            color: theme.mutedColor(root.fgColor, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+          Text {
+            text: (root.match.away && (root.match.away.abbr || root.match.away.shortName)) || "AWAY"
+            color: theme.mutedColor(root.fgColor, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
 
         Repeater {
           model: linescoreGrid.periodCount
@@ -428,6 +474,14 @@ Item {
           delegate: Column {
             required property int index
             spacing: Style.space(2)
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: linescoreGrid.periodLabel(index)
+              color: theme.mutedColor(root.fgColor, 0.45)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
 
             Text {
               anchors.horizontalCenter: parent.horizontalCenter
@@ -478,7 +532,10 @@ Item {
           anchors.right: liveLinkText.left
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          text: (root.matchSubline && root.matchSubline(root.match)) ? root.matchSubline(root.match) : "● Live in progress"
+          // The F1 card already names the circuit; the footer adds only where it is.
+          text: root.isF1
+            ? ("📍 " + [root.match.locality, root.match.country].filter(function(x) { return Boolean(x) }).join(", "))
+            : ((root.matchSubline && root.matchSubline(root.match)) ? root.matchSubline(root.match) : "● Live in progress")
           color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption

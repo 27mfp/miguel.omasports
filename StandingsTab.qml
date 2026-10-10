@@ -35,7 +35,8 @@ Column {
 
   Item {
     width: parent.width
-    implicitHeight: Math.max(tableTitle.implicitHeight, standingsScope.implicitHeight)
+    // FocusScope has no implicit size; measure the dropdown it actually shows.
+    implicitHeight: Math.max(tableTitle.implicitHeight, standingsScope.visible ? standingsScope.height : 0)
 
     Text {
       id: tableTitle
@@ -234,10 +235,10 @@ Column {
           anchors.rightMargin: Style.space(6)
 
           Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: Style.space(190); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: parent.width - Style.space(365); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(42); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(65); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(180); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: parent.width - Style.space(338); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(40); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          Text { width: Style.space(50); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // F1 Constructors Header

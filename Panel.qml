@@ -299,6 +299,14 @@ Panel {
       if (m && m.home && String(m.home.id).toLowerCase() === str) return m.home.name
       if (m && m.away && String(m.away.id).toLowerCase() === str) return m.away.name
     }
+    // Standings rows carry display names for ids outside the static catalog
+    // (e.g. F1 drivers), so a favorite never falls back to its raw id.
+    for (var group in multiSportStandings) {
+      var rows = Model.arrayFrom(multiSportStandings[group])
+      for (var r = 0; r < rows.length; r++) {
+        if (rows[r] && String(rows[r].id).toLowerCase() === str && rows[r].name) return rows[r].name
+      }
+    }
     return String(id)
   }
 

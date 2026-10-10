@@ -14,6 +14,10 @@
 - Sport and standings selectors retaining labels from previous selections; table changes now reset scroll position.
 - ESPN games-behind columns displaying points, and score differences using per-game averages instead of totals.
 - Live-row accessibility labels respect hidden scores.
+- Live-card period scores revealing results while scores are hidden.
+- Standings and schedule dropdowns overlapping the line above them.
+- F1 favorites showing a raw driver id instead of the driver's name.
+- Live cards shortening only one team's name, and F1 races shown as two "teams" with placeholder crests.
 - Pending notifications continuing after alerts were disabled or the sport changed.
 - ESPN postponed/canceled games appearing as completed results and malformed competitors interrupting scoreboard parsing.
 - Inning/period-only updates retaining stale live-card and spotlight data.
@@ -32,6 +36,9 @@
 - UI tests can use a private Quickshell host with temporary preferences and no desktop-bar changes; screenshots crop IPC-reported geometry.
 - ESPN requests prioritize today, cache today/live scoreboards for 15 seconds and surrounding dates/standings for five minutes, and reuse successful days when retrying failures.
 - Keyboard row navigation follows the filtered rows actually visible on screen.
+- Live-card period scores have quarter/period/inning headers and team labels.
+- Positive goal and point differences show a "+" sign in every standings table; F1 constructor names fit without truncation.
+- The spotlight footer shows kickoff time instead of repeating the league; F1 lists use race wording and onboarding copy mentions drivers.
 - Visual tests verify the loaded source, sport, and route, freeze mock time, and restore temporary display controls after testing.
 - Installation documentation explains copied versus linked checkouts and host-specific reload behavior.
 
