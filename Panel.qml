@@ -1814,7 +1814,7 @@ Panel {
       var key = sportCode + ":" + days[i]
       var entry = espnScoreCache[key]
       if (entry) cache[key] = entry
-      var ttl = days[i] === today || (entry && Model.parseEspnScoreboard(JSON.stringify(entry.payload), sportCode, defaultName).some(function(m) { return m.status === "live" })) ? 15000 : 300000
+      var ttl = days[i] === today || (entry && entry.live) ? 15000 : 300000
       if (entry && (espnRetryCount > 0 || now - entry.at < ttl)) payloads.push(entry.payload)
       else queue.push(days[i])
     }
@@ -1873,7 +1873,9 @@ Panel {
     }
     if (Model.isEspnScoreboardPayload(dayJson)) {
       espnDayPayloads = espnDayPayloads.concat([dayJson])
-      espnScoreCache = Model.dictSet(espnScoreCache, sportCode + ":" + espnCurrentDay, { at: Date.now(), payload: dayJson })
+      // Resolve the live flag once here, not on every refresh's TTL check.
+      var hasLive = Model.parseEspnScoreboard(payload, sportCode, defaultName).some(function(m) { return m.status === "live" })
+      espnScoreCache = Model.dictSet(espnScoreCache, sportCode + ":" + espnCurrentDay, { at: Date.now(), live: hasLive, payload: dayJson })
     } else {
       espnDayFailures++
       espnScoreCache = Model.dictDelete(espnScoreCache, sportCode + ":" + espnCurrentDay)
