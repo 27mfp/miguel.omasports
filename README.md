@@ -9,7 +9,7 @@
     <a href="#development">Development</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/version-1.4.0-38bdf8" alt="Version 1.4.0">
+    <img src="https://img.shields.io/badge/version-1.5.0-38bdf8" alt="Version 1.5.0">
     <img src="https://img.shields.io/badge/platform-Linux-f59e0b" alt="Linux">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license"></a>
   </p>
@@ -17,7 +17,7 @@
 
 ![OmaSports football fixtures panel](preview.png)
 
-<p align="center"><sub>Preview captured from the live FotMob feed. Fixture times and availability vary by season and timezone.</sub></p>
+<p align="center"><sub>Native UI preview captured on an isolated headless display using deterministic demo data.</sub></p>
 
 ## Overview
 
@@ -28,7 +28,7 @@ It supports football, basketball, Formula 1, American football, baseball, and ic
 ## Features
 
 - **Live scores and fixtures** — Browse live games, recent results, upcoming matches, and league news.
-- **Standings** — View football tables, NBA/NHL conferences, NFL and MLB divisions, and F1 driver or constructor championships.
+- **Standings** — View football tables, NBA/NHL conferences, NFL conferences and MLB leagues (ordered by playoff seed), and F1 driver or constructor championships.
 - **Follow teams and drivers** — Combine multiple favorites into one schedule and spotlight the next important game.
 - **Anti-spoiler mode** — Hide live and finished scores until you choose to reveal them.
 - **Bar ticker** — Show a followed team’s live score beside the active sport icon.
@@ -36,6 +36,12 @@ It supports football, basketball, Formula 1, American football, baseball, and ic
 - **Match detail cards** — See broadcast information, venues, leaders, form, events, possession, and period scores when the provider supplies them.
 - **Keyboard and IPC control** — Navigate without a mouse or script the panel with `omarchy-shell`.
 - **Resilient caching** — Team crests use a local cache with remote and monogram fallbacks.
+
+### New in 1.5.0
+
+A native redesign brings a compact sport picker, fixed navigation, clearer scores, flatter match lists, and grouped preferences. The spotlight starts compact, with optional match details. Recent results show a three-game preview with expansion, and fixture controls support keyboard navigation with contextual hints. ESPN refreshes prioritize today's games and cache surrounding dates and standings. Notification cancellation, postponed-game labels, inning updates, and kickoff countdowns also received fixes.
+
+See [the changelog](CHANGELOG.md) for release notes and [RUNNING.md](RUNNING.md) for update instructions.
 
 ## Supported sports
 
@@ -62,14 +68,7 @@ The plugin appears in the center section of the Omarchy bar. Open it from the ba
 
 ### From a local checkout
 
-```bash
-omarchy plugin validate .
-install_dir="$HOME/.config/omarchy/plugins/miguel.omasports"
-mkdir -p "$install_dir"
-cp -- *.qml *.py SportsModel.js manifest.json icon.svg icon.png "$install_dir/"
-omarchy-shell shell rescanPlugins
-omarchy plugin enable miguel.omasports --section center
-```
+Follow [Running OmaSports from source](RUNNING.md#install-the-working-tree-into-the-live-bar) for installation and updates. It covers copied installations, linked development checkouts, validation, and when to restart the shell.
 
 To remove it:
 
@@ -146,14 +145,14 @@ node tests/run-all.mjs --quick
 The repository also includes:
 
 ```bash
-node tests/interaction.mjs                 # headless IPC and lifecycle tests
-node tests/visual.mjs --sport=all --tab=all # headless visual regression suite
+node tests/ui-session.mjs -- node tests/interaction.mjs # isolated IPC and navigation tests
+node tests/ui-session.mjs                  # isolated visual regression suite
 node tests/offline.mjs                     # frozen provider payload regressions
 node tests/live.mjs all                     # live provider acceptance tests; network required
 node tests/release-guard.mjs                # release payload safety checks
 ```
 
-Visual and interaction tests are headless-only. They create a temporary `HEADLESS-*` Wayland monitor, suppress keyboard focus, and restore the user’s shell state when finished. The visual suite uses the built-in deterministic mock mode so screenshots do not depend on changing match data.
+The UI session runs production components in a private Quickshell host with temporary preferences. Visual and interaction tests create a temporary `HEADLESS-*` Wayland monitor, suppress keyboard focus, and clean up when finished. Cross-display dismissal surfaces are disabled only in the private host; your running shell and bar layout are untouched. The visual suite uses the built-in deterministic mock mode so screenshots do not depend on changing match data.
 
 For local UI work, launch the shell with mock data:
 

@@ -5,153 +5,47 @@ import "SportsModel.js" as Model
 
 Item {
   id: root
-
   required property var controller
-
   readonly property color fgColor: controller.fgColor
   readonly property color urgentColor: controller.urgentColor
-
-  readonly property bool anyPopupOpen: false
-  function toggleInterval() {}
-
+  readonly property bool anyPopupOpen: sportPicker.popupOpen
+  readonly property alias sportPicker: sportPicker
+  function toggleSport() { sportPicker.toggle() }
   Theme { id: theme }
-
   width: parent.width
   implicitHeight: headerCol.implicitHeight
 
   Column {
     id: headerCol
     width: parent.width
-    spacing: Style.space(8)
+    spacing: Style.space(14)
 
-    // ---- Top Header Row ---------------------------------------------
     Item {
-      id: headerRow
       width: parent.width
-      implicitHeight: Math.max(
-        controller.showingSettings ? settingsHeaderLeft.implicitHeight : headerLeft.implicitHeight,
-        headerControls.implicitHeight
-      )
+      implicitHeight: Math.max(headerLabels.implicitHeight, headerControls.implicitHeight)
 
-      // Matches Mode Header Title
       Row {
-        id: headerLeft
-        visible: !controller.showingSettings
+        id: headerLabels
         anchors.left: parent.left
         anchors.right: headerControls.left
-        anchors.rightMargin: Style.space(8)
+        anchors.rightMargin: Style.space(12)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(8)
+        spacing: Style.space(10)
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: controller.activeSportIcon
-          font.pixelSize: Style.font.heading
-        }
-
-        Column {
-          anchors.verticalCenter: parent.verticalCenter
-          width: Math.max(0, headerLeft.width - Style.space(32))
-          spacing: Style.space(1)
-
-          Row {
-            spacing: Style.space(6)
-
-            Text {
-              text: controller.activeSportMeta.label
-              color: root.fgColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-              elide: Text.ElideRight
-            }
-
-            // Inline live count indicator badge
-            Rectangle {
-              visible: controller.liveCount > 0
-              anchors.verticalCenter: parent.verticalCenter
-              implicitWidth: inlineLiveRow.implicitWidth + Style.space(10)
-              implicitHeight: inlineLiveRow.implicitHeight + Style.space(3)
-              radius: theme.subtleRadius(4)
-              color: Util.alpha(root.urgentColor, 0.15)
-              border.width: 1
-              border.color: Util.alpha(root.urgentColor, 0.5)
-
-              Row {
-                id: inlineLiveRow
-                anchors.centerIn: parent
-                spacing: Style.space(4)
-
-                Rectangle {
-                  width: Style.space(5)
-                  height: width
-                  radius: width / 2
-                  color: root.urgentColor
-                  anchors.verticalCenter: parent.verticalCenter
-
-                  SequentialAnimation on opacity {
-                    running: controller.opened && controller.liveCount > 0
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 0.25; duration: 500 }
-                    NumberAnimation { to: 1.0; duration: 500 }
-                  }
-                }
-
-                Text {
-                  text: controller.liveCount + " LIVE"
-                  color: root.urgentColor
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: controller.tabIndex = 1
-              }
-            }
-          }
-
-          Text {
-            width: parent.width
-            text: controller.statusText
-            color: controller.errorMessage !== "" || controller.persistenceError !== "" || controller.dataStale
-              ? root.urgentColor
-              : theme.mutedColor(root.fgColor, 0.55)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            elide: Text.ElideRight
-          }
-        }
-      }
-
-      // Settings Mode Header Title
-      Row {
-        id: settingsHeaderLeft
-        visible: controller.showingSettings
-        anchors.left: parent.left
-        anchors.right: headerControls.left
-        anchors.rightMargin: Style.space(8)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(8)
-
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          text: "󰒓"
+          text: controller.showingSettings ? "󰒓" : controller.activeSportIcon
           color: Color.accent
           font.pixelSize: Style.font.heading
         }
 
         Column {
-          anchors.verticalCenter: parent.verticalCenter
-          width: Math.max(0, settingsHeaderLeft.width - Style.space(32))
-          spacing: Style.space(1)
+          width: Math.max(0, headerLabels.width - Style.space(34))
+          spacing: Style.space(3)
 
           Text {
-            text: "Preferences & Settings"
+            width: parent.width
+            text: controller.showingSettings ? "Preferences" : "OmaSports"
             color: root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.title
@@ -161,8 +55,9 @@ Item {
 
           Text {
             width: parent.width
-            text: "Alerts, update speed, and display options"
-            color: theme.mutedColor(root.fgColor, 0.55)
+            text: controller.showingSettings ? "Make it your score center" : controller.statusText
+            color: controller.errorMessage !== "" || controller.persistenceError !== "" || controller.dataStale
+              ? root.urgentColor : theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             elide: Text.ElideRight
@@ -170,18 +65,32 @@ Item {
         }
       }
 
-      // Header Controls (Refresh & Settings)
       Row {
         id: headerControls
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
+        spacing: Style.space(4)
 
-        // Refresh Button (hidden in settings mode)
+        SelectionDropdown {
+          id: sportPicker
+          visible: !controller.showingSettings
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(150)
+          label: ""
+          showLabel: false
+          selectedValue: controller.activeSport
+          options: Model.sports()
+          hasCursor: controller.focusSection === controller.sectionIndex("sports")
+          Accessible.name: "Choose sport"
+          foreground: root.fgColor
+          background: Color.popups.background
+          onChanged: function(value) { controller.switchSport(String(value)) }
+        }
+
         Button {
           id: refreshButton
           visible: !controller.showingSettings
-          text: ""
+          anchors.verticalCenter: parent.verticalCenter
           iconText: "󰑐"
           iconSpinning: controller.loading
           focusable: !controller.showingSettings
@@ -193,15 +102,15 @@ Item {
           onClicked: controller.refresh()
         }
 
-        // Settings / Done Toggle Button
         Button {
           id: settingsButton
+          anchors.verticalCenter: parent.verticalCenter
           text: controller.showingSettings ? "Done" : ""
           iconText: controller.showingSettings ? "󰄬" : "󰒓"
           selected: controller.showingSettings
           focusable: true
           hasCursor: controller.focusSection === controller.sectionIndex("settings")
-          tooltipText: controller.showingSettings ? "Done (Return to matches)" : "Preferences & Settings"
+          tooltipText: controller.showingSettings ? "Return to matches" : "Preferences"
           Accessible.role: Accessible.Button
           Accessible.name: settingsButton.tooltipText
           accent: Color.accent
@@ -211,99 +120,92 @@ Item {
       }
     }
 
-    // ---- Sport Selector Segmented Row (Hidden in Settings) ---------
-    Rectangle {
-      visible: !controller.showingSettings
-      width: parent.width
-      implicitHeight: Style.space(32)
-      radius: theme.subtleRadius(6)
-      color: theme.mutedColor(root.fgColor, 0.035)
-      border.width: 1
-      border.color: theme.mutedColor(root.fgColor, 0.08)
-
-      Row {
-        id: sportSelectorRow
-        anchors.fill: parent
-        anchors.margins: Style.space(3)
-        spacing: Style.space(3)
-
-        Repeater {
-          model: Model.sports()
-
-          delegate: Rectangle {
-            required property var modelData
-            required property int index
-
-            Accessible.role: Accessible.Button
-            Accessible.name: modelData.label + (controller.activeSport === modelData.value ? " (selected)" : "")
-            width: (sportSelectorRow.width - (Model.sports().length - 1) * Style.space(3)) / Model.sports().length
-            height: parent.height
-            radius: theme.subtleRadius(4)
-            color: controller.activeSport === modelData.value
-              ? Util.alpha(Color.accent, 0.20)
-              : (sportMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.06) : "transparent")
-            border.width: 1
-            border.color: controller.activeSport === modelData.value
-              ? Color.accent
-              : (sportMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.10) : "transparent")
-
-            Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
-            Text {
-              anchors.centerIn: parent
-              text: modelData.icon
-              font.pixelSize: Style.font.title
-            }
-
-            MouseArea {
-              id: sportMouse
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: controller.switchSport(modelData.value)
-            }
-          }
-        }
-      }
-    }
-
-    // ---- Tab Navigation Row (Hidden in Settings) --------------------
     Item {
-      id: tabsContainer
       visible: !controller.showingSettings
       width: parent.width
-      implicitHeight: tabsGroup.implicitHeight
+      implicitHeight: Style.space(36)
+
+      Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 1
+        color: theme.mutedColor(root.fgColor, 0.12)
+      }
 
       Row {
         id: tabsGroup
-        anchors.left: parent.left
-        spacing: Style.space(6)
+        anchors.fill: parent
+        spacing: Style.space(4)
 
         Repeater {
           model: controller.tabOptions
-
-          delegate: Button {
+          delegate: Rectangle {
+            id: tab
             required property var modelData
             required property int index
+            readonly property bool selected: controller.tabIndex === index
+            readonly property bool cursor: controller.focusSection === controller.sectionIndex("tabs") && selected && !controller.anyPopupOpen()
+            width: (tabsGroup.width - (controller.tabOptions.length - 1) * tabsGroup.spacing) / controller.tabOptions.length
+            height: tabsGroup.height
+            radius: theme.subtleRadius(4)
+            color: tabMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : "transparent"
+            border.width: cursor || activeFocus ? 1 : 0
+            border.color: Color.accent
+            Accessible.role: Accessible.PageTab
+            Accessible.name: modelData.label
+            Accessible.selected: selected
+            Accessible.onPressAction: tab.selectTab()
+            activeFocusOnTab: true
+            Keys.onReturnPressed: selectTab()
+            Keys.onSpacePressed: selectTab()
 
-            text: modelData.label
-            iconText: modelData.icon
-            selected: controller.tabIndex === index
-            hasCursor: controller.focusSection === controller.sectionIndex("tabs") && controller.tabIndex === index && !controller.anyPopupOpen()
-            foreground: root.fgColor
-            accent: Color.accent
-            onClicked: {
+            function selectTab() {
               controller.tabIndex = index
               if (index === 2) {
                 controller.ensureStandingsSelection()
                 if (controller.standingsRows.length === 0 && !controller.loading) controller.refresh()
               }
             }
+
+            Row {
+              anchors.centerIn: parent
+              spacing: Style.space(6)
+              Text {
+                text: modelData.icon
+                color: tab.selected ? Color.accent : theme.mutedColor(root.fgColor, 0.6)
+                font.pixelSize: Style.font.body
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                text: modelData.label
+                color: tab.selected ? root.fgColor : theme.mutedColor(root.fgColor, 0.6)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                font.bold: tab.selected
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Rectangle {
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.bottom: parent.bottom
+              height: Style.space(2)
+              visible: tab.selected
+              color: Color.accent
+            }
+
+            MouseArea {
+              id: tabMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: tab.selectTab()
+            }
           }
         }
       }
     }
-
-    PanelSeparator { foreground: root.fgColor }
   }
 }

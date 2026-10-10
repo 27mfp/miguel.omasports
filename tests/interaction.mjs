@@ -110,6 +110,8 @@ async function run() {
     backgroundUpdates: bool(ipc("getBackgroundUpdates")),
     barTicker: bool(ipc("getBarTicker")),
     spotlight: bool(ipc("getSpotlight")),
+    spotlightDetails: bool(ipc("getSpotlightDetails")),
+    recentExpanded: bool(ipc("getRecentExpanded")),
     newsWire: bool(ipc("getNewsWire")),
     suppressFocus: bool(ipc("getSuppressFocus")),
     targetScreen: ipc("getTargetScreen") || "",
@@ -151,6 +153,17 @@ async function run() {
       }
     })
 
+    await test("Spotlight details and results expansion round-trip", async () => {
+      ipc("setSpotlightDetails", "true")
+      ipc("setRecentExpanded", "true")
+      assert.equal(bool(ipc("getSpotlightDetails")), true)
+      assert.equal(bool(ipc("getRecentExpanded")), true)
+      ipc("setSpotlightDetails", "false")
+      ipc("setRecentExpanded", "false")
+      assert.equal(bool(ipc("getSpotlightDetails")), false)
+      assert.equal(bool(ipc("getRecentExpanded")), false)
+    })
+
     await test("Panel open/close/toggle lifecycle", async () => {
       ipc("open")
       await sleep(400)
@@ -190,6 +203,46 @@ async function run() {
       assert.equal(bool(ipc("getBarTicker")), ticker)
       assert.equal(bool(ipc("getSpotlight")), spotlight)
     })
+    if (process.env.OMASPORTS_PRIVATE_UI_TEST === "1") {
+      await test("Keyboard cursor scrolls long fixtures while the header stays fixed", async () => {
+        ipc("sport", "football")
+        await sleep(350)
+        ipc("scheduleSection", "all")
+        await sleep(350)
+        ipc("testFocusLastRow")
+        await sleep(150)
+        const state = JSON.parse(ipc("testScrollState"))
+        assert.ok(state.y > 0, "last fixture did not scroll into view")
+        assert.equal(state.headerY, 0, "header moved with scrolling content")
+      })
+      await test("Keyboard activation opens and closes the native sport picker", async () => {
+        ipc("testToggleSportPicker")
+        await sleep(150)
+        assert.equal(bool(ipc("testSportPickerOpen")), true)
+        ipc("testToggleSportPicker")
+        await sleep(150)
+        assert.equal(bool(ipc("testSportPickerOpen")), false)
+      })
+      await test("Sport changes clear scroll and keep selected dropdown values in sync", async () => {
+        ipc("testChooseSport", "nfl")
+        await sleep(350)
+        assert.equal(ipc("testSportPickerValue"), "nfl")
+        assert.equal(JSON.parse(ipc("testScrollState")).y, 0)
+        ipc("route", "standings")
+        ipc("testChooseStandings", "National Football Conference")
+        await sleep(350)
+        assert.equal(ipc("testStandingsPickerValue"), "National Football Conference")
+        ipc("sport", "mlb")
+        await sleep(350)
+        assert.equal(ipc("testSportPickerValue"), "mlb", "sport picker retained its imperative selection")
+        assert.equal(ipc("testStandingsPickerValue"), "American League", "standings picker retained the NFL group")
+        ipc("testChooseStandings", "National League")
+        await sleep(350)
+        ipc("sport", "nhl")
+        await sleep(350)
+        assert.equal(ipc("testStandingsPickerValue"), "Eastern Conference", "NHL picker retained the MLB league")
+      })
+    }
   } finally {
     const cleanupErrors = []
     const attempt = (label, fn) => {
@@ -201,6 +254,8 @@ async function run() {
 
     // Close before restoring routing so no test popup remains visible. The
     // original visibility is restored at the end of cleanup.
+    attempt("spotlight details", () => ipc("setSpotlightDetails", String(initial.spotlightDetails)))
+    attempt("recent expansion", () => ipc("setRecentExpanded", String(initial.recentExpanded)))
     attempt("close", () => ipc("close"))
     await sleep(400)
     attempt("anti-spoiler", () => restoreToggle("getAntiSpoiler", "toggleSpoiler", initial.antiSpoiler))

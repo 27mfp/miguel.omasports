@@ -20,35 +20,48 @@ The plugin uses a clean decoupled architecture: **pure JavaScript data engine** 
 ```
 miguel.omasports/
 ├── SportsModel.js         # Core data engine: parsers, caching, catalogs, state management (pure JS, 0 QML deps)
-├── Panel.qml              # Main panel coordinator, IPC target "miguel.omasports", layout & focus management
-├── PanelHeader.qml        # Header bar: sport selector (⚽, 🏀, 🏎, 🏈, ⚾, 🏒), live indicators, settings toggle
-├── FixturesTab.qml        # Schedule tab: multi-competition fixtures, team filters, match spotlight card
+├── Panel.qml              # Main panel coordinator, IPC target "miguel.omasports", layout, fixed header & focus management
+├── PanelHeader.qml        # Fixed header: compact sport picker, tabs, live indicators, refresh & settings
+├── FixturesTab.qml        # Schedule tab: spotlight, recent/upcoming sections with expansion, team filters
 ├── LiveTab.qml            # Dedicated live score feed, live count badge, idle fallback card
 ├── StandingsTab.qml       # League tables: Football, US sports (NBA/NFL/MLB/NHL), F1 (Drivers & Constructors)
-├── SettingsTab.qml        # Preferences: desktop notifications, anti-spoiler shield, refresh cadence, team follow
-├── NewsCard.qml            # Collapsible league wire & breaking news headlines card
-├── MatchSpotlight.qml     # Hero card showcasing followed team's live/upcoming match
-├── MatchRow.qml           # Fixture list row with kickoff time, stadium info, and score pills
-├── LiveRow.qml            # Real-time match row with progress bar, minute counter, HT score, and click-to-reveal
-├── StandingsRow.qml       # Table row with rank badges (🥇, 🥈, 🥉), crests, and sport-specific statistics
+├── SettingsTab.qml        # Grouped preferences: notifications, anti-spoiler, refresh cadence, followed teams
+├── NewsCard.qml           # Collapsible league wire & breaking news headlines card
+├── MatchSpotlight.qml     # Compact spotlight for the followed team's next/live match, optional details
+├── SpotlightTeam.qml      # Shared home/away block for the spotlight: crest, two-line name, record, form
+├── MatchRow.qml           # Fixture list row with kickoff time, status and score
+├── LiveRow.qml            # Real-time match row with minute counter, period scores and click-to-reveal
+├── StandingsRow.qml       # Table row with crests, aligned sport-specific columns and zone colours
+├── SelectionDropdown.qml  # Native dropdown that restores its controller binding after a choice
 ├── TeamCrest.qml          # Crest loader: local disk cache → remote URL fallback → monogram canvas fallback
+├── Theme.qml              # Shared visual helpers (muted colours, theme-aware tints)
+├── NetworkProcess.qml     # argv-based provider request wrapper: one output/failure signal, no stale callbacks
+├── SecureProcess.qml      # Process wrapper with explicit environment and process-group hardStop()
+├── RetryTimer.qml         # Coalesced, guarded retry timer shared by provider retry slots
+├── secure_io.py           # Hardened I/O boundary: atomic, symlink-safe writes and public network reads
 ├── BarWidget.qml          # Omarchy top bar widget: live score ticker, sport icon, and live pulsing dot
 ├── manifest.json          # Omarchy plugin manifest
 └── tests/
-    ├── run-all.mjs        # Unified S-Tier master test orchestrator
-    ├── visual.mjs         # Headless visual test runner with perceptual diff comparisons
-    ├── diff.py            # Perceptual diffing engine (pixel mismatch % & neon magenta heatmaps)
-    ├── crop.py            # Automated popup card bounding-box auto-crop tool
-    ├── interaction.mjs    # Safe opt-in headless interaction tests (routing, toggles, lifecycle)
+    ├── run-all.mjs        # Unified test orchestrator (--quick / --full / --runtime)
+    ├── sportsmodel.test.mjs # Unit tests covering the pure JS functions
+    ├── controller-regressions.mjs # Panel controller regressions (notifications, kickoff, mock state)
+    ├── espn-sequence.mjs  # ESPN day sequencing, today-first ordering, cache and retry cases
+    ├── offline.mjs        # Offline golden tests against frozen provider payloads
     ├── scenarios.mjs      # Chaos & edge-case scenario tests (429 rate limit, shootouts, red cards)
-    ├── notifications.mjs  # 9 notification delivery, 500ms pacing & security tests
-    ├── crest-resilience.mjs # 8 crest cache resilience & 404/corrupt fallback tests
-    ├── burnin.mjs         # 3 burn-in & memory stability tests (100 mock cycles, TTL pruning)
-    ├── sportsmodel.test.mjs # 91 unit tests covering all pure JS functions
-    ├── offline.mjs        # 13 offline golden tests against frozen provider payloads
-    ├── live.mjs           # Live E2E integration tests against real provider APIs
+    ├── notifications.mjs  # Notification delivery, pacing & security tests
+    ├── crest-resilience.mjs # Crest cache resilience & 404/corrupt fallback tests
+    ├── burnin.mjs         # Burn-in & memory stability tests (mock cycles, TTL pruning)
+    ├── security-hardening.mjs # Process/file hardening checks
+    ├── release-guard.mjs  # Version/manifest/README consistency checks
     ├── manifest.mjs       # Manifest/package structure contract checks
     ├── qml-contract.mjs   # Static cross-file QML wiring and harness contracts
+    ├── runtime.mjs        # Opt-in offscreen Quickshell process-lifecycle test (uses runtime/shell.qml)
+    ├── ui-session.mjs     # Private Quickshell host with temporary preferences for UI tests
+    ├── interaction.mjs    # Opt-in headless interaction tests (routing, toggles, lifecycle)
+    ├── visual.mjs         # Headless visual test runner with perceptual diff comparisons
+    ├── diff.py            # Perceptual diffing engine (pixel mismatch % & heatmaps)
+    ├── crop.py            # Popup card crop from IPC-reported geometry
+    ├── live.mjs           # Live E2E integration tests against real provider APIs
     ├── capture-fixtures.mjs # Captures new real-world payloads for offline testing (network required)
     └── fixtures/
         ├── goldens.json   # Frozen JSON payloads and parser golden results
@@ -89,7 +102,7 @@ Executes the local quality gates across pure JS logic, goldens, manifest/package
 node tests/run-all.mjs           # standard full verification (includes live E2E and visual diff)
 node tests/run-all.mjs --quick   # non-desktop logic gates
 node tests/run-all.mjs --quick --interactive # opt-in safe headless interaction gate
-node tests/run-all.mjs --full    # exhaustive run across all 6 sports and tabs
+node tests/run-all.mjs --full --runtime # all sports/tabs plus isolated runtime gate
 ```
 
 ### B. Unit Tests (Pure Model Engine)
@@ -97,14 +110,14 @@ Always run before committing changes to `SportsModel.js`:
 ```bash
 node tests/sportsmodel.test.mjs
 ```
-*Current status: 91 tests passing (100%).*
+Use the suite output for the current case count; new regressions are added as bugs are fixed.
 
 ### C. Offline Golden Regression Tests
 Verifies parser output against frozen real-world provider payloads without touching the network:
 ```bash
 node tests/offline.mjs
 ```
-*Current status: 13 tests passing (100%).*
+Use the suite output for the current case count.
 > **Note**: Only update goldens via `node tests/capture-fixtures.mjs` if you are intentionally updating data schemas.
 
 ### D. QML Cross-File Contract Suite
@@ -118,72 +131,92 @@ Verifies resilience against penalty shootouts, extra time (`AET`), red cards, HT
 ```bash
 node tests/scenarios.mjs
 ```
-*Current status: 6 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### F. Safe Headless Interaction Suite
 Tests real-time UI state toggling only on a dedicated virtual monitor with confirmed focus suppression:
 ```bash
 node tests/interaction.mjs
 ```
-*Current status: 6 tests passing (100%) when run on a dedicated headless monitor.*
+The suite provisions a dedicated headless monitor and restores its saved session state.
 
 ### G. Notification & Delivery Suite
 Validates desktop notification diffing, goal alerts, anti-spoiler concealment, lifecycle transitions, crest key sanitization, queue capping, 500ms toast pacing, and `notify-send` argument escaping:
 ```bash
 node tests/notifications.mjs
 ```
-*Current status: 9 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### H. Crest Cache Resilience & Fallback Suite
 Validates monogram derivation, cold cache resilience, broken CDN recovery (404/500/corrupt bytes), and system log hygiene:
 ```bash
 node tests/crest-resilience.mjs
 ```
-*Current status: 8 tests passing (100%).*
+Use the suite output for the current case count.
 
 ### I. Burn-In & Memory Stability Suite
 Simulates 100 consecutive mock polling cycles, verifies array and queue bounds (`detailQueue ≤ 8`, `notificationQueue ≤ 5`), tests `seenMap` TTL pruning (6h), and measures heap stability:
 ```bash
 node tests/burnin.mjs
 ```
-*Current status: 3 tests passing (100%).*
+Use the suite output for the current case count.
 
-### J. Omarchy Plugin Validation
+### J. Isolated Quickshell runtime check
+
+```bash
+node tests/runtime.mjs
+```
+
+This opt-in suite runs an offscreen Quickshell process. It checks the real network worker's completion and restart behavior without attaching to the Omarchy shell or opening a window. It requires Quickshell locally and is separate from hosted syntax checks.
+
+### K. Omarchy Plugin Validation
 Validates QML syntax, plugin structure, and manifest integrity:
 ```bash
 omarchy plugin validate .
 ```
 *Must always exit with return code 0.*
 
-### K. Live Provider E2E Integration
+### L. Live Provider E2E Integration
 Hits real provider APIs (FotMob, ESPN, Jolpica) to verify parsers work against live data. Requires network access; only runs in standard and `--full` modes:
 ```bash
 node tests/live.mjs football   # football only (default in standard mode)
 node tests/live.mjs all        # all 6 sports (used in --full mode)
 ```
-*Current status: 8 tests passing (football). ~20 tests across all sports.*
+Case counts and skips depend on provider availability; inspect the current suite output.
 > **Note**: Excluded from `--quick` / pre-commit to avoid blocking commits on third-party network issues.
 
-### L. Autonomous Perceptual Visual Diffing
-Runs pixel-level visual regression testing **headlessly in the background** against deterministic runtime mock data, supporting HiDPI scaling and viewport height constraints (≤ 72% screen height). It temporarily enables and restores the runtime-only mock override:
+### M. Isolated visual and interaction checks
+
+Use the private host for UI development; installing or reloading the plugin in
+the user's desktop shell is unnecessary:
+
 ```bash
-# Compare against approved visual baselines
-node tests/visual.mjs --sport=f1 --tab=standings
-node tests/visual.mjs --sport=football --tab=all
-
-# Test with HiDPI and responsive scales
-node tests/visual.mjs --sport=f1 --tab=standings --scale=1.0
-node tests/visual.mjs --sport=f1 --tab=standings --scale=2.0
-
-# Update visual golden baselines when design changes are intentional (headless only)
-node tests/visual.mjs --sport=f1 --tab=standings --update-goldens
-
-# Inspect the generated 3-way comparative visual report
-xdg-open test-artifacts/visual-report.html
+node tests/ui-session.mjs
+node tests/ui-session.mjs -- node tests/interaction.mjs
+node tests/ui-session.mjs -- node tests/visual.mjs --sport=football --tab=all --capture-only
+node tests/ui-session.mjs --palette=light -- node tests/visual.mjs --sport=football --tab=all --capture-only --artifacts=test-artifacts/light-ui
+node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --expanded --scale=1.5 --capture-only
+node tests/ui-session.mjs --source-ref=HEAD --empty -- node tests/visual.mjs --sport=football --tab=fixtures --capture-only
 ```
-The visual runner fails closed for missing or unmeasurable baselines; only approve
-new goldens after reviewing the headless capture. Full `--sport=all --tab=all`
-coverage requires a committed golden for every requested sport/view.
+
+`ui-session.mjs` copies the installed Commons/Ui kit and the current production
+components into a temporary directory. Only its staged secure helper uses a
+private home. The test host disables cross-display dismissal windows, which
+otherwise intercept physical-screen clicks even with keyboard focus suppressed.
+Sessions serialize compositor mutations with `flock`. The runner restores state and removes its headless monitor; the host is stopped
+and its staging directory removed in `finally`.
+
+The session seeds representative favorites for every sport. `--empty` exercises
+onboarding/empty selections. Palette overrides apply only in the private process.
+Captures use `getPanelGeometry` and the requested output scale, so neither the
+wallpaper nor a particular border color affects cropping. Pillow is required;
+the runner uses the system Python if the default interpreter lacks it.
+
+`--capture-only` writes candidates marked REVIEW without modifying baselines.
+After inspecting candidates, use `--update-goldens` or copy the reviewed captures
+into `tests/fixtures/visual-goldens`. Expanded and non-default-scale states have
+separate filenames. Compare approved baselines with the default session command.
+The report is `test-artifacts/visual-report.html` (or the `--artifacts` directory).
 
 ### M. Automated Git Pre-Commit Quality Gate
 A git pre-commit hook runs the `--quick` suite (~6.5s) before every commit. If any test fails, the commit is rejected:

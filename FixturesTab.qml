@@ -19,7 +19,24 @@ Column {
 
   Theme { id: theme }
 
+  // F1 lists races, not matches; other sports keep the model's group labels.
+  function groupTitle(group) {
+    if (!group) return ""
+    if (controller.activeSport === "f1") {
+      if (group.key === "live") return "Live now"
+      if (group.key === "upcoming") return "Upcoming races"
+      if (group.key === "recent") return "Recent races"
+    }
+    return group.label || ""
+  }
+
   property bool upcomingExpanded: false
+  property bool recentExpanded: false
+  property bool spotlightExpanded: false
+  readonly property bool spotlightVisible: spotlightCard.visible
+
+  function toggleRecent() { recentExpanded = !recentExpanded }
+  function toggleSpotlightDetails() { spotlightExpanded = !spotlightExpanded }
 
   readonly property var liveGroup: {
     var groups = controller.matchGroups || []
@@ -77,6 +94,22 @@ Column {
     return controller.matchGroups || []
   }
 
+  function moveSubSection(delta) {
+    var options = root.subSectionOptions
+    var current = 0
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].key === controller.scheduleSubSection) current = i
+    }
+    controller.scheduleSubSection = options[(current + delta + options.length) % options.length].key
+  }
+
+  readonly property var visibleMatchGroups: filteredMatchGroups.map(function(group) {
+    var matches = group.matches || []
+    if (group.key === "upcoming" && controller.scheduleSubSection === "all" && !root.upcomingExpanded) matches = matches.slice(0, 6)
+    if (group.key === "recent" && !root.recentExpanded) matches = matches.slice(0, 3)
+    return { key: group.key, label: group.label, matches: matches }
+  })
+
   width: parent.width
   spacing: Style.space(12)
   visible: controller.tabIndex === 0
@@ -87,107 +120,39 @@ Column {
     width: parent.width
     implicitHeight: controller.setupExpanded ? setupDrawer.implicitHeight : compactChipBar.implicitHeight
 
-    // Compact Chip Bar (shown when collapsed)
-    Row {
+    // A single summary leaves the emphasis on matches, with setup one click away.
+    Item {
       id: compactChipBar
       width: parent.width
+      implicitHeight: setupEditBtn.implicitHeight
       visible: !controller.setupExpanded
-      spacing: Style.space(6)
 
-      Flickable {
-        id: chipFlickable
-        width: parent.width - setupEditBtn.width - Style.space(6)
-        height: setupEditBtn.height
-        contentWidth: chipsRow.implicitWidth
-        contentHeight: height
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-
-        Row {
-          id: chipsRow
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(6)
-
-          // Followed Teams Chip
-          Rectangle {
-            visible: controller.selectedTeamIds.length > 0
-            implicitWidth: favPillRow.implicitWidth + Style.space(12)
-            implicitHeight: Style.space(24)
-            radius: theme.subtleRadius(4)
-            color: Util.alpha(Color.accent, 0.12)
-            border.width: 1
-            border.color: Util.alpha(Color.accent, 0.4)
-
-            Row {
-              id: favPillRow
-              anchors.centerIn: parent
-              spacing: Style.space(4)
-
-              Text {
-                text: controller.selectedTeamIds.length === 1
-                  ? ("★ " + controller.teamNameFor(controller.selectedTeamIds[0]))
-                  : ("★ " + controller.selectedTeamIds.length + " Followed")
-                color: Color.accent
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-            }
-
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: controller.setupExpanded = true
-            }
-          }
-
-          // Followed Leagues Chip (Football only)
-          Rectangle {
-            visible: controller.activeSport === "football" && controller.selectedLeagueIds.length > 0
-            implicitWidth: leaguePillRow.implicitWidth + Style.space(12)
-            implicitHeight: Style.space(24)
-            radius: theme.subtleRadius(4)
-            color: theme.mutedColor(root.fgColor, 0.05)
-            border.width: 1
-            border.color: theme.mutedColor(root.fgColor, 0.12)
-
-            Row {
-              id: leaguePillRow
-              anchors.centerIn: parent
-              spacing: Style.space(4)
-
-              Text {
-                text: "🏆 " + controller.selectedLeagueIds.length + " Leagues"
-                color: root.fgColor
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-            }
-
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: controller.setupExpanded = true
-            }
-          }
-
-          // Hint when nothing is followed yet
-          Text {
-            visible: controller.selectedTeamIds.length === 0 && (controller.activeSport !== "football" || controller.selectedLeagueIds.length === 0)
-            text: "No favorites followed yet · Click edit to follow teams"
-            color: theme.mutedColor(root.fgColor, 0.5)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            anchors.verticalCenter: parent.verticalCenter
-          }
+      Text {
+        anchors.left: parent.left
+        anchors.right: setupEditBtn.left
+        anchors.rightMargin: Style.space(12)
+        anchors.verticalCenter: parent.verticalCenter
+        text: {
+          var teams = controller.selectedTeamIds.length
+          var leagues = controller.activeSport === "football" ? controller.selectedLeagueIds.length : 0
+          if (teams === 0 && leagues === 0) return controller.activeSport === "f1" ? "Follow drivers to personalize your schedule" : "Follow teams to personalize your schedule"
+          var summary = teams === 1 ? controller.teamNameFor(controller.selectedTeamIds[0]) : teams + " followed"
+          if (teams === 0) summary = "No teams followed"
+          if (leagues > 0) summary += " · " + leagues + (leagues === 1 ? " league" : " leagues")
+          return "★ " + summary
         }
+        color: theme.mutedColor(root.fgColor, 0.65)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
       }
 
       Button {
         id: setupEditBtn
-        text: controller.selectedTeamIds.length > 0 ? "Edit" : "+ Follow"
-        iconText: "󰅀"
+        anchors.right: parent.right
+        text: "Following"
+        iconText: "󰒓"
+        fontSize: Style.font.caption
         focusable: true
         hasCursor: controller.focusSection === controller.sectionIndex("setup")
         tooltipText: "Edit followed teams and leagues"
@@ -447,9 +412,14 @@ Column {
 
   // ---- Spotlight Featured Card ----------------------------------
   MatchSpotlight {
+    id: spotlightCard
+    detailsExpanded: root.spotlightExpanded
+    detailsFocused: controller.focusSection === controller.sectionIndex("spotlightDetails")
+    onToggleDetails: root.toggleSpotlightDetails()
     visible: controller.showSpotlight
       && (controller.scheduleSubSection === "all" || controller.scheduleSubSection === "upcoming" || !controller.scheduleSubSection)
       && controller.allMatches.length > 0 && (controller.featuredMatch !== null || fallbackMatch !== null)
+    latestMatchesById: controller.latestMatchesById
     featuredMatch: controller.featuredMatch
     fallbackMatch: controller.allMatches.length > 0 ? Model.featuredMatchForTeam(controller.allMatches) : null
     isF1: controller.activeSport === "f1"
@@ -482,13 +452,16 @@ Column {
   // ---- Schedule Header with Filter -----------------------------
   Item {
     width: parent.width
-    implicitHeight: Math.max(schedTitle.implicitHeight, fixtureFilterScope.implicitHeight)
+    implicitHeight: Math.max(schedTitle.implicitHeight, fixtureFilterScope.visible ? fixtureFilterScope.height : 0)
     visible: controller.hasData
 
     Text {
       id: schedTitle
       anchors.left: parent.left
+      anchors.right: fixtureFilterScope.left
+      anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
+      elide: Text.ElideRight
       text: controller.activeFixtureHeader
       color: theme.mutedColor(root.fgColor, 0.55)
       font.family: Style.font.family
@@ -501,7 +474,7 @@ Column {
       id: fixtureFilterScope
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(220)
+      width: Math.min(Style.space(250), parent.width * 0.62)
       height: fixtureFilterDropdown.implicitHeight
       visible: controller.fixtureFilterOptions.length > 1
 
@@ -526,9 +499,8 @@ Column {
     implicitHeight: subSectionRow.implicitHeight + Style.space(8)
     visible: controller.hasData && (totalMatchesCount > 0 || newsArticlesCount > 0)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.03)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Row {
       id: subSectionRow
@@ -547,16 +519,24 @@ Column {
           required property int index
 
           readonly property bool isSelected: (controller.scheduleSubSection || "all") === modelData.key
+          readonly property bool keyboardFocused: isSelected && controller.focusSection === controller.sectionIndex("sections")
+          Accessible.role: Accessible.PageTab
+          Accessible.name: modelData.label + ", " + modelData.count
+          Accessible.selected: isSelected
+          Accessible.onPressAction: controller.scheduleSubSection = modelData.key
+          activeFocusOnTab: true
+          Keys.onReturnPressed: controller.scheduleSubSection = modelData.key
+          Keys.onSpacePressed: controller.scheduleSubSection = modelData.key
+          Keys.onLeftPressed: root.moveSubSection(-1)
+          Keys.onRightPressed: root.moveSubSection(1)
           width: (subSectionRow.width - (root.subSectionOptions.length - 1) * Style.space(4)) / root.subSectionOptions.length
-          implicitHeight: Style.space(26)
+          implicitHeight: Style.space(30)
           radius: theme.subtleRadius(4)
           color: isSelected
             ? Util.alpha(Color.accent, 0.20)
             : (pillMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.06) : "transparent")
-          border.width: 1
-          border.color: isSelected
-            ? Color.accent
-            : (pillMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.12) : "transparent")
+          border.width: keyboardFocused || activeFocus ? 2 : 1
+          border.color: keyboardFocused || activeFocus ? Color.accent : "transparent"
 
           Behavior on color { ColorAnimation { duration: 120 } }
           Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -574,11 +554,29 @@ Column {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
-              text: modelData.label + (modelData.count > 0 ? (" (" + modelData.count + ")") : "")
+              text: modelData.label
               color: pillRect.isSelected ? Color.accent : theme.mutedColor(root.fgColor, 0.75)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: pillRect.isSelected
+            }
+
+            Rectangle {
+              visible: modelData.count > 0
+              anchors.verticalCenter: parent.verticalCenter
+              implicitWidth: sectionCount.implicitWidth + Style.space(8)
+              implicitHeight: sectionCount.implicitHeight + Style.space(2)
+              radius: theme.subtleRadius(3)
+              color: pillRect.isSelected ? Util.alpha(Color.accent, 0.15) : theme.mutedColor(root.fgColor, 0.07)
+
+              Text {
+                id: sectionCount
+                anchors.centerIn: parent
+                text: modelData.count
+                color: pillRect.isSelected ? Color.accent : theme.mutedColor(root.fgColor, 0.65)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
             }
           }
 
@@ -630,7 +628,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No wire stories available right now for " + controller.activeSportMeta.label + "."
+        text: "No " + controller.activeSportMeta.label + " news right now."
         color: theme.mutedColor(root.fgColor, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -655,7 +653,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No recent match results available"
+        text: "No recent results"
         color: root.fgColor
         font.family: Style.font.family
         font.pixelSize: Style.font.title
@@ -664,7 +662,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No completed matches recorded in the current filter window for " + controller.activeSportMeta.label + "."
+        text: "Finished " + (controller.activeSport === "f1" ? "races" : "games") + " for your current selection appear here."
         color: theme.mutedColor(root.fgColor, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -708,7 +706,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No upcoming fixtures scheduled"
+        text: controller.activeSport === "f1" ? "No upcoming races" : "No upcoming games"
         color: root.fgColor
         font.family: Style.font.family
         font.pixelSize: Style.font.title
@@ -717,7 +715,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No matches in the next days for " + controller.activeSportMeta.label + ". Use refresh (R) or switch selections."
+        text: "Nothing scheduled in the next few days. Refresh (R) or change your selection."
         color: theme.mutedColor(root.fgColor, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -800,7 +798,7 @@ Column {
     visible: controller.scheduleSubSection !== "news"
 
     Repeater {
-      model: root.filteredMatchGroups
+      model: root.visibleMatchGroups
 
       delegate: Column {
         id: groupDelegate
@@ -810,7 +808,7 @@ Column {
         readonly property int rowOffset: {
           var s = 0
           for (var g = 0; g < index; g++) {
-            s += (root.filteredMatchGroups[g].matches || []).length
+            s += (root.visibleMatchGroups[g].matches || []).length
           }
           return s
         }
@@ -819,15 +817,15 @@ Column {
 
         Item {
           width: parent.width
-          visible: root.filteredMatchGroups.length > 1 || modelData.label !== "Upcoming Fixtures"
+          visible: root.filteredMatchGroups.length > 1 || modelData.key !== "upcoming"
           implicitHeight: visible ? (groupLabel.implicitHeight + Style.space(4)) : 0
 
           Text {
             id: groupLabel
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: modelData.label.toUpperCase()
-            color: modelData.label === "Live Matches" ? root.urgentColor : theme.mutedColor(root.fgColor, 0.55)
+            text: root.groupTitle(modelData).toUpperCase()
+            color: modelData.key === "live" ? root.urgentColor : theme.mutedColor(root.fgColor, 0.55)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -849,14 +847,7 @@ Column {
           spacing: Style.space(6)
 
           Repeater {
-            model: {
-              var matches = modelData.matches || []
-              if ((controller.scheduleSubSection === "all" || !controller.scheduleSubSection)
-                  && modelData.key === "upcoming" && !root.upcomingExpanded) {
-                return matches.slice(0, 6)
-              }
-              return matches
-            }
+            model: modelData.matches || []
             delegate: MatchRow {
               activeSport: controller.activeSport
               fgColor: root.fgColor
@@ -877,10 +868,40 @@ Column {
             }
           }
 
+          Rectangle {
+            visible: modelData.key === "recent" && root.recentMatchesCount > 3
+            width: parent.width
+            implicitHeight: Style.space(30)
+            radius: theme.subtleRadius(4)
+            color: recentMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : theme.mutedColor(root.fgColor, 0.035)
+            border.width: 1
+            border.color: activeFocus || controller.focusSection === controller.sectionIndex("recentExpand") ? Color.accent : theme.mutedColor(root.fgColor, 0.12)
+            Accessible.role: Accessible.Button
+            Accessible.name: root.recentExpanded ? "Show fewer results" : "Show all loaded results"
+            Accessible.onPressAction: root.toggleRecent()
+            activeFocusOnTab: true
+            Keys.onReturnPressed: root.toggleRecent()
+            Keys.onSpacePressed: root.toggleRecent()
+            Text {
+              anchors.centerIn: parent
+              text: root.recentExpanded ? "Show fewer results ▴" : "Show " + (root.recentMatchesCount - 3) + " more results ▾"
+              color: Color.accent
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+            MouseArea { id: recentMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleRecent() }
+          }
+
           // "Show more upcoming fixtures" Accordion Expander
           Rectangle {
+            Accessible.role: Accessible.Button
+            Accessible.name: root.upcomingExpanded ? "Show fewer upcoming fixtures" : "Show all upcoming fixtures"
+            Accessible.onPressAction: root.upcomingExpanded = !root.upcomingExpanded
+            activeFocusOnTab: true
+            Keys.onReturnPressed: root.upcomingExpanded = !root.upcomingExpanded
+            Keys.onSpacePressed: root.upcomingExpanded = !root.upcomingExpanded
             visible: (controller.scheduleSubSection === "all" || !controller.scheduleSubSection)
-              && modelData.key === "upcoming" && (modelData.matches || []).length > 6
+              && modelData.key === "upcoming" && root.upcomingMatchesCount > 6
             width: parent.width
             implicitHeight: expandUpcomingRow.implicitHeight + Style.space(12)
             radius: theme.subtleRadius(4)
@@ -888,7 +909,7 @@ Column {
               ? Style.hoverFillFor(root.fgColor, Color.accent)
               : theme.mutedColor(root.fgColor, 0.035)
             border.width: 1
-            border.color: expandUpcomingMouse.containsMouse
+            border.color: expandUpcomingMouse.containsMouse || activeFocus || controller.focusSection === controller.sectionIndex("expand")
               ? Color.accent
               : theme.mutedColor(root.fgColor, 0.08)
 
@@ -911,7 +932,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.upcomingExpanded
                   ? "Show fewer upcoming fixtures"
-                  : ("Show " + (modelData.matches.length - 6) + " more upcoming fixtures")
+                  : ("Show " + (root.upcomingMatchesCount - 6) + " more upcoming fixtures")
                 color: Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -942,4 +963,18 @@ Column {
     articles: controller.leagueNews || []
     forceExpanded: false
   }
+
+  // Keep shortcuts after the content so fixtures remain the primary focus.
+  Text {
+    width: parent.width
+    visible: controller.hasData
+    text: controller.focusSection === controller.sectionIndex("sections")
+      ? "← → change section · Enter next section"
+      : "↑ ↓ navigate · Enter open · R refresh · S hide scores"
+    wrapMode: Text.WordWrap
+    color: theme.mutedColor(root.fgColor, 0.65)
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+  }
+
 }
