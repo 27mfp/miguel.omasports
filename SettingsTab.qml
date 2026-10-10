@@ -52,8 +52,8 @@ Column {
 
       PreferenceToggle {
         width: parent.width
-        label: "Desktop Notifications"
-        description: "Alerts for kickoff, goals, half-time, and final scores for followed teams"
+        label: "Desktop notifications"
+        description: "Kickoff, goal, half-time and full-time alerts for teams you follow"
         checked: controller.enableNotifications
         enabled: controller.notificationToolAvailable
         accent: Color.accent
@@ -70,8 +70,8 @@ Column {
           model: [
             { icon: "⏰", label: "Kickoff (15m)" },
             { icon: "⚽", label: "Goals & Scores" },
-            { icon: "⏱", label: "Half Time" },
-            { icon: "🏁", label: "Full Time" }
+            { icon: "⏱", label: "Half-time" },
+            { icon: "🏁", label: "Full-time" }
           ]
 
           delegate: Rectangle {
@@ -129,7 +129,7 @@ Column {
           }
           Text {
             width: parent.width - Style.space(24)
-            text: "libnotify (notify-send) is not installed. Desktop notifications are inactive."
+            text: "Install libnotify (notify-send) to receive desktop notifications."
             color: root.urgentColor
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -138,17 +138,11 @@ Column {
         }
       }
 
-      Rectangle {
-        width: parent.width
-        height: 1
-        color: theme.mutedColor(root.fgColor, 0.06)
-      }
-
       // Background Polling Toggle
       PreferenceToggle {
         width: parent.width
-        label: "Background Polling"
-        description: "Keep updating live scores and delivering goal notifications even when the panel is closed"
+        label: "Update in the background"
+        description: "Keep scores and alerts current while the panel is closed"
         checked: controller.backgroundUpdates
         accent: Color.accent
         foreground: root.fgColor
@@ -185,7 +179,7 @@ Column {
       PreferenceToggle {
         width: parent.width
         label: "Hide scores"
-        description: "Reveal a live or final score when you click it · S to toggle"
+        description: "Click a score to reveal it · press S to toggle"
         checked: controller.antiSpoiler
         accent: Color.accent
         foreground: root.fgColor
@@ -229,12 +223,6 @@ Column {
         onClicked: controller.toggleBarTicker()
       }
 
-      Rectangle {
-        width: parent.width
-        height: 1
-        color: theme.mutedColor(root.fgColor, 0.06)
-      }
-
       PreferenceToggle {
         width: parent.width
         label: "Match spotlight"
@@ -274,8 +262,8 @@ Column {
 
       PreferenceToggle {
         width: parent.width
-        label: "League Wire & Breaking News"
-        description: "Display top stories, paddock updates, and breaking headlines"
+        label: "League news"
+        description: "Show top stories and breaking headlines for the current sport"
         checked: controller.showNewsWire
         accent: Color.accent
         foreground: root.fgColor
@@ -324,7 +312,7 @@ Column {
           }
 
           Text {
-            text: "Refresh intervals respect each provider’s limits"
+            text: "Live scores refresh within each provider’s rate limits"
             color: theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -368,7 +356,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "FotMob & F1"
+                text: "FotMob & Jolpica"
                 color: root.fgColor
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
@@ -376,7 +364,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "· Cloudflare edge-safe"
+                text: "· football, F1"
                 color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -389,7 +377,7 @@ Column {
               id: fotmobSpeedLabel
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: "20s delay"
+              text: "every 20 s"
               color: (controller.activeSport === "football" || controller.activeSport === "f1") ? Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
@@ -429,7 +417,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "ESPN (NBA, NFL, MLB, NHL)"
+                text: "ESPN"
                 color: root.fgColor
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
@@ -437,7 +425,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "· Direct API"
+                text: "· NBA, NFL, MLB, NHL"
                 color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -450,7 +438,7 @@ Column {
               id: espnSpeedLabel
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: "15s delay"
+              text: "every 15 s"
               color: (controller.activeSport === "nba" || controller.activeSport === "nfl" || controller.activeSport === "mlb" || controller.activeSport === "nhl") ? Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
@@ -480,7 +468,7 @@ Column {
           spacing: Style.space(2)
 
           Text {
-            text: "Inactive Schedule Refresh"
+            text: "Refresh when nothing is live"
             color: root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
@@ -489,7 +477,7 @@ Column {
 
           Text {
             width: parent.width
-            text: "How often to check for schedule updates when no games are live"
+            text: "How often to check the schedule when no games are in progress"
             color: theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -560,7 +548,7 @@ Column {
             spacing: Style.space(2)
 
             Text {
-              text: "Followed Teams & Leagues"
+              text: "Followed teams & leagues"
               color: root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.body
@@ -586,7 +574,7 @@ Column {
           id: manageFavBtn
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: "Configure"
+          text: "Edit"
           iconText: "󰒓"
           foreground: root.fgColor
           onClicked: {
@@ -640,7 +628,7 @@ Column {
             spacing: Style.space(2)
 
             Text {
-              text: "Maintenance & Diagnostics"
+              text: "Data"
               color: root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.body
@@ -649,7 +637,7 @@ Column {
 
             Text {
               width: parent.width
-              text: "Force a complete resync of all matches and standings data (Shortcut: R)"
+              text: "Reload all matches and standings now (R)"
               color: theme.mutedColor(root.fgColor, 0.6)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -662,7 +650,7 @@ Column {
           id: forceSyncBtn
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: "Force Sync"
+          text: "Refresh now"
           iconText: "󰑐"
           iconSpinning: controller.loading
           foreground: root.fgColor

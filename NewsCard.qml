@@ -42,7 +42,7 @@ Rectangle {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    anchors.margins: Style.space(12)
+    // Flush with the schedule's section headings; the card has no fill.
     spacing: Style.space(10)
 
     // Header Row
@@ -55,7 +55,7 @@ Rectangle {
         anchors.right: headerRight.left
         anchors.rightMargin: Style.space(8)
         anchors.verticalCenter: parent.verticalCenter
-        text: "LEAGUE NEWS"
+        text: root.activeSport === "f1" ? "F1 NEWS" : "LEAGUE NEWS"
         color: theme.mutedColor(root.fgColor, 0.65)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -79,7 +79,10 @@ Rectangle {
           Text {
             id: countText
             anchors.centerIn: parent
-            text: root.articles ? (root.articles.length + " Stories") : "0 Stories"
+            text: {
+              var n = root.articles ? root.articles.length : 0
+              return n + (n === 1 ? " story" : " stories")
+            }
             color: theme.mutedColor(root.fgColor, 0.7)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption

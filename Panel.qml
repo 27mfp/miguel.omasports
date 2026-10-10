@@ -2543,8 +2543,8 @@ Panel {
     if (errorMessage !== "") return errorMessage
     if (!hasData) {
       return fetchedOnce
-        ? "No matches in the next days."
-        : "Select options above to track " + activeSportMeta.label + "."
+        ? "Nothing scheduled in the next few days."
+        : "Follow teams or leagues to track " + activeSportMeta.label + "."
     }
     var age = relativeAge()
     // The "~40s auto-update" hint already lives right below — don't repeat it

@@ -17,6 +17,7 @@
 - Live-card period scores revealing results while scores are hidden.
 - Standings and schedule dropdowns overlapping the line above them.
 - F1 favorites showing a raw driver id instead of the driver's name.
+- Portuguese races showing a chequered flag instead of Portugal's flag.
 - Live cards shortening only one team's name, and F1 races shown as two "teams" with placeholder crests.
 - Pending notifications continuing after alerts were disabled or the sport changed.
 - ESPN postponed/canceled games appearing as completed results and malformed competitors interrupting scoreboard parsing.
@@ -39,6 +40,9 @@
 - Live-card period scores have quarter/period/inning headers and team labels.
 - Positive goal and point differences show a "+" sign in every standings table; F1 constructor names fit without truncation.
 - The spotlight footer shows kickoff time instead of repeating the league; F1 lists use race wording and onboarding copy mentions drivers.
+- F1 tables and the favorite-driver chip drop placeholder monogram crests, since no constructor artwork is available.
+- Consistent sentence-case, plain-language copy across settings, empty states, news and keyboard hints; live counts say matches, games or races per sport.
+- Settings cards no longer repeat dividers, and the news card aligns with the schedule's section headings.
 - Visual tests verify the loaded source, sport, and route, freeze mock time, and restore temporary display controls after testing.
 - Installation documentation explains copied versus linked checkouts and host-specific reload behavior.
 

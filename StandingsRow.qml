@@ -428,16 +428,9 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(6)
 
-        TeamCrest {
-          sport: "f1"
-          teamId: root.modelData.teamId || ""
-          teamName: root.modelData.teamName || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
 
         Text {
-          width: parent.width - Style.space(22)
+          width: parent.width
           anchors.verticalCenter: parent.verticalCenter
           text: (root.isFavorite ? "★ " : "") + (root.modelData.flag ? root.modelData.flag + " " : "") + root.modelData.name
           color: root.isFavorite ? Color.accent : root.rowFg
@@ -526,16 +519,9 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(6)
 
-        TeamCrest {
-          sport: "f1"
-          teamId: root.modelData.id || ""
-          teamName: root.modelData.name || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
 
         Text {
-          width: parent.width - Style.space(22)
+          width: parent.width
           anchors.verticalCenter: parent.verticalCenter
           text: (root.isFavorite ? "★ " : "") + root.modelData.name
           color: root.isFavorite ? Color.accent : root.rowFg

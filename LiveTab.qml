@@ -17,7 +17,11 @@ Column {
   visible: controller.tabIndex === 1
 
   PanelSectionHeader {
-    text: controller.liveCount > 0 ? "LIVE NOW · " + (controller.liveCount === 1 ? "1 MATCH" : controller.liveCount + " MATCHES") : "LIVE MATCHES"
+    text: {
+      var noun = controller.activeSport === "f1" ? "RACE" : (controller.activeSport === "football" ? "MATCH" : "GAME")
+      var plural = noun === "MATCH" ? "MATCHES" : noun + "S"
+      return controller.liveCount > 0 ? "LIVE NOW · " + controller.liveCount + " " + (controller.liveCount === 1 ? noun : plural) : "NOTHING LIVE"
+    }
     foreground: root.fgColor
   }
 
@@ -90,7 +94,7 @@ Column {
           spacing: Style.space(2)
 
           Text {
-            text: "NEXT UPCOMING EVENT"
+            text: "UP NEXT"
             color: Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption

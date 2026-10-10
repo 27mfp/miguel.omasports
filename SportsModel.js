@@ -995,6 +995,7 @@ function f1CountryFlag(countryName, raceName) {
   var r = String(raceName || "").toLowerCase()
 
   if (c.indexOf("australia") !== -1 || r.indexOf("australian") !== -1) return "🇦🇺"
+  if (c.indexOf("portugal") !== -1 || r.indexOf("portuguese") !== -1 || r.indexOf("portim") !== -1) return "🇵🇹"
   if (c.indexOf("china") !== -1 || r.indexOf("chinese") !== -1 || r.indexOf("shanghai") !== -1) return "🇨🇳"
   if (c.indexOf("japan") !== -1 || r.indexOf("japanese") !== -1 || r.indexOf("suzuka") !== -1) return "🇯🇵"
   if (c.indexOf("bahrain") !== -1 || r.indexOf("sakhir") !== -1) return "🇧🇭"
@@ -1833,12 +1834,12 @@ function mockRound(sport, nowMs) {
       return rObj
     }
     matches = [
-      f1Race("mock-f1-0", "Round 10", "Portuguese Grand Prix", "Autódromo", "Portimão", "Portugal", "\ud83c\uddf5\ud83c\uddf7", -5 * DAY, "finished", {
+      f1Race("mock-f1-0", "Round 10", "Portuguese Grand Prix", "Autódromo", "Portimão", "Portugal", "\ud83c\uddf5\ud83c\uddf9", -5 * DAY, "finished", {
         round: "10", driverId: "norris", driverName: "Lando Norris", familyName: "Norris", code: "NOR",
         constructorName: "McLaren", time: "1:30:12.456", laps: "66", grid: "1", points: "25"
       }),
-      f1Race("mock-f1-1", "Round 11", "Mock Grand Prix", "Circuito da Mocka", "Lisboa", "Portugal", "\ud83c\uddf5\ud83c\uddf7", -45 * MIN),
-      f1Race("mock-f1-2", "Round 12", "Sprint Mock Grand Prix", "Mock Ring", "Spielberg", "Austria", "\ud83c\udde6\ud83c\uddfa", 3 * DAY)
+      f1Race("mock-f1-1", "Round 11", "Mock Grand Prix", "Circuito da Mocka", "Lisboa", "Portugal", "\ud83c\uddf5\ud83c\uddf9", -45 * MIN),
+      f1Race("mock-f1-2", "Round 12", "Sprint Mock Grand Prix", "Mock Ring", "Spielberg", "Austria", "\ud83c\udde6\ud83c\uddf9", 3 * DAY)
     ]
     standings = {
       "Drivers": mockF1Drivers(),

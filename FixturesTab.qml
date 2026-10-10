@@ -135,7 +135,7 @@ Column {
         text: {
           var teams = controller.selectedTeamIds.length
           var leagues = controller.activeSport === "football" ? controller.selectedLeagueIds.length : 0
-          if (teams === 0 && leagues === 0) return controller.activeSport === "f1" ? "Follow drivers to personalise your schedule" : "Follow teams to personalise your schedule"
+          if (teams === 0 && leagues === 0) return controller.activeSport === "f1" ? "Follow drivers to personalize your schedule" : "Follow teams to personalize your schedule"
           var summary = teams === 1 ? controller.teamNameFor(controller.selectedTeamIds[0]) : teams + " followed"
           if (teams === 0) summary = "No teams followed"
           if (leagues > 0) summary += " · " + leagues + (leagues === 1 ? " league" : " leagues")
@@ -628,7 +628,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No wire stories available right now for " + controller.activeSportMeta.label + "."
+        text: "No " + controller.activeSportMeta.label + " news right now."
         color: theme.mutedColor(root.fgColor, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -653,7 +653,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No recent match results available"
+        text: "No recent results"
         color: root.fgColor
         font.family: Style.font.family
         font.pixelSize: Style.font.title
@@ -662,7 +662,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No completed matches recorded in the current filter window for " + controller.activeSportMeta.label + "."
+        text: "Finished " + (controller.activeSport === "f1" ? "races" : "games") + " for your current selection appear here."
         color: theme.mutedColor(root.fgColor, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -706,7 +706,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No upcoming fixtures scheduled"
+        text: controller.activeSport === "f1" ? "No upcoming races" : "No upcoming games"
         color: root.fgColor
         font.family: Style.font.family
         font.pixelSize: Style.font.title
@@ -715,7 +715,7 @@ Column {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "No matches in the next days for " + controller.activeSportMeta.label + ". Use refresh (R) or switch selections."
+        text: "Nothing scheduled in the next few days. Refresh (R) or change your selection."
         color: theme.mutedColor(root.fgColor, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -970,7 +970,7 @@ Column {
     visible: controller.hasData
     text: controller.focusSection === controller.sectionIndex("sections")
       ? "← → change section · Enter next section"
-      : "↑ ↓ navigate · Enter activate · R refresh · S spoiler shield"
+      : "↑ ↓ navigate · Enter open · R refresh · S hide scores"
     wrapMode: Text.WordWrap
     color: theme.mutedColor(root.fgColor, 0.65)
     font.family: Style.font.family

@@ -55,7 +55,7 @@ Item {
 
           Text {
             width: parent.width
-            text: controller.showingSettings ? "Make it your score centre" : controller.statusText
+            text: controller.showingSettings ? "Make it your score center" : controller.statusText
             color: controller.errorMessage !== "" || controller.persistenceError !== "" || controller.dataStale
               ? root.urgentColor : theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
@@ -110,7 +110,7 @@ Item {
           selected: controller.showingSettings
           focusable: true
           hasCursor: controller.focusSection === controller.sectionIndex("settings")
-          tooltipText: controller.showingSettings ? "Return to matches" : "Preferences & Settings"
+          tooltipText: controller.showingSettings ? "Return to matches" : "Preferences"
           Accessible.role: Accessible.Button
           Accessible.name: settingsButton.tooltipText
           accent: Color.accent

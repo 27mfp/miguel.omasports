@@ -65,6 +65,7 @@ try {
   if (!panelSource.includes("function getPanelGeometry")) panelSource = panelSource.replace("    function getUiRevision", '    function getPanelGeometry(): string {\n      return JSON.stringify({ x: panel.cardOrigin.x, y: panel.cardOrigin.y, width: panel.contentWidth, height: panel.contentHeight })\n    }\n' + "    function getUiRevision")
   panelSource = panelSource.replace(/(?:audit-ui-20261008-v2|native-ui-20261008-v3)/g, "native-ui-20261008-v4")
   panelSource = panelSource.replace("    function getUiRevision", `    function testFocusLastRow(): void { root.focusSection = root.focusableControlCount() - 1 }
+    function testScrollTo(y: real): void { scroll.contentY = Math.max(0, Math.min(y, scroll.contentHeight - scroll.height)) }
     function testScrollState(): string { return JSON.stringify({ y: scroll.contentY, headerY: panelHeader.y, height: scroll.height }) }
     function testChooseSport(value: string): void { panelHeader.sportPicker.value = value; panelHeader.sportPicker.changed(value) }
     function testSportPickerValue(): string { return panelHeader.sportPicker.value }

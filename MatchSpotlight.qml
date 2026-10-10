@@ -604,13 +604,6 @@ Item {
               anchors.centerIn: parent
               spacing: Style.space(6)
 
-              TeamCrest {
-                sport: "f1"
-                teamId: root.favoriteDriverStanding ? root.favoriteDriverStanding.teamId : ""
-                teamName: root.favoriteDriverStanding ? root.favoriteDriverStanding.teamName : ""
-                crestSize: Style.space(16)
-                anchors.verticalCenter: parent.verticalCenter
-              }
 
               Text {
                 text: "★ " + ((root.favoriteDriverStanding && root.favoriteDriverStanding.name) || root.favoriteMatchTeamName) + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
