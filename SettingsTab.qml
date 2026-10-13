@@ -20,27 +20,40 @@ Column {
   spacing: Style.space(12)
   visible: controller.showingSettings
 
+  component PreferenceToggle: Toggle {
+    titleSize: Style.font.body
+    borderSpec: activeFocus || hasCursor ? Border.controlSpec("focus", foreground, accent) : Border.none()
+  }
+
   // ---- 1. Score & Match Notifications Card ------------------------
   Rectangle {
     width: parent.width
     implicitHeight: notifCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: notifCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      Toggle {
+      Text {
+        text: "ALERTS & UPDATES"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
-        label: "Desktop Notifications"
-        description: "Alerts for kickoff, goals, half-time, and final scores for followed teams"
+        label: "Desktop notifications"
+        description: "Kickoff, goal, half-time and full-time alerts for teams you follow"
         checked: controller.enableNotifications
         enabled: controller.notificationToolAvailable
         accent: Color.accent
@@ -57,8 +70,8 @@ Column {
           model: [
             { icon: "⏰", label: "Kickoff (15m)" },
             { icon: "⚽", label: "Goals & Scores" },
-            { icon: "⏱", label: "Half Time" },
-            { icon: "🏁", label: "Full Time" }
+            { icon: "⏱", label: "Half-time" },
+            { icon: "🏁", label: "Full-time" }
           ]
 
           delegate: Rectangle {
@@ -116,7 +129,7 @@ Column {
           }
           Text {
             width: parent.width - Style.space(24)
-            text: "libnotify (notify-send) is not installed. Desktop notifications are inactive."
+            text: "Install libnotify (notify-send) to receive desktop notifications."
             color: root.urgentColor
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -125,17 +138,11 @@ Column {
         }
       }
 
-      Rectangle {
-        width: parent.width
-        height: 1
-        color: theme.mutedColor(root.fgColor, 0.06)
-      }
-
       // Background Polling Toggle
-      Toggle {
+      PreferenceToggle {
         width: parent.width
-        label: "Background Polling"
-        description: "Keep updating live scores and delivering goal notifications even when the panel is closed"
+        label: "Update in the background"
+        description: "Keep scores and alerts current while the panel is closed"
         checked: controller.backgroundUpdates
         accent: Color.accent
         foreground: root.fgColor
@@ -149,22 +156,30 @@ Column {
     width: parent.width
     implicitHeight: spoilerCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: spoilerCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Toggle {
+      Text {
+        text: "SCORE PRIVACY"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
-        label: "Anti-Spoiler Shield"
-        description: "Conceal live and final scores until clicked or uncovered (Shortcut: S)"
+        label: "Hide scores"
+        description: "Click a score to reveal it · press S to toggle"
         checked: controller.antiSpoiler
         accent: Color.accent
         foreground: root.fgColor
@@ -178,38 +193,40 @@ Column {
     width: parent.width
     implicitHeight: barDisplayCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: barDisplayCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      Toggle {
+      Text {
+        text: "DISPLAY"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
-        label: "Live Score on Status Bar"
-        description: "Display live match score ticker next to the icon on the Omarchy bar (e.g. ⚽ BEN 2-1 SPO 74')"
+        label: "Bar ticker"
+        description: "Show your followed team’s live score beside the bar icon"
         checked: controller.showBarTicker
         accent: Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleBarTicker()
       }
 
-      Rectangle {
+      PreferenceToggle {
         width: parent.width
-        height: 1
-        color: theme.mutedColor(root.fgColor, 0.06)
-      }
-
-      Toggle {
-        width: parent.width
-        label: "Featured Match Spotlight Card"
-        description: "Display the large featured match hero card at the top of the schedule tab"
+        label: "Match spotlight"
+        description: "Highlight your next or live match above the schedule"
         checked: controller.showSpotlight
         accent: Color.accent
         foreground: root.fgColor
@@ -223,22 +240,30 @@ Column {
     width: parent.width
     implicitHeight: wireCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: wireCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Toggle {
+      Text {
+        text: "NEWS"
+        color: theme.mutedColor(root.fgColor, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 0.8
+      }
+
+      PreferenceToggle {
         width: parent.width
-        label: "League Wire & Breaking News"
-        description: "Display top stories, paddock updates, and breaking headlines"
+        label: "League news"
+        description: "Show top stories and breaking headlines for the current sport"
         checked: controller.showNewsWire
         accent: Color.accent
         foreground: root.fgColor
@@ -252,16 +277,15 @@ Column {
     width: parent.width
     implicitHeight: cadenceCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: cadenceCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(12)
 
       // Header row
@@ -280,7 +304,7 @@ Column {
           spacing: Style.space(2)
 
           Text {
-            text: "Live Refresh Cadence & Speed"
+            text: "Update frequency"
             color: root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.body
@@ -288,7 +312,7 @@ Column {
           }
 
           Text {
-            text: "Fastest safe delays tuned per provider to strictly avoid rate limits"
+            text: "Live scores refresh within each provider’s rate limits"
             color: theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -332,7 +356,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "FotMob & F1"
+                text: "FotMob & Jolpica"
                 color: root.fgColor
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
@@ -340,7 +364,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "· Cloudflare edge-safe"
+                text: "· football, F1"
                 color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -353,7 +377,7 @@ Column {
               id: fotmobSpeedLabel
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: "20s delay"
+              text: "every 20 s"
               color: (controller.activeSport === "football" || controller.activeSport === "f1") ? Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
@@ -393,7 +417,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "ESPN (NBA, NFL, MLB, NHL)"
+                text: "ESPN"
                 color: root.fgColor
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
@@ -401,7 +425,7 @@ Column {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "· Direct API"
+                text: "· NBA, NFL, MLB, NHL"
                 color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
@@ -414,7 +438,7 @@ Column {
               id: espnSpeedLabel
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: "15s delay"
+              text: "every 15 s"
               color: (controller.activeSport === "nba" || controller.activeSport === "nfl" || controller.activeSport === "mlb" || controller.activeSport === "nhl") ? Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
@@ -444,7 +468,7 @@ Column {
           spacing: Style.space(2)
 
           Text {
-            text: "Inactive Schedule Refresh"
+            text: "Refresh when nothing is live"
             color: root.fgColor
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
@@ -453,7 +477,7 @@ Column {
 
           Text {
             width: parent.width
-            text: "How often to check for schedule updates when no games are live"
+            text: "How often to check the schedule when no games are in progress"
             color: theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -488,16 +512,15 @@ Column {
     width: parent.width
     implicitHeight: favCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: favCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
       Item {
@@ -525,7 +548,7 @@ Column {
             spacing: Style.space(2)
 
             Text {
-              text: "Followed Teams & Leagues"
+              text: "Followed teams & leagues"
               color: root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.body
@@ -551,7 +574,7 @@ Column {
           id: manageFavBtn
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: "Configure"
+          text: "Edit"
           iconText: "󰒓"
           foreground: root.fgColor
           onClicked: {
@@ -569,16 +592,15 @@ Column {
     width: parent.width
     implicitHeight: syncCardCol.implicitHeight + Style.space(24)
     radius: theme.subtleRadius(6)
-    color: theme.mutedColor(root.fgColor, 0.035)
-    border.width: 1
-    border.color: theme.mutedColor(root.fgColor, 0.08)
+    color: "transparent"
+    border.width: 0
 
     Column {
       id: syncCardCol
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.margins: Style.space(14)
+      anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
       Item {
@@ -606,7 +628,7 @@ Column {
             spacing: Style.space(2)
 
             Text {
-              text: "Maintenance & Diagnostics"
+              text: "Data"
               color: root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.body
@@ -615,7 +637,7 @@ Column {
 
             Text {
               width: parent.width
-              text: "Force a complete resync of all matches and standings data (Shortcut: R)"
+              text: "Reload all matches and standings now (R)"
               color: theme.mutedColor(root.fgColor, 0.6)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -628,7 +650,7 @@ Column {
           id: forceSyncBtn
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          text: "Force Sync"
+          text: "Refresh now"
           iconText: "󰑐"
           iconSpinning: controller.loading
           foreground: root.fgColor

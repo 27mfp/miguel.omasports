@@ -20,6 +20,11 @@ const steps = [
     cmd: "node tests/sportsmodel.test.mjs"
   },
   {
+    name: "Controller Regressions",
+    file: "tests/controller-regressions.mjs",
+    cmd: "node tests/controller-regressions.mjs"
+  },
+  {
     name: "ESPN Request Sequencing",
     file: "tests/espn-sequence.mjs",
     cmd: "node tests/espn-sequence.mjs"
@@ -76,6 +81,10 @@ const steps = [
   }
 ]
 
+if (ARGS.includes("--runtime")) {
+  steps.push({ name: "Offscreen Quickshell Lifecycle", file: "tests/runtime.mjs", cmd: "node tests/runtime.mjs" })
+}
+
 if (!QUICK) {
   steps.push({
     name: "Live Provider E2E Integration",
@@ -88,8 +97,8 @@ if (!QUICK) {
     name: "Perceptual Visual Regression",
     file: "tests/visual.mjs",
     cmd: FULL
-      ? "node tests/visual.mjs --sport=all --tab=all"
-      : "node tests/visual.mjs --sport=f1 --tab=standings"
+      ? "node tests/ui-session.mjs -- node tests/visual.mjs --sport=all --tab=all"
+      : "node tests/ui-session.mjs -- node tests/visual.mjs --sport=f1 --tab=standings"
   })
 }
 
@@ -99,7 +108,7 @@ if (INTERACTIVE) {
   steps.splice(3, 0, {
     name: "Safe Headless Interaction Suite",
     file: "tests/interaction.mjs",
-    cmd: "node tests/interaction.mjs"
+    cmd: "node tests/ui-session.mjs -- node tests/interaction.mjs"
   })
 }
 

@@ -18,6 +18,9 @@ jobs:
       - name: Unit suite (parsers, state, catalogs)
         run: node tests/sportsmodel.test.mjs
 
+      - name: Controller regressions
+        run: node tests/controller-regressions.mjs
+
       - name: ESPN request sequencing
         run: node tests/espn-sequence.mjs
 

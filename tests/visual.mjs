@@ -21,8 +21,11 @@ const TARGET_SPORT = getArg("sport", null)
 const DELAY_MS = parseInt(getArg("delay", "1000"), 10)
 const ON_SCREEN = Boolean(getArg("on-screen", false))
 const UPDATE_GOLDENS = Boolean(getArg("update-goldens", false))
+const CAPTURE_ONLY = Boolean(getArg("capture-only", false))
 const TOLERANCE = parseFloat(getArg("tolerance", "0.5"))
 const TARGET_SCALE = parseFloat(getArg("scale", "1.25"))
+const EXPANDED = Boolean(getArg("expanded", false))
+const CAPTURE_SUFFIX = (TARGET_SCALE === 1.25 ? "" : `-scale-${TARGET_SCALE}`) + (EXPANDED ? "-expanded" : "")
 const VALID_TABS = new Set(["live", "fixtures", "standings", "settings", "news", "results"])
 const VALID_SPORTS = new Set(["football", "f1", "nba", "nfl", "mlb", "nhl"])
 
@@ -51,7 +54,7 @@ if (!Number.isFinite(DELAY_MS) || DELAY_MS < 0) {
   process.exit(1)
 }
 
-const ARTIFACTS_DIR = join(process.cwd(), "test-artifacts")
+const ARTIFACTS_DIR = join(process.cwd(), String(getArg("artifacts", "test-artifacts")))
 const GOLDENS_DIR = join(process.cwd(), "tests", "fixtures", "visual-goldens")
 const CROP_SCRIPT = join(process.cwd(), "tests", "crop.py")
 const DIFF_SCRIPT = join(process.cwd(), "tests", "diff.py")
@@ -108,15 +111,15 @@ async function setBoolean(method, getter, expected) {
 const hasGrim = Boolean(sh("which grim", true))
 const hasHyprctl = Boolean(sh("which hyprctl", true))
 const hasMagick = Boolean(sh("which magick", true) || sh("which convert", true))
-const hasPython3 = Boolean(sh("which python3", true))
-const hasPillow = hasPython3 && commandSucceeds("python3 -c \"import PIL\"")
+const PYTHON = commandSucceeds("python3 -c \"import PIL\"") ? "python3" : "/usr/bin/python3"
+const hasPillow = commandSucceeds(`${PYTHON} -c "import PIL"`)
 
 if (!hasGrim) {
   console.error("Error: 'grim' is required for autonomous visual testing on Wayland.")
   process.exit(1)
 }
-if (!hasPillow && !hasMagick) {
-  console.error("Error: Python Pillow or ImageMagick is required to measure visual baselines.")
+if (!hasPillow) {
+  console.error("Error: Python Pillow is required for precise popup capture; no fixed-crop fallback is used.")
   process.exit(1)
 }
 
@@ -177,18 +180,24 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
     await sleep(2500)
   }
 
-  if (tabName === "results") {
-    ipc("route", "fixtures")
-    ipc("scheduleSection", "results")
-  } else if (tabName === "news") {
-    ipc("route", "fixtures")
-    ipc("scheduleSection", "news")
-  } else {
-    ipc("route", tabName)
-  }
+  // Allow the shared mutation throttle to settle before selecting a route.
+  await sleep(350)
+  ipc("route", tabName)
   await sleep(DELAY_MS)
+  const expectedRoute = ["results", "news"].includes(tabName) ? "fixtures" : tabName
+  if (ipc("getOpened").toLowerCase() !== "true") throw new Error("Popup closed before capture")
+  if (ipc("getRoute") !== expectedRoute) throw new Error(`Route verification failed: expected ${expectedRoute}, got ${ipc("getRoute")}`)
+  if (tabName === "fixtures") {
+    await sleep(350)
+    ipc("scheduleSection", "all")
+    await sleep(350)
+  }
+  if (sport && ipc("getActiveSport") !== sport) throw new Error(`Sport verification failed: expected ${sport}`)
+  await setBoolean("setSpotlightDetails", "getSpotlightDetails", EXPANDED)
+  await setBoolean("setRecentExpanded", "getRecentExpanded", EXPANDED)
+  await sleep(350)
 
-  const filename = `tab-${sport ? `${sport}-` : ""}${tabName}.png`
+  const filename = `tab-${sport ? `${sport}-` : ""}${tabName}${CAPTURE_SUFFIX}.png`
   const filepath = join(ARTIFACTS_DIR, filename)
   const goldenPath = join(GOLDENS_DIR, filename)
   const diffFilename = `diff-${filename}`
@@ -200,12 +209,12 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
     sh(`grim -o "${headlessMonitor}" "${rawPath}"`)
     
     if (hasPillow && existsSync(CROP_SCRIPT)) {
-      sh(`python3 "${CROP_SCRIPT}" "${rawPath}" "${filepath}"`, true)
-    } else if (hasMagick) {
-      const magickCmd = sh("which magick", true) ? "magick" : "convert"
-      sh(`${magickCmd} "${rawPath}" -crop 665x500+628+38 +repage "${filepath}"`, true)
+      const geometry = JSON.parse(ipc("getPanelGeometry"))
+      const rect = [geometry.x, geometry.y, geometry.width, geometry.height].map(value => Math.round(value * TARGET_SCALE))
+      if (rect.some(value => !Number.isFinite(value)) || rect[2] <= 0 || rect[3] <= 0) throw new Error("Invalid popup geometry")
+      execFileSync(PYTHON, [CROP_SCRIPT, rawPath, filepath, ...rect.map(String)], { stdio: "pipe" })
     } else {
-      sh(`mv "${rawPath}" "${filepath}"`)
+      throw new Error("The precise popup crop helper is unavailable")
     }
 
     if (existsSync(rawPath) && existsSync(filepath) && rawPath !== filepath) {
@@ -235,7 +244,7 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
   try {
     const magickCmd = sh("which magick", true) ? "magick" : "convert"
     const dimRaw = hasPillow
-      ? sh(`python3 -c "from PIL import Image; im = Image.open('${filepath}'); print(f'{im.width}x{im.height}')"`)
+      ? sh(`${PYTHON} -c "from PIL import Image; im = Image.open('${filepath}'); print(f'{im.width}x{im.height}')"`)
       : sh(`${magickCmd} "${filepath}" -format "%wx%h" info:`)
     if (!dimRaw.includes("x")) throw new Error("could not measure captured image")
     const [w, h] = dimRaw.split("x").map(Number)
@@ -251,12 +260,14 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
   // Perceptual Diffing vs Golden
   let diffResult = null
   let passed = true
-  if (UPDATE_GOLDENS) {
+  if (CAPTURE_ONLY) {
+    console.log("    👀 Candidate captured for review; baseline unchanged.")
+  } else if (UPDATE_GOLDENS) {
     copyFileSync(filepath, goldenPath)
     console.log(`    🌟 Updated baseline golden: tests/fixtures/visual-goldens/${filename}`)
   } else if (existsSync(goldenPath)) {
     if (hasPillow && existsSync(DIFF_SCRIPT)) {
-      const diffRaw = sh(`python3 "${DIFF_SCRIPT}" "${goldenPath}" "${filepath}" "${diffPath}" ${TOLERANCE}`, true)
+      const diffRaw = sh(`${PYTHON} "${DIFF_SCRIPT}" "${goldenPath}" "${filepath}" "${diffPath}" ${TOLERANCE}`, true)
       try {
         diffResult = JSON.parse(diffRaw)
         if (diffResult.status === "PASS") {
@@ -296,7 +307,7 @@ async function captureTab(tabName, sport = null, isSportSwitch = false) {
     mismatchedPixels: diffResult ? diffResult.mismatchedPixels : null,
     sizeKb: Math.round(stat.size / 1024),
     stdDev: stdDev ? Math.round(stdDev) : null,
-    status: passed ? "PASS" : "FAIL"
+    status: passed ? (CAPTURE_ONLY ? "REVIEW" : "PASS") : "FAIL"
   }
 }
 
@@ -305,6 +316,7 @@ async function run() {
   console.log("  OMASports Autonomous Visual & Perceptual Diff Runner")
   console.log("==================================================")
 
+  if (ipc("getUiRevision") !== "native-ui-20261008-v4") throw new Error("Changed plugin source is not loaded; reload the shell before visual testing.")
   const initialSport = ipc("getActiveSport") || "football"
   const initialRoute = ipc("getRoute") || "fixtures"
   const initialSection = ipc("getScheduleSection") || "all"
@@ -318,6 +330,8 @@ async function run() {
   const initialNewsWire = String(ipc("getNewsWire")).trim().toLowerCase() === "true"
   const initialNotifications = String(ipc("getNotifications")).trim().toLowerCase() === "true"
   const initialMockMode = String(ipc("getMockMode")).trim().toLowerCase() === "true"
+  const initialSpotlightDetails = ipc("getSpotlightDetails").trim().toLowerCase() === "true"
+  const initialRecentExpanded = ipc("getRecentExpanded").trim().toLowerCase() === "true"
   console.log(`  📌 Initial active sport: ${initialSport}`)
   if (UPDATE_GOLDENS) console.log("  🌟 MODE: Updating baseline visual goldens")
 
@@ -333,11 +347,11 @@ async function run() {
       ? ["live", "fixtures", "standings", "settings"]
       : [TARGET_TAB]
 
-    if (!UPDATE_GOLDENS) {
+    if (!UPDATE_GOLDENS && !CAPTURE_ONLY) {
       const missing = []
       for (const sport of sportsToTest) {
         for (const tab of tabsToTest) {
-          const filename = `tab-${sport ? `${sport}-` : ""}${tab}.png`
+          const filename = `tab-${sport ? `${sport}-` : ""}${tab}${CAPTURE_SUFFIX}.png`
           if (!existsSync(join(GOLDENS_DIR, filename))) missing.push(filename)
         }
       }
@@ -346,6 +360,8 @@ async function run() {
       }
     }
 
+    await setBoolean("setSpotlightDetails", "getSpotlightDetails", EXPANDED)
+    await setBoolean("setRecentExpanded", "getRecentExpanded", EXPANDED)
     // Screenshots must not depend on the user's persisted display toggles.
     // Normalize them temporarily, then restore every value in finally.
     if (!initialMockMode) {
@@ -417,6 +433,8 @@ async function run() {
         console.error(`  ⚠️ Cleanup failed — ${label}: ${error.message}`)
       }
     }
+    cleanup("spotlight details", () => ipc("setSpotlightDetails", String(initialSpotlightDetails)))
+    cleanup("recent expansion", () => ipc("setRecentExpanded", String(initialRecentExpanded)))
     cleanup("close", () => ipc("close"))
     await sleep(400)
     await cleanupAsync("anti-spoiler", () => ensureToggle("getAntiSpoiler", "toggleSpoiler", initialAntiSpoiler))
@@ -462,8 +480,8 @@ async function run() {
   generateHtmlReport(results)
 
   console.log("==================================================")
-  const passCount = results.filter(r => r.status === "PASS").length
-  console.log(`  Visual Testing Completed: ${passCount}/${results.length} views verified.`)
+  const passCount = results.filter(r => r.status === "PASS" || r.status === "REVIEW").length
+  console.log(`  Visual Testing Completed: ${passCount}/${results.length} views ${CAPTURE_ONLY ? "captured for review" : "verified"}.`)
   console.log(`  Report generated: test-artifacts/visual-report.html`)
   console.log("==================================================")
 
@@ -475,10 +493,10 @@ function generateHtmlReport(results) {
   const cards = results.map(r => {
     const hasDiff = Boolean(r.diffFilename && r.goldenFilename)
     return `
-    <div class="card ${r.status === 'PASS' ? 'pass' : 'fail'}">
+    <div class="card ${r.status === 'FAIL' ? 'fail' : 'pass'}">
       <div class="card-header">
         <div class="card-title">
-          <span class="badge ${r.status === 'PASS' ? 'badge-pass' : 'badge-fail'}">${r.status}</span>
+          <span class="badge ${r.status === 'FAIL' ? 'badge-fail' : 'badge-pass'}">${r.status}</span>
           <strong>${r.tab.toUpperCase()}</strong>
           <span class="sport">(${r.sport})</span>
         </div>

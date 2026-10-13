@@ -23,42 +23,47 @@ Item {
 
   function formatPosition(pos) {
     var p = Number(pos)
-    if (p === 1) return "🥇"
-    if (p === 2) return "🥈"
-    if (p === 3) return "🥉"
     return String(pos || "")
   }
 
   function zoneFillColor(zone) {
-    if (zone === "europe") return Util.alpha("#10b981", 0.18)
-    if (zone === "playin") return Util.alpha("#f59e0b", 0.18)
-    if (zone === "relegation") return Util.alpha("#ef4444", 0.18)
+    if (zone === "europe") return Util.alpha(theme.zoneColor, 0.18)
+    if (zone === "playin") return Util.alpha(theme.warningColor, 0.18)
+    if (zone === "relegation") return Util.alpha(theme.negativeColor, 0.18)
     return "transparent"
   }
 
   function zoneTextColor(zone) {
-    if (zone === "europe") return "#10b981"
-    if (zone === "playin") return "#f59e0b"
-    if (zone === "relegation") return "#ef4444"
-    return theme.mutedColor(root.rowFg, 0.55)
+    if (zone === "europe") return theme.zoneColor
+    if (zone === "playin") return theme.warningColor
+    if (zone === "relegation") return theme.negativeColor
+    return theme.mutedColor(root.rowFg, 0.7)
+  }
+
+  // Positive differences carry an explicit sign in every sport's table.
+  function formatDiff(gd) {
+    if (gd === undefined || gd === null || gd === "") return "-"
+    var s = String(gd).trim()
+    var n = Number(s)
+    return !isNaN(n) && n > 0 && s.charAt(0) !== "+" ? "+" + s : s
   }
 
   function gdTextColor(gd) {
     var s = String(gd || "").trim()
-    if (!s || s === "-") return theme.mutedColor(root.rowFg, 0.55)
+    if (!s || s === "-") return theme.mutedColor(root.rowFg, 0.7)
     var n = Number(s)
     if (!isNaN(n)) {
-      if (n > 0) return "#22c55e"
-      if (n < 0) return "#ef4444"
-      return theme.mutedColor(root.rowFg, 0.55)
+      if (n > 0) return theme.positiveColor
+      if (n < 0) return theme.negativeColor
+      return theme.mutedColor(root.rowFg, 0.7)
     }
-    if (s.indexOf("+") === 0) return "#22c55e"
-    if (s.indexOf("-") === 0) return "#ef4444"
-    return theme.mutedColor(root.rowFg, 0.55)
+    if (s.indexOf("+") === 0) return theme.positiveColor
+    if (s.indexOf("-") === 0) return theme.negativeColor
+    return theme.mutedColor(root.rowFg, 0.7)
   }
 
   width: parent.width
-  implicitHeight: Style.space(26)
+  implicitHeight: Style.space(30)
 
   height: implicitHeight
 
@@ -76,6 +81,21 @@ Item {
         if (root.modelData.teamName) parts.push(root.modelData.teamName)
         parts.push(String(root.modelData.pts || "0") + " points")
         if (Number(root.modelData.wins || 0) > 0) parts.push(root.modelData.wins + " wins")
+      } else if (root.activeSport !== "football") {
+        parts.push("Seed " + pos)
+        parts.push(nm)
+        parts.push(String(root.modelData.wins || 0) + " wins")
+        parts.push(String(root.modelData.losses || 0) + " losses")
+        if (root.activeSport === "nhl") {
+          parts.push(String(root.modelData.draws || 0) + " overtime losses")
+          parts.push(String(root.modelData.pts || 0) + " points")
+        } else {
+          if (root.activeSport === "nfl") parts.push(String(root.modelData.draws || 0) + " ties")
+          parts.push(String(root.modelData.pct || ".000") + " win percentage")
+          if ((root.activeSport === "nba" || root.activeSport === "mlb") && root.modelData.gb)
+            parts.push(String(root.modelData.gb) + " games behind")
+        }
+        if (root.modelData.gd) parts.push(root.modelData.gd + " " + (root.activeSport === "mlb" ? "run" : (root.activeSport === "nhl" ? "goal" : "point")) + " difference")
       } else {
         if (pos) parts.push(pos + ".")
         parts.push(nm)
@@ -106,9 +126,10 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     anchors.leftMargin: Style.space(6)
     anchors.rightMargin: Style.space(6)
+    spacing: Style.space(8)
 
     Item {
-      width: Style.space(28)
+      width: Style.space(36)
       height: Style.space(20)
       anchors.verticalCenter: parent.verticalCenter
 
@@ -131,7 +152,7 @@ Item {
     }
 
     Row {
-      width: parent.width - Style.space(216)
+      width: parent.width - Style.space(260)
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(6)
 
@@ -156,14 +177,14 @@ Item {
       }
     }
 
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
-      text: (root.modelData.gd !== undefined && root.modelData.gd !== null && root.modelData.gd !== "") ? String(root.modelData.gd) : "-"
+      text: root.formatDiff(root.modelData.gd)
       color: root.gdTextColor(root.modelData.gd)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -191,9 +212,10 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     anchors.leftMargin: Style.space(6)
     anchors.rightMargin: Style.space(6)
+    spacing: Style.space(8)
 
     Item {
-      width: Style.space(28)
+      width: Style.space(36)
       height: Style.space(20)
       anchors.verticalCenter: parent.verticalCenter
 
@@ -216,7 +238,7 @@ Item {
     }
 
     Row {
-      width: parent.width - Style.space(190)
+      width: parent.width - Style.space(274)
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(6)
 
@@ -242,23 +264,23 @@ Item {
       }
     }
 
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
-      width: Style.space(36)
+      width: Style.space(44)
       anchors.verticalCenter: parent.verticalCenter
       text: root.activeSport === "nhl"
         ? String(root.modelData.draws !== undefined ? root.modelData.draws : "0")
-        : (root.modelData.played > 0 ? (root.modelData.wins / root.modelData.played).toFixed(3).replace(/^0/, "") : ".000")
-      color: theme.mutedColor(root.rowFg, 0.65)
+        : (root.modelData.pct || ".000")
+      color: theme.mutedColor(root.rowFg, 0.8)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
     }
     Text {
-      width: Style.space(34)
+      width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
-      text: (root.modelData.gd !== undefined && root.modelData.gd !== null && root.modelData.gd !== "") ? String(root.modelData.gd) : "-"
+      text: root.formatDiff(root.modelData.gd)
       color: root.gdTextColor(root.modelData.gd)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -266,9 +288,9 @@ Item {
       elide: Text.ElideRight
     }
     Text {
-      width: Style.space(36)
+      width: Style.space(40)
       anchors.verticalCenter: parent.verticalCenter
-      text: String(root.modelData.pts || "0")
+      text: root.activeSport === "nhl" ? String(root.modelData.pts || "0") : String(root.modelData.gb || "–")
       color: root.isFavorite ? Color.accent : root.rowFg
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
@@ -285,9 +307,10 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     anchors.leftMargin: Style.space(6)
     anchors.rightMargin: Style.space(6)
+    spacing: Style.space(8)
 
     Item {
-      width: Style.space(28)
+      width: Style.space(36)
       height: Style.space(20)
       anchors.verticalCenter: parent.verticalCenter
 
@@ -310,7 +333,7 @@ Item {
     }
 
     Row {
-      width: parent.width - Style.space(182)
+      width: parent.width - Style.space(256)
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(6)
 
@@ -336,22 +359,22 @@ Item {
       }
     }
 
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws || 0; color: theme.mutedColor(root.rowFg, 0.65); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws || 0; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
     Text {
-      width: Style.space(38)
+      width: Style.space(44)
       anchors.verticalCenter: parent.verticalCenter
-      text: root.modelData.played > 0 ? (root.modelData.wins / root.modelData.played).toFixed(3).replace(/^0/, "") : ".000"
-      color: theme.mutedColor(root.rowFg, 0.65)
+      text: root.modelData.pct || ".000"
+      color: theme.mutedColor(root.rowFg, 0.8)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
     }
     Text {
-      width: Style.space(38)
+      width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
-      text: (root.modelData.gd !== undefined && root.modelData.gd !== null && root.modelData.gd !== "") ? String(root.modelData.gd) : "-"
+      text: root.formatDiff(root.modelData.gd)
       color: root.gdTextColor(root.modelData.gd)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -368,106 +391,10 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     anchors.leftMargin: Style.space(6)
     anchors.rightMargin: Style.space(6)
+    spacing: Style.space(8)
 
     Item {
-      width: Style.space(28)
-      height: Style.space(20)
-      anchors.verticalCenter: parent.verticalCenter
-
-      Rectangle {
-        anchors.centerIn: parent
-        width: Style.space(20)
-        height: Style.space(18)
-        radius: 3
-        color: root.zoneFillColor(root.modelData.zone)
-
-        Text {
-          anchors.centerIn: parent
-          text: root.formatPosition(root.modelData.pos)
-          color: root.zoneTextColor(root.modelData.zone)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
-        }
-      }
-    }
-
-    Item {
-      width: Style.space(190)
-      height: Style.space(20)
-      anchors.verticalCenter: parent.verticalCenter
-
-      Row {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.rightMargin: Style.space(8)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
-
-        TeamCrest {
-          sport: "f1"
-          teamId: root.modelData.teamId || ""
-          teamName: root.modelData.teamName || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Text {
-          width: parent.width - Style.space(22)
-          anchors.verticalCenter: parent.verticalCenter
-          text: (root.isFavorite ? "★ " : "") + (root.modelData.flag ? root.modelData.flag + " " : "") + root.modelData.name
-          color: root.isFavorite ? Color.accent : root.rowFg
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-          font.bold: root.isFavorite
-          elide: Text.ElideRight
-        }
-      }
-    }
-
-    Text {
-      width: parent.width - Style.space(330)
-      anchors.verticalCenter: parent.verticalCenter
-      text: root.modelData.gd || root.modelData.teamName || ""
-      color: theme.mutedColor(root.rowFg, 0.55)
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
-    }
-
-    Text {
-      width: Style.space(42)
-      anchors.verticalCenter: parent.verticalCenter
-      text: String(root.modelData.wins)
-      color: theme.mutedColor(root.rowFg, 0.65)
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      horizontalAlignment: Text.AlignRight
-    }
-
-    Text {
-      width: Style.space(65)
-      anchors.verticalCenter: parent.verticalCenter
-      text: String(root.modelData.pts || "0").replace(/\s*PTS$/i, "")
-      color: root.isFavorite ? Color.accent : root.rowFg
-      font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
-      horizontalAlignment: Text.AlignRight
-    }
-  }
-
-  // F1 Constructors Standings Row
-  Row {
-    visible: root.activeSport === "f1" && (root.standingsLeagueId === "Constructors" || root.standingsLeagueId.indexOf("Construct") !== -1)
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
-    anchors.leftMargin: Style.space(6)
-    anchors.rightMargin: Style.space(6)
-
-    Item {
-      width: Style.space(28)
+      width: Style.space(36)
       height: Style.space(20)
       anchors.verticalCenter: parent.verticalCenter
 
@@ -501,16 +428,100 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(6)
 
-        TeamCrest {
-          sport: "f1"
-          teamId: root.modelData.id || ""
-          teamName: root.modelData.name || ""
-          crestSize: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
-        }
 
         Text {
-          width: parent.width - Style.space(22)
+          width: parent.width
+          anchors.verticalCenter: parent.verticalCenter
+          text: (root.isFavorite ? "★ " : "") + (root.modelData.flag ? root.modelData.flag + " " : "") + root.modelData.name
+          color: root.isFavorite ? Color.accent : root.rowFg
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.bold: root.isFavorite
+          elide: Text.ElideRight
+        }
+      }
+    }
+
+    Text {
+      width: parent.width - Style.space(338)
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.modelData.gd || root.modelData.teamName || ""
+      color: theme.mutedColor(root.rowFg, 0.7)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+    }
+
+    Text {
+      width: Style.space(40)
+      anchors.verticalCenter: parent.verticalCenter
+      text: String(root.modelData.wins)
+      color: theme.mutedColor(root.rowFg, 0.8)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      horizontalAlignment: Text.AlignRight
+    }
+
+    Text {
+      width: Style.space(50)
+      anchors.verticalCenter: parent.verticalCenter
+      text: String(root.modelData.pts || "0").replace(/\s*PTS$/i, "")
+      color: root.isFavorite ? Color.accent : root.rowFg
+      font.family: Style.font.family
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+      horizontalAlignment: Text.AlignRight
+    }
+  }
+
+  // F1 Constructors Standings Row
+  Row {
+    visible: root.activeSport === "f1" && (root.standingsLeagueId === "Constructors" || root.standingsLeagueId.indexOf("Construct") !== -1)
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    anchors.leftMargin: Style.space(6)
+    anchors.rightMargin: Style.space(6)
+    spacing: Style.space(8)
+
+    Item {
+      width: Style.space(36)
+      height: Style.space(20)
+      anchors.verticalCenter: parent.verticalCenter
+
+      Rectangle {
+        anchors.centerIn: parent
+        width: Style.space(20)
+        height: Style.space(18)
+        radius: 3
+        color: root.zoneFillColor(root.modelData.zone)
+
+        Text {
+          anchors.centerIn: parent
+          text: root.formatPosition(root.modelData.pos)
+          color: root.zoneTextColor(root.modelData.zone)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+      }
+    }
+
+    Item {
+      width: Style.space(180)
+      height: Style.space(20)
+      anchors.verticalCenter: parent.verticalCenter
+
+      Row {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(6)
+
+
+        Text {
+          width: parent.width
           anchors.verticalCenter: parent.verticalCenter
           text: (root.isFavorite ? "★ " : "") + root.modelData.name
           color: root.isFavorite ? Color.accent : root.rowFg
@@ -523,10 +534,10 @@ Item {
     }
 
     Text {
-      width: parent.width - Style.space(320)
+      width: parent.width - Style.space(355)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || ""
-      color: theme.mutedColor(root.rowFg, 0.55)
+      color: theme.mutedColor(root.rowFg, 0.7)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
@@ -536,7 +547,7 @@ Item {
       width: Style.space(42)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
-      color: theme.mutedColor(root.rowFg, 0.65)
+      color: theme.mutedColor(root.rowFg, 0.8)
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
