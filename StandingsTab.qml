@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Column {
@@ -38,7 +39,7 @@ Column {
     // FocusScope has no implicit size; measure the dropdown it actually shows.
     implicitHeight: Math.max(tableTitle.implicitHeight, standingsScope.visible ? standingsScope.height : 0)
 
-    Text {
+    PlainText {
       id: tableTitle
       anchors.left: parent.left
       anchors.right: standingsScope.left
@@ -71,7 +72,7 @@ Column {
         options: controller.standingsOptions
         hasCursor: controller.focusSection === controller.sectionIndex("standings")
         foreground: root.fgColor
-        background: Color.popups.background
+        background: Commons.Color.popups.background
         onChanged: function(value) { controller.setStandingsLeague(value) }
       }
     }
@@ -103,11 +104,11 @@ Column {
         Rectangle {
           anchors.fill: parent
           radius: width / 2
-          color: Util.alpha(Color.accent, 0.12)
+          color: Util.alpha(Commons.Color.accent, 0.12)
           border.width: 1
-          border.color: Util.alpha(Color.accent, 0.25)
+          border.color: Util.alpha(Commons.Color.accent, 0.25)
 
-          Text {
+          PlainText {
             anchors.centerIn: parent
             text: "📊"
             font.pixelSize: Style.font.heading
@@ -115,7 +116,7 @@ Column {
         }
       }
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: controller.hasData
           ? "No standings available for " + controller.activeSportMeta.label + "."
@@ -161,14 +162,14 @@ Column {
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(260); text: "CLUB"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "P"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "D"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(32); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(32); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          PlainText { width: parent.width - Style.space(260); text: "CLUB"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "P"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "D"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(32); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(32); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // NBA / MLB Header (W, L, PCT, DIFF, GB)
@@ -180,13 +181,13 @@ Column {
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(274); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(44); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(40); text: "GB"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          PlainText { width: parent.width - Style.space(274); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(44); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(40); text: "GB"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // NHL Header (W, L, OTL, DIFF, PTS)
@@ -198,13 +199,13 @@ Column {
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(274); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(44); text: "OTL"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(40); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          PlainText { width: parent.width - Style.space(274); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(28); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(28); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(44); text: "OTL"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(40); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // NFL Header (W, L, T, PCT, DIFF)
@@ -216,13 +217,13 @@ Column {
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: parent.width - Style.space(256); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(26); text: "T"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(44); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(36); text: "SEED"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          PlainText { width: parent.width - Style.space(256); text: "TEAM"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "W"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "L"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(26); text: "T"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(44); text: "PCT"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(50); text: "DIFF"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // F1 Drivers Header
@@ -234,11 +235,11 @@ Column {
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: Style.space(180); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: parent.width - Style.space(338); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(40); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(50); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          PlainText { width: Style.space(180); text: "DRIVER"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: parent.width - Style.space(338); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(40); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(50); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
 
         // F1 Constructors Header
@@ -250,11 +251,11 @@ Column {
           anchors.leftMargin: Style.space(6)
           anchors.rightMargin: Style.space(6)
 
-          Text { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
-          Text { width: Style.space(180); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: parent.width - Style.space(355); text: "COUNTRY"; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(42); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
-          Text { width: Style.space(65); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(36); text: "#"; color: root.tableHeaderColor(); font: root.tableFont(); horizontalAlignment: Text.AlignHCenter }
+          PlainText { width: Style.space(180); text: "CONSTRUCTOR"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: parent.width - Style.space(355); text: "COUNTRY"; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(42); text: "WINS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
+          PlainText { width: Style.space(65); text: "PTS"; horizontalAlignment: Text.AlignRight; color: root.tableHeaderColor(); font: root.tableFont() }
         }
       }
 
@@ -272,6 +273,7 @@ Column {
         Repeater {
           model: controller.standingsRows
           delegate: StandingsRow {
+            knownLogoKeys: controller.knownLogoKeys
             activeSport: controller.activeSport
             standingsLeagueId: controller.standingsLeagueId
             selectedTeamIds: controller.selectedTeamIds
@@ -313,7 +315,7 @@ Column {
           color: modelData.color
           anchors.verticalCenter: parent.verticalCenter
         }
-        Text {
+        PlainText {
           text: modelData.label
           color: theme.mutedColor(root.fgColor, 0.75)
           font.family: Style.font.family
@@ -322,9 +324,9 @@ Column {
       }
     }
 
-    Text {
+    PlainText {
       text: "★ Favorite"
-      color: Color.accent
+      color: Commons.Color.accent
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
     }

@@ -1,11 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "SportsModel.js" as Model
 
 // One league table row; the layout adapts per sport (football, US sports,
 // F1 drivers/constructors). Theme/state inputs are injected by Panel.qml.
 Item {
   id: root
+  property var knownLogoKeys: ({})
   Theme { id: theme }
 
   required property var modelData
@@ -110,9 +112,9 @@ Item {
       return parts.join(", ")
     }
     color: tableMouse.containsMouse
-      ? Style.hoverFillFor(root.rowFg, Color.accent)
+      ? Style.hoverFillFor(root.rowFg, Commons.Color.accent)
       : (root.isFavorite
-         ? Util.alpha(Color.accent, 0.12)
+         ? Util.alpha(Commons.Color.accent, 0.12)
          : (root.index % 2 === 1 ? theme.mutedColor(root.rowFg, 0.02) : "transparent"))
 
     Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
@@ -140,7 +142,7 @@ Item {
         radius: 3
         color: root.zoneFillColor(root.modelData.zone)
 
-        Text {
+        PlainText {
           anchors.centerIn: parent
           text: root.formatPosition(root.modelData.pos)
           color: root.zoneTextColor(root.modelData.zone)
@@ -157,6 +159,7 @@ Item {
       spacing: Style.space(6)
 
       TeamCrest {
+        knownLogoKeys: root.knownLogoKeys
         sport: "football"
         teamId: root.modelData.id
         teamName: root.modelData.name
@@ -165,11 +168,11 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
       }
 
-      Text {
+      PlainText {
         width: parent.width - Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
         text: (root.isFavorite ? "★ " : "") + (root.modelData.shortName || root.modelData.name)
-        color: root.isFavorite ? Color.accent : root.rowFg
+        color: root.isFavorite ? Commons.Color.accent : root.rowFg
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
         font.bold: root.isFavorite
@@ -177,11 +180,11 @@ Item {
       }
     }
 
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text {
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.played; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
       text: root.formatDiff(root.modelData.gd)
@@ -192,11 +195,11 @@ Item {
       elide: Text.ElideRight
     }
 
-    Text {
+    PlainText {
       width: Style.space(32)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.pts || "0")
-      color: root.isFavorite ? Color.accent : root.rowFg
+      color: root.isFavorite ? Commons.Color.accent : root.rowFg
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
       font.bold: true
@@ -226,7 +229,7 @@ Item {
         radius: 3
         color: root.zoneFillColor(root.modelData.zone)
 
-        Text {
+        PlainText {
           anchors.centerIn: parent
           text: root.formatPosition(root.modelData.pos)
           color: root.zoneTextColor(root.modelData.zone)
@@ -243,6 +246,7 @@ Item {
       spacing: Style.space(6)
 
       TeamCrest {
+        knownLogoKeys: root.knownLogoKeys
         sport: root.activeSport
         teamId: root.modelData.id
         teamName: root.modelData.name
@@ -252,11 +256,11 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
       }
 
-      Text {
+      PlainText {
         width: parent.width - Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
         text: (root.isFavorite ? "★ " : "") + (root.modelData.shortName || root.modelData.name)
-        color: root.isFavorite ? Color.accent : root.rowFg
+        color: root.isFavorite ? Commons.Color.accent : root.rowFg
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
         font.bold: root.isFavorite
@@ -264,9 +268,9 @@ Item {
       }
     }
 
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text {
+    PlainText { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText { width: Style.space(28); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText {
       width: Style.space(44)
       anchors.verticalCenter: parent.verticalCenter
       text: root.activeSport === "nhl"
@@ -277,7 +281,7 @@ Item {
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
     }
-    Text {
+    PlainText {
       width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
       text: root.formatDiff(root.modelData.gd)
@@ -287,11 +291,11 @@ Item {
       horizontalAlignment: Text.AlignRight
       elide: Text.ElideRight
     }
-    Text {
+    PlainText {
       width: Style.space(40)
       anchors.verticalCenter: parent.verticalCenter
       text: root.activeSport === "nhl" ? String(root.modelData.pts || "0") : String(root.modelData.gb || "–")
-      color: root.isFavorite ? Color.accent : root.rowFg
+      color: root.isFavorite ? Commons.Color.accent : root.rowFg
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
       font.bold: true
@@ -321,7 +325,7 @@ Item {
         radius: 3
         color: root.zoneFillColor(root.modelData.zone)
 
-        Text {
+        PlainText {
           anchors.centerIn: parent
           text: root.formatPosition(root.modelData.pos)
           color: root.zoneTextColor(root.modelData.zone)
@@ -338,6 +342,7 @@ Item {
       spacing: Style.space(6)
 
       TeamCrest {
+        knownLogoKeys: root.knownLogoKeys
         sport: "nfl"
         teamId: root.modelData.id
         teamName: root.modelData.name
@@ -347,11 +352,11 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
       }
 
-      Text {
+      PlainText {
         width: parent.width - Style.space(22)
         anchors.verticalCenter: parent.verticalCenter
         text: (root.isFavorite ? "★ " : "") + (root.modelData.shortName || root.modelData.name)
-        color: root.isFavorite ? Color.accent : root.rowFg
+        color: root.isFavorite ? Commons.Color.accent : root.rowFg
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
         font.bold: root.isFavorite
@@ -359,10 +364,10 @@ Item {
       }
     }
 
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws || 0; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
-    Text {
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.wins; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.losses; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText { width: Style.space(26); anchors.verticalCenter: parent.verticalCenter; text: root.modelData.draws || 0; color: theme.mutedColor(root.rowFg, 0.8); font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignRight }
+    PlainText {
       width: Style.space(44)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.pct || ".000"
@@ -371,7 +376,7 @@ Item {
       font.pixelSize: Style.font.caption
       horizontalAlignment: Text.AlignRight
     }
-    Text {
+    PlainText {
       width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
       text: root.formatDiff(root.modelData.gd)
@@ -405,7 +410,7 @@ Item {
         radius: 3
         color: root.zoneFillColor(root.modelData.zone)
 
-        Text {
+        PlainText {
           anchors.centerIn: parent
           text: root.formatPosition(root.modelData.pos)
           color: root.zoneTextColor(root.modelData.zone)
@@ -429,11 +434,11 @@ Item {
         spacing: Style.space(6)
 
 
-        Text {
+        PlainText {
           width: parent.width
           anchors.verticalCenter: parent.verticalCenter
           text: (root.isFavorite ? "★ " : "") + (root.modelData.flag ? root.modelData.flag + " " : "") + root.modelData.name
-          color: root.isFavorite ? Color.accent : root.rowFg
+          color: root.isFavorite ? Commons.Color.accent : root.rowFg
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           font.bold: root.isFavorite
@@ -442,7 +447,7 @@ Item {
       }
     }
 
-    Text {
+    PlainText {
       width: parent.width - Style.space(338)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || root.modelData.teamName || ""
@@ -452,7 +457,7 @@ Item {
       elide: Text.ElideRight
     }
 
-    Text {
+    PlainText {
       width: Style.space(40)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
@@ -462,11 +467,11 @@ Item {
       horizontalAlignment: Text.AlignRight
     }
 
-    Text {
+    PlainText {
       width: Style.space(50)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.pts || "0").replace(/\s*PTS$/i, "")
-      color: root.isFavorite ? Color.accent : root.rowFg
+      color: root.isFavorite ? Commons.Color.accent : root.rowFg
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
       font.bold: true
@@ -496,7 +501,7 @@ Item {
         radius: 3
         color: root.zoneFillColor(root.modelData.zone)
 
-        Text {
+        PlainText {
           anchors.centerIn: parent
           text: root.formatPosition(root.modelData.pos)
           color: root.zoneTextColor(root.modelData.zone)
@@ -520,11 +525,11 @@ Item {
         spacing: Style.space(6)
 
 
-        Text {
+        PlainText {
           width: parent.width
           anchors.verticalCenter: parent.verticalCenter
           text: (root.isFavorite ? "★ " : "") + root.modelData.name
-          color: root.isFavorite ? Color.accent : root.rowFg
+          color: root.isFavorite ? Commons.Color.accent : root.rowFg
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           font.bold: root.isFavorite
@@ -533,7 +538,7 @@ Item {
       }
     }
 
-    Text {
+    PlainText {
       width: parent.width - Style.space(355)
       anchors.verticalCenter: parent.verticalCenter
       text: root.modelData.gd || ""
@@ -543,7 +548,7 @@ Item {
       elide: Text.ElideRight
     }
 
-    Text {
+    PlainText {
       width: Style.space(42)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.wins)
@@ -553,11 +558,11 @@ Item {
       horizontalAlignment: Text.AlignRight
     }
 
-    Text {
+    PlainText {
       width: Style.space(65)
       anchors.verticalCenter: parent.verticalCenter
       text: String(root.modelData.pts || "0").replace(/\s*PTS$/i, "")
-      color: root.isFavorite ? Color.accent : root.rowFg
+      color: root.isFavorite ? Commons.Color.accent : root.rowFg
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
       font.bold: true

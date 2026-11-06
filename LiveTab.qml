@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Column {
@@ -51,11 +52,11 @@ Column {
         Rectangle {
           anchors.fill: parent
           radius: width / 2
-          color: Util.alpha(Color.accent, 0.12)
+          color: Util.alpha(Commons.Color.accent, 0.12)
           border.width: 1
-          border.color: Util.alpha(Color.accent, 0.25)
+          border.color: Util.alpha(Commons.Color.accent, 0.25)
 
-          Text {
+          PlainText {
             anchors.centerIn: parent
             text: controller.activeSportIcon
             font.pixelSize: Style.font.heading
@@ -63,7 +64,7 @@ Column {
         }
       }
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: (controller.hasData || controller.fetchedOnce)
           ? "No live events in progress right now for " + controller.activeSportMeta.label + "."
@@ -81,9 +82,9 @@ Column {
         width: parent.width
         implicitHeight: nextCol.implicitHeight + Style.space(12)
         radius: theme.subtleRadius(4)
-        color: Util.alpha(Color.accent, 0.08)
+        color: Util.alpha(Commons.Color.accent, 0.08)
         border.width: 1
-        border.color: Util.alpha(Color.accent, 0.25)
+        border.color: Util.alpha(Commons.Color.accent, 0.25)
 
         Column {
           id: nextCol
@@ -93,15 +94,15 @@ Column {
           anchors.margins: Style.space(8)
           spacing: Style.space(2)
 
-          Text {
+          PlainText {
             text: "UP NEXT"
-            color: Color.accent
+            color: Commons.Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
           }
 
-          Text {
+          PlainText {
             width: parent.width
             text: controller.nextKickoffText
             color: root.fgColor
@@ -123,6 +124,7 @@ Column {
     Repeater {
       model: controller.liveList
       delegate: LiveRow {
+        knownLogoKeys: controller.knownLogoKeys
         latestMatchesById: controller.latestMatchesById
         activeSport: controller.activeSport
         activeSportIcon: controller.activeSportIcon

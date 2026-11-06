@@ -12,7 +12,7 @@ vm.runInContext(modelSource.replace(/^\.pragma library\s*$/m, ""), Model)
 // Execute the production Panel functions, with QML services supplied below.
 // Panel's top-level functions end at a two-space closing brace.
 const names = [
-  "startEspnRound", "fetchNextEspnDay", "resolveEspnScoreboard",
+  "monitoringAllowed", "startEspnRound", "fetchNextEspnDay", "resolveEspnScoreboard",
   "resolveEspnStandings", "finishEspnScoreboard", "checkEspnDone", "stopNetworkWorkers"
 ]
 const functions = names.map(name => {
@@ -26,7 +26,7 @@ function harness() {
   const requests = []
   const dayList = ["20261007", "20261008", "20261009", "20261010", "20261011"]
   const state = {
-    Model, requestSerial: 1, espnDayQueue: [], espnDayPayloads: [],
+    Model, opened: true, backgroundUpdates: false, requestSerial: 1, espnDayQueue: [], espnDayPayloads: [],
     espnDayFailures: 0, espnRetryCount: 0, espnRetrySerial: 0,
     espnScoreCache: {}, espnStandingsCache: {}, espnCurrentDay: "", activeSport: "mlb",
     loading: true, errorMessage: "", activeSportMeta: { label: "MLB" },
@@ -35,7 +35,8 @@ function harness() {
     workerStandings: { running: false, handled: false },
     retryDelay: { stop() {} }, teamRetryDelay: { stop() {} },
     retries: 0, completions: 0,
-    espnRetryDelay: { running: false, restart() { this.running = true; state.retries++ } },
+    f1RetryDelay: { stop() {} },
+    espnRetryDelay: { running: false, stop() { this.running = false }, restart() { this.running = true; state.retries++ } },
     Qt: { callLater(fn) { deferred.push(fn) } },
     secureFetchCommand(url) { requests.push(url); return url },
     fetchLeagueNews() {}, ensureStandingsSelection() {},

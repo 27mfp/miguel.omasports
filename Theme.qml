@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // Shared visual helpers for the OmaSports plugin.
 //
@@ -17,7 +18,7 @@ import qs.Commons
 // (that is a directory import and fails at runtime).
 QtObject {
   // Semantic states keep their meaning while remaining legible on light themes.
-  readonly property bool lightBackground: 0.299 * Color.background.r + 0.587 * Color.background.g + 0.114 * Color.background.b > 0.6
+  readonly property bool lightBackground: 0.299 * Commons.Color.background.r + 0.587 * Commons.Color.background.g + 0.114 * Commons.Color.background.b > 0.6
   readonly property color positiveColor: lightBackground ? "#187a3d" : "#22c55e"
   readonly property color negativeColor: lightBackground ? "#b92f3a" : "#ef4444"
   readonly property color warningColor: lightBackground ? "#956000" : "#f59e0b"

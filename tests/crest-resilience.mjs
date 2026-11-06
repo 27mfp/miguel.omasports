@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // S-Tier Crest Cache Resilience & 404/Corrupt Image Fallbacks Suite for miguel.omasports
-// Validates monogram derivation, cold cache resilience, broken CDN recovery, and log hygiene.
-import { readFileSync, existsSync } from "node:fs"
+// Pure cache-key/monogram/URL contracts. Real image behavior is exercised by
+// tests/compatibility.mjs against production QML; malformed PNGs by security-hardening.mjs.
+import { readFileSync } from "node:fs"
 import { execSync } from "node:child_process"
 import assert from "node:assert/strict"
 
@@ -82,69 +83,7 @@ test("Rejects untrusted protocols and malicious URL schemes", () => {
 })
 
 // -----------------------------------------------------------------------------
-// 3. Fallback Monogram State Machine Simulation
-// -----------------------------------------------------------------------------
-test("TeamCrest state machine: cold cache + broken CDN activates fallback monogram", () => {
-  // Simulates TeamCrest.qml image status transitions:
-  // Status enum: Null=0, Ready=1, Loading=2, Error=3
-  const Image = { Null: 0, Ready: 1, Loading: 2, Error: 3 }
-
-  function resolveCrestState(localExists, cdnStatus, hasSource) {
-    let localStatus = localExists ? Image.Ready : Image.Error
-    let remoteSource = (localStatus === Image.Error && hasSource) ? "https://cdn.example.com/crest.png" : ""
-    let remoteStatus = Image.Null
-    if (remoteSource !== "") {
-      if (cdnStatus === 200) remoteStatus = Image.Ready
-      else remoteStatus = Image.Error // 404, 500, corrupt bytes
-    }
-    const isMonogramVisible = (localStatus !== Image.Ready && remoteStatus !== Image.Ready)
-    const isLocalVisible = (localStatus === Image.Ready)
-    const isRemoteVisible = (localStatus !== Image.Ready && remoteStatus === Image.Ready)
-    return { isMonogramVisible, isLocalVisible, isRemoteVisible, remoteSource }
-  }
-
-  // Case 1: Warm local cache -> local image ready, monogram hidden, no remote request
-  const warm = resolveCrestState(true, null, true)
-  assert.equal(warm.isLocalVisible, true)
-  assert.equal(warm.isMonogramVisible, false)
-  assert.equal(warm.remoteSource, "", "Warm cache must not trigger remote CDN request")
-
-  // Case 2: Cold cache + Broken CDN (HTTP 404) -> fallback monogram visible
-  const notFound = resolveCrestState(false, 404, true)
-  assert.equal(notFound.isLocalVisible, false)
-  assert.equal(notFound.isRemoteVisible, false)
-  assert.equal(notFound.isMonogramVisible, true, "404 must trigger fallback monogram")
-
-  // Case 3: Cold cache + Broken CDN (HTTP 500 / corrupt image bytes) -> fallback monogram visible
-  const serverError = resolveCrestState(false, 500, true)
-  assert.equal(serverError.isMonogramVisible, true, "500 must trigger fallback monogram")
-
-  // Case 4: Cold cache + Empty source -> fallback monogram visible without CDN request
-  const noSource = resolveCrestState(false, null, false)
-  assert.equal(noSource.isMonogramVisible, true)
-  assert.equal(noSource.remoteSource, "")
-})
-
-// -----------------------------------------------------------------------------
-// 4. Broken CDN Payload & Corrupt Bytes Simulation
-// -----------------------------------------------------------------------------
-test("Simulated broken responses (404 HTML, 500 error, truncated PNG) handled cleanly", () => {
-  const payloads = [
-    { name: "404 HTML", bytes: Buffer.from("<html><head><title>404 Not Found</title></head><body>404</body></html>") },
-    { name: "500 Internal Error", bytes: Buffer.from("Internal Server Error") },
-    { name: "Truncated PNG", bytes: Buffer.from([0x89, 0x50, 0x4E, 0x47]) }, // Incomplete 4-byte header
-    { name: "Empty response", bytes: Buffer.alloc(0) }
-  ]
-
-  for (const p of payloads) {
-    const isPng = p.bytes.length > 8 &&
-      p.bytes[0] === 0x89 && p.bytes[1] === 0x50 && p.bytes[2] === 0x4E && p.bytes[3] === 0x47
-    assert.ok(!isPng, `${p.name} must not be identified as valid PNG`)
-  }
-})
-
-// -----------------------------------------------------------------------------
-// 5. System Log & Journalctl Hygiene Check
+// 3. System Log & Journalctl Hygiene Check
 // -----------------------------------------------------------------------------
 test("System log hygiene: verify no crashing or error loop in user services", () => {
   try {

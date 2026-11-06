@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Collapsible League Wire / Breaking News card displaying top stories
@@ -9,8 +10,8 @@ Rectangle {
 
   Theme { id: theme }
 
-  property color fgColor: Color.foreground
-  property color urgentColor: Color.urgent
+  property color fgColor: Commons.Color.foreground
+  property color urgentColor: Commons.Color.urgent
   property string activeSport: "football"
   property var articles: []
   property bool expanded: false
@@ -50,7 +51,7 @@ Rectangle {
       width: parent.width
       implicitHeight: headerRight.implicitHeight
 
-      Text {
+      PlainText {
         anchors.left: parent.left
         anchors.right: headerRight.left
         anchors.rightMargin: Style.space(8)
@@ -76,7 +77,7 @@ Rectangle {
           radius: theme.subtleRadius(4)
           color: theme.mutedColor(root.fgColor, 0.08)
 
-          Text {
+          PlainText {
             id: countText
             anchors.centerIn: parent
             text: {
@@ -109,11 +110,11 @@ Rectangle {
           implicitHeight: articleCol.implicitHeight + Style.space(12)
           radius: theme.subtleRadius(4)
           color: articleMouse.containsMouse
-            ? Style.hoverFillFor(root.fgColor, Color.accent)
+            ? Style.hoverFillFor(root.fgColor, Commons.Color.accent)
             : theme.mutedColor(root.fgColor, 0.02)
           border.width: 1
           border.color: articleMouse.containsMouse
-            ? Color.accent
+            ? Commons.Color.accent
             : theme.mutedColor(root.fgColor, 0.06)
 
           Behavior on color { ColorAnimation { duration: 120 } }
@@ -127,7 +128,7 @@ Rectangle {
             anchors.margins: Style.space(8)
             spacing: Style.space(3)
 
-            Text {
+            PlainText {
               width: parent.width
               text: articleRow.modelData.headline || ""
               color: root.fgColor
@@ -143,17 +144,17 @@ Rectangle {
               width: parent.width
               spacing: Style.space(6)
 
-              Text {
+              PlainText {
                 visible: Boolean(articleRow.modelData.published)
                 text: "⏱ " + root.formatTimeAgo(articleRow.modelData.published)
-                color: Color.accent
+                color: Commons.Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
               }
 
-              Text {
+              PlainText {
                 visible: Boolean(articleRow.modelData.description)
                 width: parent.width - (parent.children[0].visible ? (parent.children[0].width + Style.space(6)) : 0) - Style.space(16)
                 text: articleRow.modelData.description || ""
@@ -194,11 +195,11 @@ Rectangle {
         implicitHeight: expandRow.implicitHeight + Style.space(6)
         radius: theme.subtleRadius(4)
         color: expandMouse.containsMouse
-          ? Util.alpha(Color.accent, 0.15)
+          ? Util.alpha(Commons.Color.accent, 0.15)
           : theme.mutedColor(root.fgColor, 0.04)
         border.width: 1
         border.color: expandMouse.containsMouse
-          ? Color.accent
+          ? Commons.Color.accent
           : theme.mutedColor(root.fgColor, 0.1)
 
         Row {
@@ -206,9 +207,9 @@ Rectangle {
           anchors.centerIn: parent
           spacing: Style.space(4)
 
-          Text {
+          PlainText {
             text: root.expanded ? "Show fewer stories 󰅃" : ("Show all " + root.articles.length + " stories 󰅀")
-            color: Color.accent
+            color: Commons.Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true

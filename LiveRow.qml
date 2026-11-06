@@ -1,11 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "SportsModel.js" as Model
 
 // Broadcast-style live match card with pulsing clock pill, scorecard layout
 // and game progression bar. Theme/state inputs are injected by Panel.qml.
 Item {
   id: root
+  property var knownLogoKeys: ({})
   Theme { id: theme }
 
   required property var modelData
@@ -81,7 +83,7 @@ Item {
       return h + " versus " + a + ", live, " + (root.scoreHidden ? "result hidden" : (root.match.scoreText || "")) + ", " + root.syncedLiveTime
     }
     color: liveMouse.containsMouse
-      ? Style.hoverFillFor(root.fgColor, Color.accent)
+      ? Style.hoverFillFor(root.fgColor, Commons.Color.accent)
       : (root.favLiveState === "leading"
          ? Util.alpha(theme.positiveColor, 0.05)
          : (root.favLiveState === "trailing"
@@ -94,9 +96,9 @@ Item {
 
     border.width: root.rowFocused || liveMouse.containsMouse ? 1 : 0
     border.color: liveMouse.containsMouse
-      ? Color.accent
+      ? Commons.Color.accent
       : (root.rowFocused
-         ? Color.accent
+         ? Commons.Color.accent
          : (root.favLiveState === "leading"
             ? Util.alpha(theme.positiveColor, 0.35)
             : (root.favLiveState === "trailing"
@@ -116,7 +118,7 @@ Item {
         ? theme.positiveColor
         : (root.favLiveState === "trailing"
            ? theme.negativeColor
-           : (root.favLiveState === "tied" ? theme.warningColor : Color.accent))
+           : (root.favLiveState === "tied" ? theme.warningColor : Commons.Color.accent))
 
       SequentialAnimation on opacity {
         running: root.listVisible
@@ -145,13 +147,13 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(6)
 
-          Text {
+          PlainText {
             text: root.activeSportIcon
             font.pixelSize: Style.font.caption
             anchors.verticalCenter: parent.verticalCenter
           }
 
-          Text {
+          PlainText {
             id: liveLeagueText
             anchors.verticalCenter: parent.verticalCenter
             text: root.leagueName
@@ -162,7 +164,7 @@ Item {
             font.letterSpacing: 0.9
           }
 
-          Text {
+          PlainText {
             readonly property string roundStr: String(root.match && root.match.round || "").trim()
             visible: roundStr !== ""
             anchors.verticalCenter: parent.verticalCenter
@@ -172,7 +174,7 @@ Item {
             font.pixelSize: Style.font.caption
           }
 
-          Text {
+          PlainText {
             readonly property string koTime: Model.formatKickoff(root.match && root.match.time)
             visible: koTime !== ""
             anchors.verticalCenter: parent.verticalCenter
@@ -214,7 +216,7 @@ Item {
               }
             }
 
-            Text {
+            PlainText {
               text: Model.cleanLiveTime(root.syncedLiveTime) || "LIVE"
               color: root.urgentColor
               font.family: Style.font.family
@@ -239,6 +241,7 @@ Item {
           implicitHeight: Math.max(liveHomeCrest.height, liveHomeText.implicitHeight)
 
           TeamCrest {
+            knownLogoKeys: root.knownLogoKeys
             id: liveHomeCrest
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
@@ -251,7 +254,7 @@ Item {
             crestSize: root.isF1 ? 0 : Style.space(26)
           }
 
-          Text {
+          PlainText {
             id: liveHomeText
             anchors.left: parent.left
             anchors.right: liveHomeCrest.left
@@ -262,7 +265,7 @@ Item {
               return root.sideName(root.match.home, root.homeFullName)
             }
             color: root.favTeamId === String(root.match.home && root.match.home.id)
-              ? Color.accent
+              ? Commons.Color.accent
               : (root.homeLeading ? root.fgColor : (root.awayLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
             font.pixelSize: (liveHomeText.text.length > 14 || liveAwayText.text.length > 14) ? Style.font.body : Style.font.title
@@ -295,7 +298,7 @@ Item {
                   ? theme.warningColor
                   : theme.mutedColor(root.fgColor, 0.14)))
 
-          Text {
+          PlainText {
             anchors.centerIn: parent
             text: {
               if (root.scoreHidden) return "••••"
@@ -340,6 +343,7 @@ Item {
           implicitHeight: Math.max(liveAwayCrest.height, liveAwayText.implicitHeight)
 
           TeamCrest {
+            knownLogoKeys: root.knownLogoKeys
             id: liveAwayCrest
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
@@ -352,7 +356,7 @@ Item {
             crestSize: root.isF1 ? 0 : Style.space(26)
           }
 
-          Text {
+          PlainText {
             id: liveAwayText
             anchors.left: liveAwayCrest.right
             anchors.leftMargin: root.isF1 ? 0 : Style.space(8)
@@ -364,7 +368,7 @@ Item {
             }
             color: root.isF1 ? theme.mutedColor(root.fgColor, 0.7)
               : root.favTeamId === String(root.match.away && root.match.away.id)
-              ? Color.accent
+              ? Commons.Color.accent
               : (root.awayLeading ? root.fgColor : (root.homeLeading ? theme.mutedColor(root.fgColor, 0.6) : root.fgColor))
             font.family: Style.font.family
             font.pixelSize: (liveHomeText.text.length > 14 || liveAwayText.text.length > 14) ? Style.font.body : Style.font.title
@@ -414,7 +418,7 @@ Item {
             ? theme.positiveColor
             : (root.favLiveState === "trailing"
                ? theme.negativeColor
-               : (root.favLiveState === "tied" ? theme.warningColor : Color.accent))
+               : (root.favLiveState === "tied" ? theme.warningColor : Commons.Color.accent))
         }
       }
 
@@ -447,19 +451,19 @@ Item {
         // Row labels: which line belongs to which team.
         Column {
           spacing: Style.space(2)
-          Text {
+          PlainText {
             text: " "
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
-          Text {
+          PlainText {
             text: (root.match.home && (root.match.home.abbr || root.match.home.shortName)) || "HOME"
             color: theme.mutedColor(root.fgColor, 0.55)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
           }
-          Text {
+          PlainText {
             text: (root.match.away && (root.match.away.abbr || root.match.away.shortName)) || "AWAY"
             color: theme.mutedColor(root.fgColor, 0.55)
             font.family: Style.font.family
@@ -475,7 +479,7 @@ Item {
             required property int index
             spacing: Style.space(2)
 
-            Text {
+            PlainText {
               anchors.horizontalCenter: parent.horizontalCenter
               text: linescoreGrid.periodLabel(index)
               color: theme.mutedColor(root.fgColor, 0.45)
@@ -483,7 +487,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
 
-            Text {
+            PlainText {
               anchors.horizontalCenter: parent.horizontalCenter
               text: {
                 var s = linescoreGrid.homeScores[index]
@@ -495,7 +499,7 @@ Item {
               font.bold: true
             }
 
-            Text {
+            PlainText {
               anchors.horizontalCenter: parent.horizontalCenter
               text: {
                 var s = linescoreGrid.awayScores[index]
@@ -514,7 +518,7 @@ Item {
         spacing: Style.space(6)
         visible: root.halfTimeText !== ""
 
-        Text {
+        PlainText {
           text: "⏱ HT " + root.halfTimeText
           color: theme.mutedColor(root.fgColor, 0.55)
           font.family: Style.font.family
@@ -526,7 +530,7 @@ Item {
         width: parent.width
         implicitHeight: Math.max(liveVenueText.implicitHeight, liveLinkText.implicitHeight)
 
-        Text {
+        PlainText {
           id: liveVenueText
           anchors.left: parent.left
           anchors.right: liveLinkText.left
@@ -542,12 +546,12 @@ Item {
           elide: Text.ElideRight
         }
 
-        Text {
+        PlainText {
           id: liveLinkText
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           text: (root.activeSport === "football" ? "FotMob" : "Official") + " 󰌹"
-          color: Color.accent
+          color: Commons.Color.accent
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true

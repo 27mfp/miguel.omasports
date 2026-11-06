@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "SportsModel.js" as Model
 
@@ -63,7 +64,7 @@ Column {
   readonly property int liveMatchesCount: liveGroup ? (liveGroup.matches || []).length : 0
   readonly property int upcomingMatchesCount: upcomingGroup ? (upcomingGroup.matches || []).length : 0
   readonly property int recentMatchesCount: recentGroup ? (recentGroup.matches || []).length : 0
-  readonly property int newsArticlesCount: (controller.leagueNews && controller.showNewsWire) ? controller.leagueNews.length : 0
+  readonly property int newsArticlesCount: (controller.leagueNews && controller.showNewsWire && !controller.antiSpoiler) ? controller.leagueNews.length : 0
   readonly property int totalMatchesCount: upcomingMatchesCount + recentMatchesCount + liveMatchesCount
 
   readonly property var subSectionOptions: {
@@ -127,7 +128,7 @@ Column {
       implicitHeight: setupEditBtn.implicitHeight
       visible: !controller.setupExpanded
 
-      Text {
+      PlainText {
         anchors.left: parent.left
         anchors.right: setupEditBtn.left
         anchors.rightMargin: Style.space(12)
@@ -159,7 +160,7 @@ Column {
         Accessible.role: Accessible.Button
         Accessible.name: setupEditBtn.tooltipText
         foreground: root.fgColor
-        accent: Color.accent
+        accent: Commons.Color.accent
         onClicked: controller.setupExpanded = true
       }
     }
@@ -209,7 +210,7 @@ Column {
             Accessible.role: Accessible.Button
             Accessible.name: drawerDoneBtn.tooltipText
             foreground: root.fgColor
-            accent: Color.accent
+            accent: Commons.Color.accent
             onClicked: controller.setupExpanded = false
           }
         }
@@ -234,7 +235,7 @@ Column {
             popupMinHeight: Style.space(180)
             hasCursor: controller.focusSection === controller.sectionIndex("leagues")
             foreground: root.fgColor
-            background: Color.popups.background
+            background: Commons.Color.popups.background
             onChanged: function(values) { controller.setSelectedLeagues(values) }
           }
         }
@@ -268,7 +269,7 @@ Column {
                 anchors.centerIn: parent
                 spacing: Style.space(6)
 
-                Text {
+                PlainText {
                   text: Model.leagueLabel(modelData)
                   color: root.fgColor
                   font.family: Style.font.family
@@ -276,7 +277,7 @@ Column {
                   font.bold: true
                 }
 
-                Text {
+                PlainText {
                   id: leagueChipX
                   text: "✕"
                   color: chipMouse.containsMouse ? root.urgentColor : theme.mutedColor(root.fgColor, 0.45)
@@ -329,7 +330,7 @@ Column {
               popupMinHeight: Style.space(200)
               hasCursor: controller.focusSection === controller.sectionIndex("teams")
               foreground: root.fgColor
-              background: Color.popups.background
+              background: Commons.Color.popups.background
               onChanged: function(value) { controller.toggleSelectedTeam(value) }
             }
           }
@@ -366,26 +367,26 @@ Column {
               radius: theme.subtleRadius(4)
               color: favChipMouse.containsMouse
                 ? Style.hoverFillFor(root.fgColor, root.urgentColor)
-                : Util.alpha(Color.accent, 0.12)
+                : Util.alpha(Commons.Color.accent, 0.12)
               border.width: 1
               border.color: favChipMouse.containsMouse
                 ? root.urgentColor
-                : Color.accent
+                : Commons.Color.accent
 
               Row {
                 id: favTeamChipRow
                 anchors.centerIn: parent
                 spacing: Style.space(6)
 
-                Text {
+                PlainText {
                   text: "★ " + controller.teamNameFor(modelData)
-                  color: Color.accent
+                  color: Commons.Color.accent
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
                 }
 
-                Text {
+                PlainText {
                   text: "✕"
                   color: favChipMouse.containsMouse ? root.urgentColor : theme.mutedColor(root.fgColor, 0.45)
                   font.family: Style.font.family
@@ -412,6 +413,7 @@ Column {
 
   // ---- Spotlight Featured Card ----------------------------------
   MatchSpotlight {
+    knownLogoKeys: controller.knownLogoKeys
     id: spotlightCard
     detailsExpanded: root.spotlightExpanded
     detailsFocused: controller.focusSection === controller.sectionIndex("spotlightDetails")
@@ -455,7 +457,7 @@ Column {
     implicitHeight: Math.max(schedTitle.implicitHeight, fixtureFilterScope.visible ? fixtureFilterScope.height : 0)
     visible: controller.hasData
 
-    Text {
+    PlainText {
       id: schedTitle
       anchors.left: parent.left
       anchors.right: fixtureFilterScope.left
@@ -486,7 +488,7 @@ Column {
         value: controller.fixtureFilterId
         options: controller.fixtureFilterOptions
         foreground: root.fgColor
-        background: Color.popups.background
+        background: Commons.Color.popups.background
         onChanged: function(val) { controller.fixtureFilterId = String(val || "all") }
       }
     }
@@ -533,10 +535,10 @@ Column {
           implicitHeight: Style.space(30)
           radius: theme.subtleRadius(4)
           color: isSelected
-            ? Util.alpha(Color.accent, 0.20)
+            ? Util.alpha(Commons.Color.accent, 0.20)
             : (pillMouse.containsMouse ? theme.mutedColor(root.fgColor, 0.06) : "transparent")
           border.width: keyboardFocused || activeFocus ? 2 : 1
-          border.color: keyboardFocused || activeFocus ? Color.accent : "transparent"
+          border.color: keyboardFocused || activeFocus ? Commons.Color.accent : "transparent"
 
           Behavior on color { ColorAnimation { duration: 120 } }
           Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -545,17 +547,17 @@ Column {
             anchors.centerIn: parent
             spacing: Style.space(4)
 
-            Text {
+            PlainText {
               anchors.verticalCenter: parent.verticalCenter
               text: modelData.icon
-              color: pillRect.isSelected ? Color.accent : theme.mutedColor(root.fgColor, 0.7)
+              color: pillRect.isSelected ? Commons.Color.accent : theme.mutedColor(root.fgColor, 0.7)
               font.pixelSize: Style.font.caption
             }
 
-            Text {
+            PlainText {
               anchors.verticalCenter: parent.verticalCenter
               text: modelData.label
-              color: pillRect.isSelected ? Color.accent : theme.mutedColor(root.fgColor, 0.75)
+              color: pillRect.isSelected ? Commons.Color.accent : theme.mutedColor(root.fgColor, 0.75)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: pillRect.isSelected
@@ -567,13 +569,13 @@ Column {
               implicitWidth: sectionCount.implicitWidth + Style.space(8)
               implicitHeight: sectionCount.implicitHeight + Style.space(2)
               radius: theme.subtleRadius(3)
-              color: pillRect.isSelected ? Util.alpha(Color.accent, 0.15) : theme.mutedColor(root.fgColor, 0.07)
+              color: pillRect.isSelected ? Util.alpha(Commons.Color.accent, 0.15) : theme.mutedColor(root.fgColor, 0.07)
 
-              Text {
+              PlainText {
                 id: sectionCount
                 anchors.centerIn: parent
                 text: modelData.count
-                color: pillRect.isSelected ? Color.accent : theme.mutedColor(root.fgColor, 0.65)
+                color: pillRect.isSelected ? Commons.Color.accent : theme.mutedColor(root.fgColor, 0.65)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
               }
@@ -594,7 +596,7 @@ Column {
 
   // Dedicated News View (expanded directly under switcher)
   NewsCard {
-    visible: controller.scheduleSubSection === "news" && Boolean(controller.leagueNews && controller.leagueNews.length > 0)
+    visible: !controller.antiSpoiler && controller.scheduleSubSection === "news" && Boolean(controller.leagueNews && controller.leagueNews.length > 0)
     fgColor: root.fgColor
     urgentColor: root.urgentColor
     activeSport: controller.activeSport
@@ -606,7 +608,7 @@ Column {
   Rectangle {
     width: parent.width
     implicitHeight: noNewsCol.implicitHeight + Style.space(24)
-    visible: controller.scheduleSubSection === "news" && root.newsArticlesCount === 0 && !controller.loading
+    visible: !controller.antiSpoiler && controller.scheduleSubSection === "news" && root.newsArticlesCount === 0 && !controller.loading
     radius: Style.cornerRadius
     color: theme.mutedColor(root.fgColor, 0.035)
     border.width: 1
@@ -617,7 +619,7 @@ Column {
       anchors.centerIn: parent
       spacing: Style.space(6)
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: "No breaking headlines"
         color: root.fgColor
@@ -626,7 +628,7 @@ Column {
         font.bold: true
       }
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: "No " + controller.activeSportMeta.label + " news right now."
         color: theme.mutedColor(root.fgColor, 0.55)
@@ -651,7 +653,7 @@ Column {
       anchors.centerIn: parent
       spacing: Style.space(6)
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: "No recent results"
         color: root.fgColor
@@ -660,7 +662,7 @@ Column {
         font.bold: true
       }
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: "Finished " + (controller.activeSport === "f1" ? "races" : "games") + " for your current selection appear here."
         color: theme.mutedColor(root.fgColor, 0.55)
@@ -693,18 +695,18 @@ Column {
         width: Style.space(40)
         height: Style.space(40)
         radius: width / 2
-        color: Util.alpha(Color.accent, 0.12)
+        color: Util.alpha(Commons.Color.accent, 0.12)
         border.width: 1
-        border.color: Util.alpha(Color.accent, 0.25)
+        border.color: Util.alpha(Commons.Color.accent, 0.25)
 
-        Text {
+        PlainText {
           anchors.centerIn: parent
           text: controller.activeSportIcon
           font.pixelSize: Style.font.heading
         }
       }
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: controller.activeSport === "f1" ? "No upcoming races" : "No upcoming games"
         color: root.fgColor
@@ -713,7 +715,7 @@ Column {
         font.bold: true
       }
 
-      Text {
+      PlainText {
         anchors.horizontalCenter: parent.horizontalCenter
         text: "Nothing scheduled in the next few days. Refresh (R) or change your selection."
         color: theme.mutedColor(root.fgColor, 0.55)
@@ -744,7 +746,7 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Text {
+      PlainText {
         width: parent.width
         text: controller.errorMessage
         color: root.fgColor
@@ -820,7 +822,7 @@ Column {
           visible: root.filteredMatchGroups.length > 1 || modelData.key !== "upcoming"
           implicitHeight: visible ? (groupLabel.implicitHeight + Style.space(4)) : 0
 
-          Text {
+          PlainText {
             id: groupLabel
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
@@ -849,6 +851,7 @@ Column {
           Repeater {
             model: modelData.matches || []
             delegate: MatchRow {
+              knownLogoKeys: controller.knownLogoKeys
               activeSport: controller.activeSport
               fgColor: root.fgColor
               urgentColor: root.urgentColor
@@ -873,19 +876,19 @@ Column {
             width: parent.width
             implicitHeight: Style.space(30)
             radius: theme.subtleRadius(4)
-            color: recentMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : theme.mutedColor(root.fgColor, 0.035)
+            color: recentMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Commons.Color.accent) : theme.mutedColor(root.fgColor, 0.035)
             border.width: 1
-            border.color: activeFocus || controller.focusSection === controller.sectionIndex("recentExpand") ? Color.accent : theme.mutedColor(root.fgColor, 0.12)
+            border.color: activeFocus || controller.focusSection === controller.sectionIndex("recentExpand") ? Commons.Color.accent : theme.mutedColor(root.fgColor, 0.12)
             Accessible.role: Accessible.Button
             Accessible.name: root.recentExpanded ? "Show fewer results" : "Show all loaded results"
             Accessible.onPressAction: root.toggleRecent()
             activeFocusOnTab: true
             Keys.onReturnPressed: root.toggleRecent()
             Keys.onSpacePressed: root.toggleRecent()
-            Text {
+            PlainText {
               anchors.centerIn: parent
               text: root.recentExpanded ? "Show fewer results ▴" : "Show " + (root.recentMatchesCount - 3) + " more results ▾"
-              color: Color.accent
+              color: Commons.Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
             }
@@ -906,11 +909,11 @@ Column {
             implicitHeight: expandUpcomingRow.implicitHeight + Style.space(12)
             radius: theme.subtleRadius(4)
             color: expandUpcomingMouse.containsMouse
-              ? Style.hoverFillFor(root.fgColor, Color.accent)
+              ? Style.hoverFillFor(root.fgColor, Commons.Color.accent)
               : theme.mutedColor(root.fgColor, 0.035)
             border.width: 1
             border.color: expandUpcomingMouse.containsMouse || activeFocus || controller.focusSection === controller.sectionIndex("expand")
-              ? Color.accent
+              ? Commons.Color.accent
               : theme.mutedColor(root.fgColor, 0.08)
 
             Behavior on color { ColorAnimation { duration: 120 } }
@@ -921,19 +924,19 @@ Column {
               anchors.centerIn: parent
               spacing: Style.space(6)
 
-              Text {
+              PlainText {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.upcomingExpanded ? "󰅃" : "󰅀"
-                color: Color.accent
+                color: Commons.Color.accent
                 font.pixelSize: Style.font.caption
               }
 
-              Text {
+              PlainText {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.upcomingExpanded
                   ? "Show fewer upcoming fixtures"
                   : ("Show " + (root.upcomingMatchesCount - 6) + " more upcoming fixtures")
-                color: Color.accent
+                color: Commons.Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -956,7 +959,7 @@ Column {
   // League Wire / Breaking News Card (shown at bottom in All mode)
   NewsCard {
     visible: (controller.scheduleSubSection === "all" || !controller.scheduleSubSection)
-      && controller.showNewsWire && Boolean(controller.leagueNews && controller.leagueNews.length > 0)
+      && !controller.antiSpoiler && controller.showNewsWire && Boolean(controller.leagueNews && controller.leagueNews.length > 0)
     fgColor: root.fgColor
     urgentColor: root.urgentColor
     activeSport: controller.activeSport
@@ -965,7 +968,7 @@ Column {
   }
 
   // Keep shortcuts after the content so fixtures remain the primary focus.
-  Text {
+  PlainText {
     width: parent.width
     visible: controller.hasData
     text: controller.focusSection === controller.sectionIndex("sections")

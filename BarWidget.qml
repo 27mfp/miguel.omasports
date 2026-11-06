@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // A lightweight, instant-access Omarchy status bar widget with live match ticker.
@@ -128,8 +129,8 @@ BarWidget {
             ? "#ef4444"
             : (root.favoriteLiveState === "tied"
                ? "#f59e0b"
-               : (root.bar ? root.bar.urgent : Color.urgent))))
-      : Color.accent
+               : (root.bar ? root.bar.urgent : Commons.Color.urgent))))
+      : Commons.Color.accent
     border.width: 1
     border.color: Qt.rgba(0, 0, 0, 0.35)
 

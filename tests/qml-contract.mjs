@@ -15,6 +15,10 @@ const visual = read("tests/visual.mjs")
 const interaction = read("tests/interaction.mjs")
 const networkProcess = read("NetworkProcess.qml")
 const secureProcess = read("SecureProcess.qml")
+for (const [file, component] of [["FixturesTab.qml", "MatchRow"], ["LiveTab.qml", "LiveRow"], ["StandingsTab.qml", "StandingsRow"]]) {
+  assert.match(read(file), new RegExp(`delegate: ${component} \\{\\s*knownLogoKeys: controller\\.knownLogoKeys`),
+    `${component} must receive cache publications from its controller`)
+}
 
 assert.match(panel, /function toggleRevealScore\(matchId\)/, "Panel must expose score reveal callback")
 assert.match(liveTab, /toggleRevealScore:\s*controller\.toggleRevealScore/, "LiveTab must wire score reveal callback")

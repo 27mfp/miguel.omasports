@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "SportsModel.js" as Model
 
@@ -33,9 +34,9 @@ Panel {
   readonly property var barIdentity: hostWidget || root
 
   // Theme colors
-  readonly property color fgColor: root.bar && root.bar.barForeground ? root.bar.barForeground : Color.foreground
-  readonly property color bgColor: Color.background
-  readonly property color urgentColor: root.bar && root.bar.urgent ? root.bar.urgent : Color.urgent
+  readonly property color fgColor: root.bar && root.bar.barForeground ? root.bar.barForeground : Commons.Color.foreground
+  readonly property color bgColor: Commons.Color.background
+  readonly property color urgentColor: root.bar && root.bar.urgent ? root.bar.urgent : Commons.Color.urgent
 
   readonly property string userHome: {
     var h = ""
@@ -73,6 +74,28 @@ Panel {
   property bool backgroundUpdates: (savedState && savedState.backgroundUpdates !== undefined)
     ? (savedState.backgroundUpdates === true)
     : (setting("backgroundUpdates", true) === true)
+  property bool notificationBaselinePending: true
+  onBackgroundUpdatesChanged: if (root.stateLoaded) root.reconcileMonitoring()
+
+  function monitoringAllowed() {
+    return root.opened || root.backgroundUpdates
+  }
+
+  function reconcileMonitoring() {
+    if (!monitoringAllowed()) {
+      // Invalidate deferred callbacks as well as stopping the current jobs.
+      requestSerial++
+      stopNetworkWorkers()
+      cancelPendingNotifications()
+      refreshTimer.stop()
+      loading = false
+      notificationBaselinePending = true
+      return
+    }
+    scheduleNextPoll()
+    if (stateLoaded && !loading && (notificationBaselinePending || needsAutoRefresh() || allMatches.length === 0))
+      refresh()
+  }
 
   function toggleBackgroundUpdates() {
     backgroundUpdates = !backgroundUpdates
@@ -144,6 +167,10 @@ Panel {
   property var selectedTeamIds: []
   property string standingsLeagueId: "47"
   property bool antiSpoiler: false
+  onAntiSpoilerChanged: if (antiSpoiler) {
+    revealedMatchIds = ({})
+    cancelPendingNotifications()
+  }
   property bool enableNotifications: true
   property var revealedMatchIds: ({})
   property var lastSeenMatches: ({})
@@ -280,6 +307,7 @@ Panel {
   // Crest disk-cache bookkeeping: keys already on disk are never re-downloaded
   property var knownLogoKeys: ({})
   property var pendingLogoKeys: []
+  property bool tearingDown: false
   property bool logoScanDone: false
 
   readonly property bool hasData: allMatches.length > 0
@@ -682,7 +710,7 @@ Panel {
     return false
   }
   readonly property string favoriteLiveState: {
-    if (!favoriteTeamLive) return ""
+    if (root.antiSpoiler || !favoriteTeamLive) return ""
     for (var i = 0; i < teamMatches.length; i++) {
       var m = teamMatches[i]
       if (m && m.status === "live") {
@@ -710,7 +738,7 @@ Panel {
     var first = teamMatches[0]
     var status = Model.matchStatusText(first)
     var tLabel = first.home && Model.isFollowedTeam(first.home.id, selectedTeamIds) ? (first.home.shortName || first.home.name) : (first.away ? (first.away.shortName || first.away.name) : (selectedTeamName || (first.home ? first.home.name : "")))
-    return tLabel + " · " + status + (first.scoreText && first.status !== "upcoming" ? " " + first.scoreText : "")
+    return tLabel + " · " + status + (root.antiSpoiler && first.status !== "upcoming" ? " · result hidden" : (first.scoreText && first.status !== "upcoming" ? " " + first.scoreText : ""))
   }
 
   readonly property var refreshIntervalOptions: Model.refreshIntervalOptions()
@@ -791,10 +819,6 @@ Panel {
 
   function toggleSpoiler() {
     antiSpoiler = !antiSpoiler
-    if (antiSpoiler) {
-      // Re-masking must not leave per-match reveals from the previous session
-      revealedMatchIds = {}
-    }
     savedState.antiSpoiler = antiSpoiler
     persistState()
   }
@@ -991,13 +1015,12 @@ Panel {
       setCenterHoverRevealSuppressed(true)
       if (!root.routedExplicitly && root.liveCount > 0 && root.tabIndex === 0) root.tabIndex = 1
       root.routedExplicitly = false
-      scheduleNextPoll()
-      if (root.stateLoaded && !root.loading && (needsAutoRefresh() || root.allMatches.length === 0)) root.refresh()
-      else if (!root.loading && detailQueue.length > 0) Qt.callLater(root.nextDetail)
+      reconcileMonitoring()
+      if (!root.loading && detailQueue.length > 0) Qt.callLater(root.nextDetail)
     } else {
       setCenterHoverRevealSuppressed(false)
       openedFromHotkey = false
-      scheduleNextPoll()
+      reconcileMonitoring()
     }
   }
 
@@ -1087,7 +1110,7 @@ Panel {
     if (savedState.backgroundUpdates !== undefined) {
       backgroundUpdates = savedState.backgroundUpdates === true
     } else {
-      backgroundUpdates = true
+      backgroundUpdates = setting("backgroundUpdates", true) === true
     }
     if (savedState.showBarTicker !== undefined) {
       showBarTicker = savedState.showBarTicker === true
@@ -1100,12 +1123,12 @@ Panel {
 
     if (fixturesTab && fixturesTab.leaguePicker) fixturesTab.leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
-    if (!ownWrite && (root.opened || root.backgroundUpdates || root.enableNotifications)) {
+    if (!ownWrite && monitoringAllowed()) {
       espnRetryCount = 0
       f1RetryCount = 0
       root.startRound()
     } else {
-      root.scheduleNextPoll()
+      root.reconcileMonitoring()
     }
   }
 
@@ -1166,6 +1189,7 @@ Panel {
 
   function setNotificationPreference(enabled) {
     enableNotifications = Boolean(enabled)
+    notificationBaselinePending = true
     if (!enableNotifications) cancelPendingNotifications()
     savedState.notifications = enableNotifications
     persistState()
@@ -1208,7 +1232,7 @@ Panel {
     if (item.urgency) args.push("-u", item.urgency)
     // "--" ends option parsing: provider-derived strings must never be
     // mistaken for flags even when they start with a dash.
-    args.push("--", item.title, item.body)
+    args.push("--", item.title, Model.escapeNotificationMarkup(item.body))
     notifierProc.command = secureToolCommand("notify-send", args)
     notifierProc.running = true
   }
@@ -1224,6 +1248,10 @@ Panel {
   }
 
   function checkScoreNotifications() {
+    if (notificationBaselinePending) {
+      lastSeenMatches = ({})
+      notificationBaselinePending = false
+    }
     var result = Model.diffMatchNotifications(allMatches, lastSeenMatches, {
       enabled: root.enableNotifications,
       activeSport: root.activeSport,
@@ -1262,7 +1290,7 @@ Panel {
     if (fixturesTab && fixturesTab.leaguePicker) fixturesTab.leaguePicker.values = next
     ensureStandingsSelection()
     persistState()
-    if (root.opened || root.backgroundUpdates || root.enableNotifications) root.forceRefresh()
+    if (monitoringAllowed()) root.forceRefresh()
   }
 
   function toggleSelectedTeam(value) {
@@ -1375,6 +1403,10 @@ Panel {
   }
 
   function startRound() {
+    if (!monitoringAllowed()) {
+      reconcileMonitoring()
+      return
+    }
     requestSerial++
     loading = true
     errorMessage = ""
@@ -1408,6 +1440,8 @@ Panel {
   function stopNetworkWorkers() {
     retryDelay.stop()
     teamRetryDelay.stop()
+    espnRetryDelay.stop()
+    f1RetryDelay.stop()
     teamFetchActive = false
     teamFetchQueue = []
     teamRetryId = ""
@@ -1422,8 +1456,7 @@ Panel {
                  workerNews, workerTeam,
                  detailProcA, detailProcB, detailProcC,
                  workerA, workerB, workerC, workerD,
-                 logoScanProc, logoEvictProc, logoCacheProc,
-                 notificationProbe, notifierProc, matchOpener]
+                 logoCacheProc, notifierProc]
     for (var i = 0; i < procs.length; i++) {
       var w = procs[i]
       if ("handled" in w) w.handled = true
@@ -1514,6 +1547,7 @@ Panel {
 
   // ---- Football Round (FotMob) ---------------------------------------------
   function startFootballRound() {
+    if (!monitoringAllowed()) return
     var workers = [workerA, workerB, workerC, workerD]
     for (var i = 0; i < workers.length; i++) {
       if (workers[i].running) workers[i].hardStop()
@@ -1566,6 +1600,7 @@ Panel {
   }
 
   function beginTeamPageFetch(ids, isRound) {
+    if (!monitoringAllowed()) return
     if (workerTeam.running) workerTeam.hardStop()
     workerTeam.handled = true
     teamRetryDelay.stop()
@@ -1584,6 +1619,7 @@ Panel {
   // Kept as the public entry point used when a favorite changes. It now
   // refreshes every selected football team rather than only the first one.
   function fetchFootballTeamPage() {
+    if (!monitoringAllowed()) return
     if (selectedTeamIds.length === 0) return
     // A selection change while a full round is in flight must invalidate the
     // old league/team generation together; otherwise its late callback can
@@ -1599,6 +1635,7 @@ Panel {
   }
 
   function fetchNextFootballTeamPage() {
+    if (!monitoringAllowed()) return
     if (!teamFetchActive || workerTeam.running) return
     if (teamFetchIndex >= teamFetchQueue.length) {
       teamFetchActive = false
@@ -1676,6 +1713,7 @@ Panel {
   }
 
   function startFootballWorker(w, leagueId) {
+    if (!monitoringAllowed()) return
     w.handled = false
     w.leagueId = String(leagueId)
     w.serial = root.requestSerial
@@ -1691,6 +1729,7 @@ Panel {
   }
 
   function pumpFootball() {
+    if (!monitoringAllowed()) return
     if (!root.loading || activeSport !== "football") return
     var workers = [workerA, workerB, workerC, workerD]
     var anyBusy = teamFetchActive || workerTeam.running
@@ -1799,6 +1838,7 @@ Panel {
 
   // ---- ESPN Scoreboard & Standings (NBA, NFL, MLB, NHL) ---------------------
   function startEspnRound(espnPath, sportCode, defaultName) {
+    if (!monitoringAllowed()) return
     espnSportPath = String(espnPath)
     espnSportCode = String(sportCode)
     espnDefaultName = String(defaultName)
@@ -1857,6 +1897,7 @@ Panel {
   }
 
   function fetchNextEspnDay(serial) {
+    if (!monitoringAllowed()) return
     if (serial !== root.requestSerial || espnDayQueue.length === 0 || workerScoreboard.running) return
     var queue = espnDayQueue.slice()
     var day = queue.shift()
@@ -1982,6 +2023,7 @@ Panel {
 
   // ---- Formula 1 Round (Jolpica / Ergast) ----------------------------------
   function startF1Round() {
+    if (!monitoringAllowed()) return
     workerF1Calendar.handled = false
     workerF1Calendar.gotData = false
     workerF1Calendar.serial = root.requestSerial
@@ -2001,6 +2043,7 @@ Panel {
   }
 
   function f1EnsurePodium() {
+    if (!monitoringAllowed()) return
     if (f1Podium && f1Podium.length >= 3) {
       workerF1Podium.handled = true
       workerF1Podium.gotData = true
@@ -2025,6 +2068,7 @@ Panel {
   }
 
   function f1EnsurePole() {
+    if (!monitoringAllowed()) return
     if (f1Pole) {
       workerF1Pole.handled = true
       workerF1Pole.gotData = true
@@ -2049,7 +2093,8 @@ Panel {
   }
 
   function fetchLeagueNews() {
-    if (!root.showNewsWire) return
+    if (!monitoringAllowed()) return
+    if (!root.showNewsWire || root.antiSpoiler) return
     if (workerNews.running) return
     var url = ""
     if (activeSport === "football") url = "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news"
@@ -2078,6 +2123,7 @@ Panel {
   }
 
   function f1EnsureStandings(group) {
+    if (!monitoringAllowed()) return
     var w = group === "Constructors" ? workerF1Constructors : workerF1Drivers
     var fetchedAt = group === "Constructors" ? f1ConstructorsFetchedAt : f1DriversFetchedAt
     var age = Date.now() - Number(fetchedAt || 0)
@@ -2097,6 +2143,7 @@ Panel {
   }
 
   function f1EnsureWinners() {
+    if (!monitoringAllowed()) return
     var age = Date.now() - Number(f1WinnersFetchedAt || 0)
     if (f1WinnersFetchedAt > 0 && age < Model.F1_RESULTS_REFRESH_MS) {
       workerF1Winners.handled = true
@@ -2221,6 +2268,7 @@ Panel {
   SecureProcess {
     id: logoEvictProc
     onExited: function(exitCode) {
+      if (root.tearingDown) return
       if (exitCode !== 0) {
         console.warn("omasports: logo eviction exited with code", exitCode)
       }
@@ -2249,6 +2297,7 @@ Panel {
   }
 
   function downloadMissingLogos() {
+    if (!monitoringAllowed()) return
     if (!root.logoScanDone || logoCacheProc.running) return
     var items = []
     var seen = {}
@@ -2318,6 +2367,7 @@ Panel {
 
   // ---- Football Detail Enrichment ------------------------------------------
   function startDetailFetch() {
+    if (!monitoringAllowed()) return
     if (activeSport !== "football") return
     var wanted = []
     var live = Model.liveMatches(allMatches, matchDetails, root.mockModeOverride ? root.nowMs : Date.now())
@@ -2335,7 +2385,7 @@ Panel {
   }
 
   function nextDetail() {
-    if (!root.opened && !root.backgroundUpdates && !root.enableNotifications) return
+    if (!monitoringAllowed()) return
     var procs = [detailProcA, detailProcB, detailProcC]
     for (var p = 0; p < procs.length; p++) {
       var proc = procs[p]
@@ -2570,7 +2620,10 @@ Panel {
   // Without this, in-flight workers keep writing to the on-disk crest cache
   // and dispatching desktop notifications after the panel is gone.
   Component.onDestruction: {
+    root.tearingDown = true
     stopNetworkWorkers()
+    for (var localWorker of [logoScanProc, logoEvictProc, notificationProbe, matchOpener])
+      if (localWorker.running) localWorker.hardStop()
     if (stateReadProc.running) stateReadProc.hardStop()
     if (stateWriteProc.running) stateWriteProc.hardStop()
     refreshTimer.stop()
@@ -2774,7 +2827,7 @@ Panel {
     id: retryDelay
     interval: Model.RETRY_DELAY_FOTMOB_F1_MS
     predicate: function() {
-      return root.loading && pendingRetryIds.length > 0
+      return monitoringAllowed() && root.loading && pendingRetryIds.length > 0
     }
     callback: function() {
       roundQueue = roundQueue.concat(pendingRetryIds)
@@ -2787,7 +2840,7 @@ Panel {
     id: teamRetryDelay
     interval: Model.RETRY_DELAY_FOTMOB_F1_MS
     predicate: function() {
-      return root.teamFetchActive
+      return monitoringAllowed() && root.teamFetchActive
         && root.teamRetrySerial === root.requestSerial
         && root.teamRetryId !== ""
     }
@@ -2802,7 +2855,7 @@ Panel {
     id: espnRetryDelay
     interval: Model.RETRY_DELAY_ESPN_MS
     predicate: function() {
-      return root.loading
+      return monitoringAllowed() && root.loading
         && root.activeSport === root.espnSportCode
         && root.requestSerial === root.espnRetrySerial
     }
@@ -2815,7 +2868,7 @@ Panel {
     id: f1RetryDelay
     interval: Model.RETRY_DELAY_FOTMOB_F1_MS
     predicate: function() {
-      return root.loading
+      return monitoringAllowed() && root.loading
         && root.activeSport === "f1"
         && root.requestSerial === root.f1RetrySerial
     }
@@ -2868,7 +2921,7 @@ Panel {
     // Followed team is playing live
     if (hasLiveFollowedMatch()) return true
     // Panel is open or background monitoring active with live events
-    if ((root.opened || root.backgroundUpdates || root.enableNotifications) && root.liveCount > 0) return true
+    if (monitoringAllowed() && root.liveCount > 0) return true
     return false
   }
 
@@ -2880,11 +2933,7 @@ Panel {
   }
 
   function scheduleNextPoll() {
-    var wantRunning = root.opened
-      || root.backgroundUpdates
-      || root.enableNotifications
-      || root.hasLiveFollowedMatch()
-      || root.liveCount > 0
+    var wantRunning = monitoringAllowed()
     fastPolling = wantRunning && (root.hasLiveFollowedMatch() || shouldFastPoll())
     if (!wantRunning) {
       refreshTimer.stop()
@@ -2916,11 +2965,7 @@ Panel {
   // before Qt honors the new value. stop()/start() is the documented way to
   // apply a fresh interval cleanly (used by scheduleNextPoll above).
   function setRefreshTimerInterval(ms) {
-    var wantRunning = root.opened
-      || root.backgroundUpdates
-      || root.enableNotifications
-      || root.hasLiveFollowedMatch()
-      || root.liveCount > 0
+    var wantRunning = monitoringAllowed()
     var intervalChanged = refreshTimer.interval !== ms
     if (intervalChanged) {
       refreshTimer.stop()

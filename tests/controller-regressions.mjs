@@ -23,7 +23,7 @@ function notifications() {
     notificationPacingTimer: { running: true, stop() { this.running = false } },
     Model: { resetMockClock() {}, arrayFrom: x => Array.from(x), sports: () => [{ value: "mlb" }, { value: "nba" }] },
     savedState: {}, selectedTeamIds: [], activeSport: "mlb",
-    persistState() {}, scheduleNextPoll() {}, restoreSportSelections() {},
+    notificationBaselinePending: false, persistState() {}, scheduleNextPoll() {}, restoreSportSelections() {},
     ensureStandingsSelection() {}, forceRefresh() {},
     secureToolCommand: (tool, args) => [tool, ...args]
   })
@@ -150,4 +150,113 @@ test("stable live/spotlight delegates resolve fresh match data by identity", () 
     assert.equal(result, latest.a)
     assert.deepEqual(result.linescores.home, [1, 0])
   }
+})
+
+test("notifications and live events cannot override the background preference", () => {
+  for (const opened of [false, true]) for (const backgroundUpdates of [false, true]) {
+    const state = load(["monitoringAllowed", "scheduleNextPoll", "setRefreshTimerInterval"], {
+      opened, backgroundUpdates, enableNotifications: true, liveCount: 4,
+      fastPolling: false, slowRefreshMs: 300000,
+      hasLiveFollowedMatch: () => true, shouldFastPoll: () => true, livePollIntervalMs: () => 15000,
+      refreshTimer: { running: true, interval: 60000,
+        stop() { this.running = false }, start() { this.running = true } }
+    })
+    state.scheduleNextPoll()
+    assert.equal(state.refreshTimer.running, opened || backgroundUpdates)
+  }
+})
+
+test("pausing cancels work, invalidates callbacks and preserves displayed data", () => {
+  let stopped = 0, canceled = 0, refreshes = 0
+  const matches = [{ id: "retained" }]
+  const state = load(["monitoringAllowed", "reconcileMonitoring", "startRound"], {
+    opened: false, backgroundUpdates: false, enableNotifications: true,
+    requestSerial: 12, loading: true, allMatches: matches, stateLoaded: true,
+    notificationBaselinePending: false,
+    stopNetworkWorkers() { stopped++ }, cancelPendingNotifications() { canceled++ },
+    refreshTimer: { stop() {} }, scheduleNextPoll() {},
+    needsAutoRefresh: () => false, refresh() { refreshes++ }
+  })
+  state.reconcileMonitoring()
+  assert.equal(stopped, 1)
+  assert.equal(canceled, 1)
+  assert.equal(state.requestSerial, 13)
+  assert.equal(state.loading, false)
+  assert.equal(state.allMatches, matches)
+  assert.equal(state.notificationBaselinePending, true)
+  state.startRound() // IPC refresh while closed cannot restart the workers.
+  assert.equal(refreshes, 0)
+  state.opened = true
+  state.reconcileMonitoring()
+  assert.equal(refreshes, 1)
+})
+
+test("paused deferred jobs cannot fetch details, news, standings or crests", () => {
+  const names = ["startFootballRound", "startFootballWorker", "pumpFootball", "beginTeamPageFetch",
+    "fetchFootballTeamPage", "fetchNextFootballTeamPage", "startEspnRound", "fetchNextEspnDay",
+    "startF1Round", "f1EnsurePodium", "f1EnsurePole", "f1EnsureStandings", "f1EnsureWinners",
+    "fetchLeagueNews", "downloadMissingLogos", "startDetailFetch", "nextDetail"]
+  const state = load(["monitoringAllowed", ...names], {
+    opened: false, backgroundUpdates: false, enableNotifications: true
+  })
+  for (const name of names) state[name]() // No worker dependencies should be touched.
+})
+
+test("resuming notifications establishes a fresh baseline before reporting changes", () => {
+  let previous, alerts = 0
+  const state = load(["checkScoreNotifications"], {
+    notificationBaselinePending: true, enableNotifications: true, activeSport: "football",
+    selectedTeamIds: ["home"], antiSpoiler: true, nowMs: 100,
+    allMatches: [{ id: "game", homeScore: 3 }], lastSeenMatches: { game: { homeScore: 0 } },
+    Model: { arrayFrom: x => x, diffMatchNotifications(matches, seen) {
+      previous = seen
+      return { notifications: [], nextSeen: { game: { homeScore: matches[0].homeScore } } }
+    } }, sendDesktopNotification() { alerts++ }
+  })
+  state.checkScoreNotifications()
+  assert.equal(Object.keys(previous).length, 0)
+  assert.equal(state.lastSeenMatches.game.homeScore, 3)
+  assert.equal(state.notificationBaselinePending, false)
+  assert.equal(alerts, 0)
+})
+
+test("anti-spoiler neutralizes the bar outcome and conceals the result summary", () => {
+  const state = {
+    antiSpoiler: true, favoriteTeamLive: true, selectedTeamIds: ["home"], nowMs: 100,
+    teamMatches: [{ id: "game", status: "live", scoreText: "3–0", home: { id: "home", name: "Home" }, away: { id: "away", name: "Away" } }],
+    lastUpdated: new Date(100), Model: { matchLiveStateForTeams: () => "leading", interpolateLiveTime: () => "70'",
+      matchStatusText: () => "FT", isFollowedTeam: () => true }
+  }
+  state.root = state
+  vm.createContext(state)
+  function evaluate(name) {
+    const body = panel.match(new RegExp(`readonly property string ${name}: \\{([\\s\\S]*?)^  \\}`, "m"))[1]
+    return vm.runInContext(`(function() {${body}})()`, state)
+  }
+  assert.equal(evaluate("favoriteLiveState"), "")
+  assert.doesNotMatch(evaluate("favoriteSummaryText"), /3–0/)
+  state.favoriteTeamLive = false
+  state.teamMatches[0].status = "finished"
+  assert.match(evaluate("favoriteSummaryText"), /result hidden/)
+  assert.doesNotMatch(evaluate("favoriteSummaryText"), /3–0/)
+  state.antiSpoiler = false
+  state.favoriteTeamLive = true
+  state.teamMatches[0].status = "live"
+  assert.equal(evaluate("favoriteLiveState"), "leading")
+})
+
+test("canceling network rounds preserves local discovery and an explicit link opener", () => {
+  const state = {
+    retryDelay: { stop() {} }, teamRetryDelay: { stop() {} },
+    espnRetryDelay: { stop() {} }, f1RetryDelay: { stop() {} }
+  }
+  const workers = panel.match(/var procs = \[([\s\S]*?)\]/)[1].match(/\b\w+\b/g)
+  for (const name of [...workers, "logoScanProc", "logoEvictProc", "notificationProbe", "matchOpener"])
+    state[name] = { running: true, handled: false, hardStop() { this.running = false } }
+  load(["stopNetworkWorkers"], state)
+  state.stopNetworkWorkers()
+  assert.equal(state.workerScoreboard.running, false)
+  assert.equal(state.logoCacheProc.running, false)
+  for (const name of ["logoScanProc", "logoEvictProc", "notificationProbe", "matchOpener"])
+    assert.equal(state[name].running, true, name)
 })
