@@ -1,20 +1,22 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Commons as Commons
 import "SportsModel.js" as Model
 
-// High-performance team badge: instant local disk cache, remote fallback while
-// the cache is cold, and a circular monogram when neither is available.
+// Read only crests published by the bounded, validated cache helper.
+// A cold or failed cache shows a monogram without issuing an Image request.
 Item {
   id: root
 
-  property string source: ""
+  property string source: "" // Provider metadata; never used as an Image URL.
+  property var knownLogoKeys: ({})
   property string teamId: ""
   property string teamName: ""
   property string abbr: ""
   property string sport: "football"
-  property color accent: Color.accent
-  property color foreground: Color.foreground
+  property color accent: Commons.Color.accent
+  property color foreground: Commons.Color.foreground
   property real crestSize: Style.space(22)
   property bool dimmed: false
 
@@ -39,23 +41,23 @@ Item {
   // Cache keys are resolved by Model.crestCacheKey so the panel's background
   // downloader and this component always agree on the same file name.
   readonly property string cacheKey: Model.crestCacheKey(sport, teamId, abbr)
-  readonly property string localCachePath: cacheKey !== ""
+  readonly property string localCachePath: cacheKey !== "" && root.knownLogoKeys[cacheKey] === true
     ? "file://" + userHome + "/.cache/omarchy-omasports/logos/" + cacheKey + ".png"
     : ""
 
   readonly property string monogramText: Model.monogramText(root.abbr, root.teamName)
 
-  // Circular Monogram Fallback (visible until local or remote image is ready)
+  // Monogram until a validated local crest becomes available.
   Rectangle {
     id: fallbackMonogram
     anchors.fill: parent
     radius: width / 2
-    visible: localImg.status !== Image.Ready && remoteImg.status !== Image.Ready
+    visible: localImg.status !== Image.Ready
     color: Util.alpha(root.accent, 0.16)
     border.width: 1
     border.color: Util.alpha(root.accent, 0.45)
 
-    Text {
+    PlainText {
       anchors.centerIn: parent
       text: root.monogramText
       color: root.foreground
@@ -82,21 +84,4 @@ Item {
     Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
   }
 
-  // Remote fallback for first runs before the disk cache is populated
-  Image {
-    id: remoteImg
-    anchors.fill: parent
-    // Keep a warm local cache from triggering a second CDN request. The
-    // remote fallback starts only after the local file is absent or fails.
-    source: (root.localCachePath === "" || localImg.status === Image.Error)
-      && Model.isTrustedCrestUrl(root.source, root.sport) ? root.source : ""
-    fillMode: Image.PreserveAspectFit
-    asynchronous: true
-    cache: true
-    smooth: true
-    sourceSize: Qt.size(root.crestSize * 2, root.crestSize * 2)
-    visible: localImg.status !== Image.Ready && status === Image.Ready
-    opacity: visible ? 1.0 : 0.0
-    Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-  }
 }

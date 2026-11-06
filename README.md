@@ -9,7 +9,7 @@
     <a href="#development">Development</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/version-1.5.0-38bdf8" alt="Version 1.5.0">
+    <img src="https://img.shields.io/badge/version-1.5.1-38bdf8" alt="Version 1.5.1">
     <img src="https://img.shields.io/badge/platform-Linux-f59e0b" alt="Linux">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license"></a>
   </p>
@@ -36,6 +36,10 @@ It supports football, basketball, Formula 1, American football, baseball, and ic
 - **Match detail cards** — See broadcast information, venues, leaders, form, events, possession, and period scores when the provider supplies them.
 - **Keyboard and IPC control** — Navigate without a mouse or script the panel with `omarchy-shell`.
 - **Resilient caching** — Team crests use a local cache with remote and monogram fallbacks.
+
+### New in 1.5.1
+
+Omarchy 4.5 / Qt 6.12 palette compatibility, literal provider text, broader anti-spoiler coverage and a background-update preference that also stops live polling and retries. See [release verification](docs/release-checklist.md) for the tested scope.
 
 ### New in 1.5.0
 
@@ -80,12 +84,16 @@ omarchy plugin remove miguel.omasports
 
 The panel’s settings screen controls notifications, background polling, anti-spoiler mode, refresh cadence, followed teams, the bar ticker, the spotlight card, and the league news wire.
 
+With **Update in the background** off, closing the panel stops automatic score, detail, news and crest requests, including retries. Alerts then update only while the panel is open. Reopening establishes a fresh baseline so goals scored while paused are not replayed as new alerts.
+
+Anti-spoiler also conceals the bar’s outcome colors, F1 winners and podiums, and recent form for hidden matches. The news wire stays hidden because headlines can reveal results. Crests appear from the validated local cache; unavailable crests use a monogram.
+
 The plugin also exposes these manifest settings:
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `showBarTicker` | `true` | Show a followed team’s live score in the bar. |
-| `backgroundUpdates` | `true` | Keep score data fresh while the panel is closed. |
+| `backgroundUpdates` | `true` | Fetch scores, news and crests while closed; when off, alerts update only while open. |
 | `panelPosition` | `auto` | Choose automatic, icon-anchored, or centered panel placement. |
 
 Preferences are stored locally at:

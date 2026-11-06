@@ -104,8 +104,7 @@ async function run() {
     route: ipc("getRoute") || "fixtures",
     section: ipc("getScheduleSection") || "all",
     antiSpoiler: bool(ipc("getAntiSpoiler")),
-    // Read these as part of the snapshot for diagnostics; this suite does not
-    // mutate them, but keeping them visible makes future additions auditable.
+    // Private-host polling checks restore these preferences afterward.
     notifications: bool(ipc("getNotifications")),
     backgroundUpdates: bool(ipc("getBackgroundUpdates")),
     barTicker: bool(ipc("getBarTicker")),
@@ -204,6 +203,34 @@ async function run() {
       assert.equal(bool(ipc("getSpotlight")), spotlight)
     })
     if (process.env.OMASPORTS_PRIVATE_UI_TEST === "1") {
+      await test("Closed panels pause live polling even with notifications enabled", async () => {
+        ipc("open")
+        ipc("setNotifications", "true")
+        await sleep(350)
+        if (bool(ipc("getBackgroundUpdates"))) ipc("toggleBackgroundUpdates")
+        await sleep(350)
+        ipc("close")
+        await sleep(500)
+        const paused = JSON.parse(ipc("testMonitoringState"))
+        assert.equal(paused.polling, false)
+        assert.equal(paused.retries, false)
+        assert.equal(paused.loading, false)
+        assert.equal(paused.baselinePending, true)
+        ipc("testPausedCallbacks")
+        await sleep(500)
+        const later = JSON.parse(ipc("testMonitoringState"))
+        assert.equal(later.serial, paused.serial, "deferred requests restarted a paused round")
+        assert.equal(later.loading, false)
+        ipc("open")
+        await sleep(500)
+        const resumed = JSON.parse(ipc("testMonitoringState"))
+        assert.equal(resumed.polling, true)
+        assert.ok(resumed.serial > paused.serial, "opening did not request a fresh round")
+        assert.equal(resumed.baselinePending, false)
+        ipc("setNotifications", String(initial.notifications))
+        if (bool(ipc("getBackgroundUpdates")) !== initial.backgroundUpdates) ipc("toggleBackgroundUpdates")
+        await sleep(350)
+      })
       await test("Keyboard cursor scrolls long fixtures while the header stays fixed", async () => {
         ipc("sport", "football")
         await sleep(350)
@@ -258,6 +285,9 @@ async function run() {
     attempt("recent expansion", () => ipc("setRecentExpanded", String(initial.recentExpanded)))
     attempt("close", () => ipc("close"))
     await sleep(400)
+    attempt("notifications", () => ipc("setNotifications", String(initial.notifications)))
+    attempt("background updates", () => restoreToggle("getBackgroundUpdates", "toggleBackgroundUpdates", initial.backgroundUpdates))
+    await sleep(350)
     attempt("anti-spoiler", () => restoreToggle("getAntiSpoiler", "toggleSpoiler", initial.antiSpoiler))
     attempt("bar ticker", () => restoreToggle("getBarTicker", "toggleBarTicker", initial.barTicker))
     attempt("spotlight", () => restoreToggle("getSpotlight", "toggleSpotlight", initial.spotlight))

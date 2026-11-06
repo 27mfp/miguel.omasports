@@ -13,7 +13,8 @@ const directory = mkdtempSync(join(tmpdir(), "omasports-ui-session-"))
 const shell = join(directory, "shell")
 const home = join(directory, "private-home")
 const args = process.argv.slice(2)
-const palette = args.find(arg => arg.startsWith("--palette="))?.slice(10)
+// Keep regression captures independent of the desktop's current theme.
+const palette = args.find(arg => arg.startsWith("--palette="))?.slice(10) || "dark"
 if (palette && !["light", "dark"].includes(palette)) throw new Error("Palette must be light or dark")
 const ref = args.find(arg => arg.startsWith("--source-ref="))?.slice(13)
 const separator = args.indexOf("--")
@@ -65,6 +66,8 @@ try {
   if (!panelSource.includes("function getPanelGeometry")) panelSource = panelSource.replace("    function getUiRevision", '    function getPanelGeometry(): string {\n      return JSON.stringify({ x: panel.cardOrigin.x, y: panel.cardOrigin.y, width: panel.contentWidth, height: panel.contentHeight })\n    }\n' + "    function getUiRevision")
   panelSource = panelSource.replace(/(?:audit-ui-20261008-v2|native-ui-20261008-v3)/g, "native-ui-20261008-v4")
   panelSource = panelSource.replace("    function getUiRevision", `    function testFocusLastRow(): void { root.focusSection = root.focusableControlCount() - 1 }
+    function testMonitoringState(): string { return JSON.stringify({ serial: root.requestSerial, loading: root.loading, baselinePending: root.notificationBaselinePending, polling: refreshTimer.running, retries: retryDelay.running || teamRetryDelay.running || espnRetryDelay.running || f1RetryDelay.running }) }
+    function testPausedCallbacks(): void { root.startFootballRound(); root.fetchFootballTeamPage(); root.fetchNextFootballTeamPage(); root.pumpFootball(); root.startEspnRound(); root.fetchNextEspnDay(); root.startF1Round(); root.f1EnsurePodium(); root.f1EnsurePole(); root.f1EnsureStandings(); root.f1EnsureWinners(); root.fetchLeagueNews(); root.downloadMissingLogos(); root.startDetailFetch(); root.nextDetail(); }
     function testScrollTo(y: real): void { scroll.contentY = Math.max(0, Math.min(y, scroll.contentHeight - scroll.height)) }
     function testScrollState(): string { return JSON.stringify({ y: scroll.contentY, headerY: panelHeader.y, height: scroll.height }) }
     function testChooseSport(value: string): void { panelHeader.sportPicker.value = value; panelHeader.sportPicker.changed(value) }
@@ -82,8 +85,8 @@ try {
   const original = "    entry = pwd.getpwuid(os.geteuid())\n    path = os.path.abspath(entry.pw_dir)"
   if (!source.includes(original)) throw new Error("Private-home staging contract changed")
   writeFileSync(helper, source.replace(original, `    path = ${JSON.stringify(home)}`))
-  writeFileSync(join(shell, "shell.qml"), `import QtQuick\nimport Quickshell\nimport qs.Commons\nimport "sports" as Sports\nShellRoot {\n  Sports.Panel {\n    id: sports\n    suppressFocus: true\n    Timer { interval: 700; running: true; onTriggered: { ${palette ? `Color.foreground = "${palette === "light" ? "#242a32" : "#c7d0dd"}"; Color.background = "${palette === "light" ? "#f4f2ee" : "#252a33"}"; Color.accent = "${palette === "light" ? "#245f93" : "#64b8ef"}"; Color.urgent = "${palette === "light" ? "#bb3944" : "#ef777e"}"; Color.shellValues = Object.assign({}, Color.shellValues, {"popups.background": Color.background.toString(), "popups.text": Color.foreground.toString(), "popups.border": Color.accent.toString()});` : ""} sports.setMockModeForTesting(true); sports.startRound(); } }\n  }\n}\n`)
-  const env = { ...process.env, OMARCHY_PATH: directory, OMASPORTS_MOCK: "1", OMASPORTS_PRIVATE_UI_TEST: "1" }
+  writeFileSync(join(shell, "shell.qml"), `import QtQuick\nimport Quickshell\nimport qs.Commons\nimport qs.Commons as Commons\nimport "sports" as Sports\nShellRoot {\n  Sports.Panel {\n    id: sports\n    suppressFocus: true\n    Timer { interval: 700; running: true; onTriggered: { ${palette ? `Commons.Color.foreground = "${palette === "light" ? "#242a32" : "#c7d0dd"}"; Commons.Color.background = "${palette === "light" ? "#f4f2ee" : "#252a33"}"; Commons.Color.accent = "${palette === "light" ? "#245f93" : "#64b8ef"}"; Commons.Color.urgent = "${palette === "light" ? "#bb3944" : "#ef777e"}"; Commons.Color.shellValues = Object.assign({}, Commons.Color.shellValues, {"popups.background": Commons.Color.background.toString(), "popups.text": Commons.Color.foreground.toString(), "popups.border": Commons.Color.accent.toString()});` : ""} sports.setMockModeForTesting(true); sports.startRound(); } }\n  }\n}\n`)
+  const env = { ...process.env, HOME: home, OMARCHY_PATH: directory, OMASPORTS_MOCK: "1", OMASPORTS_PRIVATE_UI_TEST: "1" }
   host = spawn("quickshell", ["--no-color", "--path", shell], { env, stdio: ["ignore", "pipe", "pipe"] })
   host.stdout.on("data", data => { log += data })
   host.stderr.on("data", data => { log += data })

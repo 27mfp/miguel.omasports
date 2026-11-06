@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "SportsModel.js" as Model
 
@@ -41,7 +42,7 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      Text {
+      PlainText {
         text: "ALERTS & UPDATES"
         color: theme.mutedColor(root.fgColor, 0.6)
         font.family: Style.font.family
@@ -53,10 +54,12 @@ Column {
       PreferenceToggle {
         width: parent.width
         label: "Desktop notifications"
-        description: "Kickoff, goal, half-time and full-time alerts for teams you follow"
+        description: controller.backgroundUpdates
+          ? "Kickoff, goal, half-time and full-time alerts for teams you follow"
+          : "Alerts only while the panel is open"
         checked: controller.enableNotifications
         enabled: controller.notificationToolAvailable
-        accent: Color.accent
+        accent: Commons.Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleNotifications()
       }
@@ -79,20 +82,20 @@ Column {
             implicitWidth: eventBadgeRow.implicitWidth + Style.space(12)
             implicitHeight: Style.space(22)
             radius: theme.subtleRadius(4)
-            color: Util.alpha(Color.accent, 0.12)
+            color: Util.alpha(Commons.Color.accent, 0.12)
             border.width: 1
-            border.color: Util.alpha(Color.accent, 0.3)
+            border.color: Util.alpha(Commons.Color.accent, 0.3)
 
             Row {
               id: eventBadgeRow
               anchors.centerIn: parent
               spacing: Style.space(4)
 
-              Text {
+              PlainText {
                 text: modelData.icon
                 font.pixelSize: Style.font.caption
               }
-              Text {
+              PlainText {
                 text: modelData.label
                 color: root.fgColor
                 font.family: Style.font.family
@@ -122,12 +125,12 @@ Column {
           anchors.margins: Style.space(8)
           spacing: Style.space(6)
 
-          Text {
+          PlainText {
             text: "⚠"
             color: root.urgentColor
             font.pixelSize: Style.font.caption
           }
-          Text {
+          PlainText {
             width: parent.width - Style.space(24)
             text: "Install libnotify (notify-send) to receive desktop notifications."
             color: root.urgentColor
@@ -142,9 +145,9 @@ Column {
       PreferenceToggle {
         width: parent.width
         label: "Update in the background"
-        description: "Keep scores and alerts current while the panel is closed"
+        description: "Fetch scores, news and crests while closed; disabling also pauses alerts"
         checked: controller.backgroundUpdates
-        accent: Color.accent
+        accent: Commons.Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleBackgroundUpdates()
       }
@@ -167,7 +170,7 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Text {
+      PlainText {
         text: "SCORE PRIVACY"
         color: theme.mutedColor(root.fgColor, 0.6)
         font.family: Style.font.family
@@ -181,7 +184,7 @@ Column {
         label: "Hide scores"
         description: "Click a score to reveal it · press S to toggle"
         checked: controller.antiSpoiler
-        accent: Color.accent
+        accent: Commons.Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleSpoiler()
       }
@@ -204,7 +207,7 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      Text {
+      PlainText {
         text: "DISPLAY"
         color: theme.mutedColor(root.fgColor, 0.6)
         font.family: Style.font.family
@@ -218,7 +221,7 @@ Column {
         label: "Bar ticker"
         description: "Show your followed team’s live score beside the bar icon"
         checked: controller.showBarTicker
-        accent: Color.accent
+        accent: Commons.Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleBarTicker()
       }
@@ -228,7 +231,7 @@ Column {
         label: "Match spotlight"
         description: "Highlight your next or live match above the schedule"
         checked: controller.showSpotlight
-        accent: Color.accent
+        accent: Commons.Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleSpotlight()
       }
@@ -251,7 +254,7 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      Text {
+      PlainText {
         text: "NEWS"
         color: theme.mutedColor(root.fgColor, 0.6)
         font.family: Style.font.family
@@ -265,7 +268,7 @@ Column {
         label: "League news"
         description: "Show top stories and breaking headlines for the current sport"
         checked: controller.showNewsWire
-        accent: Color.accent
+        accent: Commons.Color.accent
         foreground: root.fgColor
         onClicked: controller.toggleNewsWire()
       }
@@ -292,10 +295,10 @@ Column {
       Row {
         spacing: Style.space(10)
 
-        Text {
+        PlainText {
           anchors.verticalCenter: parent.verticalCenter
           text: "󰑐"
-          color: Color.accent
+          color: Commons.Color.accent
           font.pixelSize: Style.font.heading
         }
 
@@ -303,7 +306,7 @@ Column {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(2)
 
-          Text {
+          PlainText {
             text: "Update frequency"
             color: root.fgColor
             font.family: Style.font.family
@@ -311,7 +314,7 @@ Column {
             font.bold: true
           }
 
-          Text {
+          PlainText {
             text: "Live scores refresh within each provider’s rate limits"
             color: theme.mutedColor(root.fgColor, 0.6)
             font.family: Style.font.family
@@ -331,11 +334,11 @@ Column {
           implicitHeight: Style.space(34)
           radius: theme.subtleRadius(4)
           color: (controller.activeSport === "football" || controller.activeSport === "f1")
-            ? Util.alpha(Color.accent, 0.15)
+            ? Util.alpha(Commons.Color.accent, 0.15)
             : theme.mutedColor(root.fgColor, 0.03)
           border.width: 1
           border.color: (controller.activeSport === "football" || controller.activeSport === "f1")
-            ? Color.accent
+            ? Commons.Color.accent
             : theme.mutedColor(root.fgColor, 0.08)
 
           Item {
@@ -350,12 +353,12 @@ Column {
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(6)
 
-              Text {
+              PlainText {
                 text: "⚽ 🏎️"
                 font.pixelSize: Style.font.caption
                 anchors.verticalCenter: parent.verticalCenter
               }
-              Text {
+              PlainText {
                 text: "FotMob & Jolpica"
                 color: root.fgColor
                 font.family: Style.font.family
@@ -363,7 +366,7 @@ Column {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
               }
-              Text {
+              PlainText {
                 text: "· football, F1"
                 color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
@@ -373,12 +376,12 @@ Column {
               }
             }
 
-            Text {
+            PlainText {
               id: fotmobSpeedLabel
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: "every 20 s"
-              color: (controller.activeSport === "football" || controller.activeSport === "f1") ? Color.accent : root.fgColor
+              color: (controller.activeSport === "football" || controller.activeSport === "f1") ? Commons.Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               font.bold: true
@@ -392,11 +395,11 @@ Column {
           implicitHeight: Style.space(34)
           radius: theme.subtleRadius(4)
           color: (controller.activeSport === "nba" || controller.activeSport === "nfl" || controller.activeSport === "mlb" || controller.activeSport === "nhl")
-            ? Util.alpha(Color.accent, 0.15)
+            ? Util.alpha(Commons.Color.accent, 0.15)
             : theme.mutedColor(root.fgColor, 0.03)
           border.width: 1
           border.color: (controller.activeSport === "nba" || controller.activeSport === "nfl" || controller.activeSport === "mlb" || controller.activeSport === "nhl")
-            ? Color.accent
+            ? Commons.Color.accent
             : theme.mutedColor(root.fgColor, 0.08)
 
           Item {
@@ -411,12 +414,12 @@ Column {
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(6)
 
-              Text {
+              PlainText {
                 text: "🏀 🏈 ⚾ 🏒"
                 font.pixelSize: Style.font.caption
                 anchors.verticalCenter: parent.verticalCenter
               }
-              Text {
+              PlainText {
                 text: "ESPN"
                 color: root.fgColor
                 font.family: Style.font.family
@@ -424,7 +427,7 @@ Column {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
               }
-              Text {
+              PlainText {
                 text: "· NBA, NFL, MLB, NHL"
                 color: theme.mutedColor(root.fgColor, 0.55)
                 font.family: Style.font.family
@@ -434,12 +437,12 @@ Column {
               }
             }
 
-            Text {
+            PlainText {
               id: espnSpeedLabel
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: "every 15 s"
-              color: (controller.activeSport === "nba" || controller.activeSport === "nfl" || controller.activeSport === "mlb" || controller.activeSport === "nhl") ? Color.accent : root.fgColor
+              color: (controller.activeSport === "nba" || controller.activeSport === "nfl" || controller.activeSport === "mlb" || controller.activeSport === "nhl") ? Commons.Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               font.bold: true
@@ -467,7 +470,7 @@ Column {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(2)
 
-          Text {
+          PlainText {
             text: "Refresh when nothing is live"
             color: root.fgColor
             font.family: Style.font.family
@@ -475,7 +478,7 @@ Column {
             font.bold: true
           }
 
-          Text {
+          PlainText {
             width: parent.width
             text: "How often to check the schedule when no games are in progress"
             color: theme.mutedColor(root.fgColor, 0.6)
@@ -499,7 +502,7 @@ Column {
             value: controller.refreshIntervalLabel()
             options: controller.refreshIntervalOptions
             foreground: root.fgColor
-            background: Color.popups.background
+            background: Commons.Color.popups.background
             onChanged: function(value) { controller.setRefreshMinutes(value) }
           }
         }
@@ -535,10 +538,10 @@ Column {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(10)
 
-          Text {
+          PlainText {
             anchors.verticalCenter: parent.verticalCenter
             text: "★"
-            color: Color.accent
+            color: Commons.Color.accent
             font.pixelSize: Style.font.heading
           }
 
@@ -547,7 +550,7 @@ Column {
             width: favRow.width - Style.space(34)
             spacing: Style.space(2)
 
-            Text {
+            PlainText {
               text: "Followed teams & leagues"
               color: root.fgColor
               font.family: Style.font.family
@@ -555,7 +558,7 @@ Column {
               font.bold: true
             }
 
-            Text {
+            PlainText {
               width: parent.width
               text: controller.selectedTeamIds.length > 0
                 ? (controller.selectedTeamIds.length === 1
@@ -615,7 +618,7 @@ Column {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(10)
 
-          Text {
+          PlainText {
             anchors.verticalCenter: parent.verticalCenter
             text: "󰝘"
             color: theme.mutedColor(root.fgColor, 0.6)
@@ -627,7 +630,7 @@ Column {
             width: syncRow.width - Style.space(34)
             spacing: Style.space(2)
 
-            Text {
+            PlainText {
               text: "Data"
               color: root.fgColor
               font.family: Style.font.family
@@ -635,7 +638,7 @@ Column {
               font.bold: true
             }
 
-            Text {
+            PlainText {
               width: parent.width
               text: "Reload all matches and standings now (R)"
               color: theme.mutedColor(root.fgColor, 0.6)

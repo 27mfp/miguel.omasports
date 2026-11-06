@@ -25,6 +25,7 @@ miguel.omasports/
 ├── FixturesTab.qml        # Schedule tab: spotlight, recent/upcoming sections with expansion, team filters
 ├── LiveTab.qml            # Dedicated live score feed, live count badge, idle fallback card
 ├── StandingsTab.qml       # League tables: Football, US sports (NBA/NFL/MLB/NHL), F1 (Drivers & Constructors)
+├── PlainText.qml          # Literal provider text; never interprets markup
 ├── SettingsTab.qml        # Grouped preferences: notifications, anti-spoiler, refresh cadence, followed teams
 ├── NewsCard.qml           # Collapsible league wire & breaking news headlines card
 ├── MatchSpotlight.qml     # Compact spotlight for the followed team's next/live match, optional details
@@ -33,7 +34,7 @@ miguel.omasports/
 ├── LiveRow.qml            # Real-time match row with minute counter, period scores and click-to-reveal
 ├── StandingsRow.qml       # Table row with crests, aligned sport-specific columns and zone colours
 ├── SelectionDropdown.qml  # Native dropdown that restores its controller binding after a choice
-├── TeamCrest.qml          # Crest loader: local disk cache → remote URL fallback → monogram canvas fallback
+├── TeamCrest.qml          # Crest loader: published local cache → monogram while unavailable
 ├── Theme.qml              # Shared visual helpers (muted colours, theme-aware tints)
 ├── NetworkProcess.qml     # argv-based provider request wrapper: one output/failure signal, no stale callbacks
 ├── SecureProcess.qml      # Process wrapper with explicit environment and process-group hardStop()
@@ -44,6 +45,7 @@ miguel.omasports/
 └── tests/
     ├── run-all.mjs        # Unified test orchestrator (--quick / --full / --runtime)
     ├── sportsmodel.test.mjs # Unit tests covering the pure JS functions
+    ├── compatibility.mjs  # Native offscreen palette, markup, F1 and crest checks
     ├── controller-regressions.mjs # Panel controller regressions (notifications, kickoff, mock state)
     ├── espn-sequence.mjs  # ESPN day sequencing, today-first ordering, cache and retry cases
     ├── offline.mjs        # Offline golden tests against frozen provider payloads
@@ -52,7 +54,7 @@ miguel.omasports/
     ├── crest-resilience.mjs # Crest cache resilience & 404/corrupt fallback tests
     ├── burnin.mjs         # Burn-in & memory stability tests (mock cycles, TTL pruning)
     ├── security-hardening.mjs # Process/file hardening checks
-    ├── release-guard.mjs  # Version/manifest/README consistency checks
+    ├── release-guard.mjs  # Installable payload guard (agent-control files)
     ├── manifest.mjs       # Manifest/package structure contract checks
     ├── qml-contract.mjs   # Static cross-file QML wiring and harness contracts
     ├── runtime.mjs        # Opt-in offscreen Quickshell process-lifecycle test (uses runtime/shell.qml)
@@ -148,7 +150,7 @@ node tests/notifications.mjs
 Use the suite output for the current case count.
 
 ### H. Crest Cache Resilience & Fallback Suite
-Validates monogram derivation, cold cache resilience, broken CDN recovery (404/500/corrupt bytes), and system log hygiene:
+Validates monogram derivation, safe cache keys, trusted URL rules and log hygiene. Real cold/published image behavior is checked by `tests/compatibility.mjs`; malformed cache images are exercised by `tests/security-hardening.mjs`:
 ```bash
 node tests/crest-resilience.mjs
 ```
@@ -257,3 +259,11 @@ omarchy-restart-shell
 5. **API Rate Limits**:
    - **FotMob & F1 (Jolpica)**: Route through Cloudflare edge caching. Minimum polling cadence: **20 seconds**. Never poll faster to avoid IP bans.
    - **ESPN (NBA, NFL, MLB, NHL)**: Direct public API. Minimum polling cadence: **15 seconds**.
+
+## Omarchy 4.5 compatibility patch (1.5.1)
+
+Run `node tests/run-all.mjs --quick --runtime` on an installed Omarchy host. The runtime option includes `tests/compatibility.mjs`, which stages the production components and installed Commons/Ui imports in a temporary Quickshell root. It uses the offscreen platform, a private home and a synthetic local crest, with no `OmarchyLoadPatch`, windows or live provider requests. It verifies palette resolution, literal markup, hidden/revealed F1 results and local cache publication. The Node controller suite exercises the real polling/dispatcher functions against paused and resumed state.
+
+All plugin-owned text derives from `PlainText.qml`. All image downloads use the bounded helper cache; TeamCrest consumes the published key map through the tab/row components. Keep these files in copied installations. The shared-service redesign and its full integration matrix remain in [the follow-up plan](docs/omarchy-4.5-plan.md); the current panel still owns the model per widget.
+
+The private UI harness defaults to a fixed dark palette; use `--palette=light` for the second palette. Its HOME and preferences are temporary, so the mock screenshots exercise the cold-cache monogram path without live CDN fallback. The checked-in dark baselines were reviewed for Omarchy 4.5 / Qt 6.12; see [release evidence](docs/release-checklist.md) before updating them. The installed desktop theme does not determine these captures.

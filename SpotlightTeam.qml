@@ -1,9 +1,11 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // Mirrored team presentation on either side of the spotlight score.
 Item {
   id: root
+  property var knownLogoKeys: ({})
   Theme { id: theme }
 
   property var team: null
@@ -20,6 +22,7 @@ Item {
   implicitHeight: Math.max(crest.height, labels.implicitHeight)
 
   TeamCrest {
+    knownLogoKeys: root.knownLogoKeys
     id: crest
     anchors.left: root.homeSide ? undefined : parent.left
     anchors.right: root.homeSide ? parent.right : undefined
@@ -41,10 +44,10 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(2)
 
-    Text {
+    PlainText {
       width: parent.width
       text: root.team ? root.team.name || root.team.shortName : ""
-      color: root.favorite ? Color.accent : root.fgColor
+      color: root.favorite ? Commons.Color.accent : root.fgColor
       font.family: Style.font.family
       font.pixelSize: Style.font.title
       font.bold: true
@@ -54,7 +57,7 @@ Item {
       elide: Text.ElideRight
     }
 
-    Text {
+    PlainText {
       width: parent.width
       text: root.team && root.team.record ? root.team.record
         : (root.homeSide ? "HOME" : "AWAY") + (root.favorite ? " · FAVORITE" : "")
@@ -79,7 +82,7 @@ Item {
           radius: Style.space(2)
           color: modelData === "W" ? theme.positiveColor
             : (modelData === "D" ? theme.mutedColor(root.fgColor, 0.25) : root.urgentColor)
-          Text {
+          PlainText {
             anchors.centerIn: parent
             text: modelData
             font.pixelSize: 8

@@ -83,6 +83,7 @@ const steps = [
 
 if (ARGS.includes("--runtime")) {
   steps.push({ name: "Offscreen Quickshell Lifecycle", file: "tests/runtime.mjs", cmd: "node tests/runtime.mjs" })
+  steps.push({ name: "Native UI Compatibility", file: "tests/compatibility.mjs", cmd: "node tests/compatibility.mjs" })
 }
 
 if (!QUICK) {

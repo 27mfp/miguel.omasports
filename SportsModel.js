@@ -3236,3 +3236,8 @@ function parseF1Pole(raw) {
   }
 }
 
+
+// Notification bodies support markup; provider names must remain literal.
+function escapeNotificationMarkup(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}

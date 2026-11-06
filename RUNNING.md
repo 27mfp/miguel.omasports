@@ -70,7 +70,8 @@ interaction tests use a headless monitor; see DEVELOPMENT.md before running them
   (`Model.espnDateList` + `Model.mergeEspnScoreboardPayloads`).
 - Probing ESPN by hand: use `curl --compressed` (responses are gzipped). A
   browser-like User-Agent gets an Akamai "Access Denied".
-- `Cannot open: .../logos/*.png` warnings on first run are cache misses;
-  crests fall back to the remote URL and then to a monogram.
+- Crests use only the validated local cache. A cold cache shows a monogram
+  until the helper publishes the image; no remote Image fallback is used.
+- Keep all `*.qml` files when copying an installation, including `PlainText.qml`.
 - A one-time `computeStandingsRows is not a function` warning at shell
   startup is pre-existing and harmless.

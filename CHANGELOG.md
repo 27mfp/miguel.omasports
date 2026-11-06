@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.1 — Unreleased
+
+### Fixed
+
+- Resolve Omarchy palette colors through `Commons.Color` on Qt 6.12, including private test-host palette overrides.
+- Treat provider names, news and other plugin-owned display text literally; escape notification-body markup.
+- Conceal the bar outcome indicator, F1 winners/session results, podiums and recent form while the result is hidden. Explicit per-match reveal remains available; hide the news wire in anti-spoiler mode.
+- Honor background updates as the polling switch: with the panel closed and background updates disabled, stop workers, queues and all provider retry timers. Notifications and live games no longer override this preference; reopening establishes a new alert baseline.
+- Keep local cache discovery and notification-tool detection alive when canceling network rounds; explicitly stop these local helpers on teardown.
+- Keep the translucent F1 live badge text legible in both palettes.
+- Load crests only from the helper-published local cache. A cold or failed cache displays a monogram without a direct remote Image request, and cache publication updates the visible crest.
+
+### Release preparation
+
+- Bump the manifest to 1.5.1 and retain the larger Omarchy 4.5 shared-service/UI plan as follow-up work.
+- Add behavioral polling/notification regressions and an opt-in native offscreen UI test with real, unpatched Omarchy imports.
+
 ## 1.5.0 — 2026-10-10
 
 ### Added
