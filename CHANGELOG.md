@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Marketplace` CI workflow that runs the Omarchy plugin marketplace's update validation and security baseline on every push, pull request and `v*` tag. Any finding, or a capability not listed in `.github/marketplace/allowed-capabilities.json` (currently none), fails the check.
+
 ## 1.5.1 — 2026-11-24
 
 ### Fixed
