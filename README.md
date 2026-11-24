@@ -9,7 +9,7 @@
     <a href="#development">Development</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/version-1.5.0-38bdf8" alt="Version 1.5.0">
+    <img src="https://img.shields.io/badge/version-1.5.1-38bdf8" alt="Version 1.5.1">
     <img src="https://img.shields.io/badge/platform-Linux-f59e0b" alt="Linux">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license"></a>
   </p>
@@ -36,6 +36,10 @@ It supports football, basketball, Formula 1, American football, baseball, and ic
 - **Match detail cards** — See broadcast information, venues, leaders, form, events, possession, and period scores when the provider supplies them.
 - **Keyboard and IPC control** — Navigate without a mouse or script the panel with `omarchy-shell`.
 - **Resilient caching** — Team crests use a local cache with remote and monogram fallbacks.
+
+### New in 1.5.1
+
+Omarchy 4.5 / Qt 6.12 palette compatibility, literal provider text, broader anti-spoiler coverage and a background-update preference that also stops live polling and retries. See [release verification](docs/release-checklist.md) for the tested scope.
 
 ### New in 1.5.0
 
@@ -78,14 +82,18 @@ omarchy plugin remove miguel.omasports
 
 ## Configuration
 
-The panel’s settings screen controls notifications, background polling, anti-spoiler mode, refresh cadence, followed teams, the bar ticker, the spotlight card, and the league news wire.
+The panel’s settings screen controls notifications, background polling, anti-spoiler mode, refresh cadence, followed teams, the bar ticker, the spotlight card, and the league news wire. It also has a **Copy** button under Diagnostics for a sanitized support summary (plugin/Qt version, sport/provider, fetch state and cache counts; no favourites, paths, tokens or provider URLs).
+
+With **Update in the background** off, closing the panel stops automatic score, detail, news and crest requests, including retries. Alerts then update only while the panel is open. Reopening establishes a fresh baseline so goals scored while paused are not replayed as new alerts.
+
+Anti-spoiler also conceals the bar’s outcome colors, F1 winners and podiums, and recent form for hidden matches. The news wire stays hidden because headlines can reveal results. Crests appear from the validated local cache; unavailable crests use a monogram.
 
 The plugin also exposes these manifest settings:
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `showBarTicker` | `true` | Show a followed team’s live score in the bar. |
-| `backgroundUpdates` | `true` | Keep score data fresh while the panel is closed. |
+| `backgroundUpdates` | `true` | Fetch scores, news and crests while closed; when off, alerts update only while open. |
 | `panelPosition` | `auto` | Choose automatic, icon-anchored, or centered panel placement. |
 
 Preferences are stored locally at:
@@ -150,6 +158,16 @@ node tests/ui-session.mjs                  # isolated visual regression suite
 node tests/offline.mjs                     # frozen provider payload regressions
 node tests/live.mjs all                     # live provider acceptance tests; network required
 node tests/release-guard.mjs                # release payload safety checks
+npm test                                    # alias for the quick quality gate
+npm run test:visual:scale2                  # 2x fractional-scaling comparison
+```
+
+Optional CI-only static analysis (no runtime dependencies):
+
+```bash
+uvx ruff check secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+uvx mypy secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+qmllint -i /usr/share/omarchy/shell/Commons/qmldir -i /usr/share/omarchy/shell/Ui/qmldir ./*.qml
 ```
 
 The UI session runs production components in a private Quickshell host with temporary preferences. Visual and interaction tests create a temporary `HEADLESS-*` Wayland monitor, suppress keyboard focus, and clean up when finished. Cross-display dismissal surfaces are disabled only in the private host; your running shell and bar layout are untouched. The visual suite uses the built-in deterministic mock mode so screenshots do not depend on changing match data.
@@ -160,7 +178,7 @@ For local UI work, launch the shell with mock data:
 OMASPORTS_MOCK=1 omarchy-launch-shell
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the architecture map, provider polling floors, IPC details, and the full testing playbook.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the architecture map, provider polling floors, IPC details, and the full testing playbook, and [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## License
 

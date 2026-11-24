@@ -1,0 +1,35 @@
+{
+  "name": "miguel.omasports",
+  "version": "1.5.1",
+  "private": true,
+  "description": "OmaSports Omarchy bar plugin development scripts (no runtime dependencies).",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node tests/run-all.mjs --quick",
+    "test:quick": "node tests/run-all.mjs --quick",
+    "test:full": "node tests/run-all.mjs --full",
+    "test:standard": "node tests/run-all.mjs",
+    "test:model": "node tests/sportsmodel.test.mjs",
+    "test:model:core": "node tests/model/core.test.mjs",
+    "test:model:espn": "node tests/model/espn.test.mjs",
+    "test:model:f1": "node tests/model/f1.test.mjs",
+    "test:model:fotmob": "node tests/model/fotmob.test.mjs",
+    "test:model:matches": "node tests/model/matches.test.mjs",
+    "test:model:notifications": "node tests/model/notifications.test.mjs",
+    "test:panel": "node tests/panel-logic.test.mjs",
+    "test:offline": "node tests/offline.mjs",
+    "test:security": "node tests/security-hardening.mjs",
+    "test:visual": "node tests/ui-session.mjs -- node tests/visual.mjs --sport=all --tab=all",
+    "test:visual:scale1": "node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --scale=1",
+    "test:visual:scale1.5": "node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --scale=1.5",
+    "test:visual:scale2": "node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --scale=2",
+    "test:interaction": "node tests/ui-session.mjs -- node tests/interaction.mjs",
+    "test:live": "node tests/live.mjs all",
+    "fixtures": "node tests/capture-fixtures.mjs",
+    "lint:python": "ruff check secure_io.py tests/security-helper.py tests/diff.py tests/crop.py",
+    "typecheck:python": "mypy secure_io.py tests/security-helper.py tests/diff.py tests/crop.py"
+  }
+}

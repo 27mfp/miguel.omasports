@@ -1,11 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "SportsModel.js" as Model
 
 // Hero card highlighting the featured match of a followed team, or the next
 // Grand Prix weekend when the active sport is F1. Injected by Panel.qml.
 Item {
   id: root
+  property var knownLogoKeys: ({})
   Theme { id: theme }
 
   property bool detailsExpanded: false
@@ -82,20 +84,20 @@ Item {
     implicitHeight: spotlightCol.implicitHeight + Style.space(24)
     radius: Style.cornerRadius
     color: spotlightMouse.containsMouse
-      ? Style.hoverFillFor(root.fgColor, Color.accent)
+      ? Style.hoverFillFor(root.fgColor, Commons.Color.accent)
       : theme.mutedColor(root.fgColor, 0.035)
     border.width: root.rowFocused ? 2 : 1
     border.color: spotlightMouse.containsMouse
-      ? Color.accent
+      ? Commons.Color.accent
       : (root.rowFocused
-         ? Color.accent
+         ? Commons.Color.accent
          : (root.liveState === "leading"
             ? Util.alpha(theme.positiveColor, 0.4)
             : (root.liveState === "trailing"
                ? Util.alpha(theme.negativeColor, 0.4)
                : (root.liveState === "tied"
                   ? Util.alpha(theme.warningColor, 0.35)
-                  : (root.isLive ? Util.alpha(Color.accent, 0.3) : theme.mutedColor(root.fgColor, 0.12))))))
+                  : (root.isLive ? Util.alpha(Commons.Color.accent, 0.3) : theme.mutedColor(root.fgColor, 0.12))))))
     // When there's no match to announce, the surface is an empty card, not a
     // button — mirror that in accessibility so screen readers don't claim an
     // actionable item that the mouse handler already early-returns on.
@@ -103,7 +105,7 @@ Item {
     Accessible.name: root.match
       ? (root.isF1
           ? (root.match.raceName || (root.match.home && root.match.home.name) || "Grand Prix")
-             + ", " + (root.isLive ? "live" : (root.match.status || ""))
+             + ", " + (root.scoreHidden ? "result hidden" : (root.isLive ? "live" : (root.match.status || "")))
           : ((root.match.home && (root.match.home.name || root.match.home.shortName)) || "")
              + " versus "
              + ((root.match.away && (root.match.away.name || root.match.away.shortName)) || "")
@@ -123,9 +125,9 @@ Item {
       anchors.margins: Style.space(3)
       width: Style.space(4)
       radius: width / 2
-      visible: Boolean(root.match) && (root.isLive || (root.isFinished && (root.outcome !== "" || (root.isF1 && root.match && root.match.winner))))
+      visible: !root.scoreHidden && Boolean(root.match) && (root.isLive || (root.isFinished && (root.outcome !== "" || (root.isF1 && root.match && root.match.winner))))
       color: root.isLive
-        ? (root.liveState === "leading" ? theme.positiveColor : (root.liveState === "trailing" ? theme.negativeColor : (root.liveState === "tied" ? theme.warningColor : Color.accent)))
+        ? (root.liveState === "leading" ? theme.positiveColor : (root.liveState === "trailing" ? theme.negativeColor : (root.liveState === "tied" ? theme.warningColor : Commons.Color.accent)))
         : (root.isF1 && root.match && root.match.winner
            ? theme.podiumColor
            : (root.outcome === "win"
@@ -164,11 +166,11 @@ Item {
             color: "transparent"
             anchors.verticalCenter: parent.verticalCenter
 
-            Text {
+            PlainText {
               id: spotlightTagLabel
               anchors.centerIn: parent
               text: root.isF1 ? "GRAND PRIX" : (root.isLive ? "LIVE NOW" : (root.isUpcoming ? "UP NEXT" : "LATEST RESULT"))
-              color: Color.accent
+              color: Commons.Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -176,7 +178,7 @@ Item {
             }
           }
 
-          Text {
+          PlainText {
             // The tags row and the right-anchored status pill share one line;
             // long league names (e.g. "Major League Baseball · Started 20:00")
             // must elide instead of pushing the broadcast chip under the pill
@@ -209,8 +211,8 @@ Item {
               id: spotlightBcastRow
               anchors.centerIn: parent
               spacing: Style.space(3)
-              Text { text: "📺"; font.pixelSize: Style.font.caption; anchors.verticalCenter: parent.verticalCenter }
-              Text {
+              PlainText { text: "📺"; font.pixelSize: Style.font.caption; anchors.verticalCenter: parent.verticalCenter }
+              PlainText {
                 text: String(root.broadcast).toUpperCase()
                 color: root.fgColor
                 font.family: Style.font.family
@@ -243,7 +245,7 @@ Item {
                            : (root.outcome === "draw"
                               ? Util.alpha(theme.warningColor, 0.18)
                               : theme.mutedColor(root.fgColor, 0.08))))))
-               : Util.alpha(Color.accent, 0.14))
+               : Util.alpha(Commons.Color.accent, 0.14))
           border.width: 1
           border.color: root.isLive
             ? Util.alpha(root.urgentColor, 0.3)
@@ -259,7 +261,7 @@ Item {
                            : (root.outcome === "draw"
                               ? Util.alpha(theme.warningColor, 0.45)
                               : theme.mutedColor(root.fgColor, 0.15))))))
-               : Util.alpha(Color.accent, 0.3))
+               : Util.alpha(Commons.Color.accent, 0.3))
 
           Row {
             id: statusPillRow
@@ -282,12 +284,12 @@ Item {
               }
             }
 
-            Text {
+            PlainText {
               text: root.isLive
                 ? (root.syncedLiveTime === "LIVE" ? "LIVE" : ("LIVE · " + root.syncedLiveTime))
                 : (root.match && root.match.status === "finished"
                    ? (root.isF1
-                      ? (root.match.winner ? ("🏆 " + (root.match.winner.code || root.match.winner.familyName).toUpperCase() + " · WINNER") : "OFFICIAL")
+                      ? (root.scoreHidden ? "RESULT HIDDEN · REVEAL 󰈈" : root.match.winner ? ("🏆 " + (root.match.winner.code || root.match.winner.familyName).toUpperCase() + " · WINNER") : "OFFICIAL")
                       : (root.scoreHidden
                           ? ((root.match.sport && root.match.sport !== "football") ? "FINAL · REVEAL 󰈈" : "FT · REVEAL 󰈈")
                           : (root.outcome === "win"
@@ -316,7 +318,7 @@ Item {
                                : (root.outcome === "draw"
                                   ? theme.warningColor
                                   : theme.mutedColor(root.fgColor, 0.75))))))
-                   : Color.accent)
+                   : Commons.Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -340,7 +342,7 @@ Item {
             width: parent.width
             spacing: Style.space(10)
 
-            Text {
+            PlainText {
               text: (root.match && root.match.countryFlag) ? root.match.countryFlag : "🏎"
               font.pixelSize: Style.font.display
               anchors.verticalCenter: parent.verticalCenter
@@ -351,7 +353,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(2)
 
-              Text {
+              PlainText {
                 width: parent.width
                 text: root.match ? (root.match.raceName || root.match.home.name) : "Grand Prix"
                 color: root.fgColor
@@ -361,7 +363,7 @@ Item {
                 elide: Text.ElideRight
               }
 
-              Text {
+              PlainText {
                 width: parent.width
                 text: root.match ? ("📍 " + (root.match.circuitName || "") + (root.match.locality ? " · " + root.match.locality : "") + (root.match.country ? ", " + root.match.country : "")) : ""
                 color: theme.mutedColor(root.fgColor, 0.55)
@@ -374,13 +376,13 @@ Item {
 
           // Winner Showcase (for finished Grand Prix)
           Rectangle {
-            visible: root.isFinished && Boolean(root.match && root.match.winner)
+            visible: !root.scoreHidden && root.isFinished && Boolean(root.match && root.match.winner)
             width: parent.width
             implicitHeight: winnerCol.implicitHeight + Style.space(12)
             radius: theme.subtleRadius(4)
-            color: Util.alpha(Color.accent, 0.12)
+            color: Util.alpha(Commons.Color.accent, 0.12)
             border.width: 1
-            border.color: Util.alpha(Color.accent, 0.3)
+            border.color: Util.alpha(Commons.Color.accent, 0.3)
 
             Column {
               id: winnerCol
@@ -394,22 +396,22 @@ Item {
                 width: parent.width
                 spacing: Style.space(6)
 
-                Text {
+                PlainText {
                   text: "🏆"
                   font.pixelSize: Style.font.body
                   anchors.verticalCenter: parent.verticalCenter
                 }
 
-                Text {
+                PlainText {
                   text: "RACE WINNER: " + (root.match && root.match.winner ? root.match.winner.driverName.toUpperCase() : "")
-                  color: Color.accent
+                  color: Commons.Color.accent
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
                   anchors.verticalCenter: parent.verticalCenter
                 }
 
-                Text {
+                PlainText {
                   visible: Boolean(root.match && root.match.winner && root.match.winner.constructorName)
                   text: "· " + (root.match && root.match.winner ? root.match.winner.constructorName : "")
                   color: theme.mutedColor(root.fgColor, 0.75)
@@ -420,7 +422,7 @@ Item {
                 }
               }
 
-              Text {
+              PlainText {
                 visible: Boolean(root.match && root.match.winner && (root.match.winner.time || root.match.winner.laps))
                 text: {
                   if (!root.match || !root.match.winner) return ""
@@ -440,7 +442,7 @@ Item {
           // F1 3-Step Podium Showcase & Pole Position
           Rectangle {
             id: podiumCard
-            visible: root.detailsExpanded && root.isF1 && Boolean(root.f1Podium && root.f1Podium.length >= 3)
+            visible: !root.scoreHidden && root.detailsExpanded && root.isF1 && Boolean(root.f1Podium && root.f1Podium.length >= 3)
             width: parent.width
             implicitHeight: podiumCol.implicitHeight + Style.space(12)
             radius: theme.subtleRadius(4)
@@ -460,19 +462,19 @@ Item {
                 width: parent.width
                 implicitHeight: podiumHeading.implicitHeight
 
-                Text {
+                PlainText {
                   id: podiumHeading
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
                   text: "🏆 RACE PODIUM & TOP 3"
-                  color: Color.accent
+                  color: Commons.Color.accent
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   font.bold: true
                   font.letterSpacing: 0.8
                 }
 
-                Text {
+                PlainText {
                   visible: Boolean(root.f1Pole)
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
@@ -497,9 +499,9 @@ Item {
                     width: (podiumCol.width - Style.space(12)) / 3
                     implicitHeight: podItemCol.implicitHeight + Style.space(8)
                     radius: theme.subtleRadius(4)
-                    color: index === 0 ? Util.alpha(Color.accent, 0.12) : theme.mutedColor(root.fgColor, 0.02)
+                    color: index === 0 ? Util.alpha(Commons.Color.accent, 0.12) : theme.mutedColor(root.fgColor, 0.02)
                     border.width: 1
-                    border.color: index === 0 ? Color.accent : theme.mutedColor(root.fgColor, 0.08)
+                    border.color: index === 0 ? Commons.Color.accent : theme.mutedColor(root.fgColor, 0.08)
 
                     Column {
                       id: podItemCol
@@ -511,13 +513,13 @@ Item {
 
                       Row {
                         spacing: Style.space(4)
-                        Text {
+                        PlainText {
                           text: index === 0 ? "🥇" : (index === 1 ? "🥈" : "🥉")
                           font.pixelSize: Style.font.caption
                         }
-                        Text {
+                        PlainText {
                           text: modelData.code || modelData.driverName
-                          color: index === 0 ? Color.accent : root.fgColor
+                          color: index === 0 ? Commons.Color.accent : root.fgColor
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
                           font.bold: true
@@ -525,7 +527,7 @@ Item {
                         }
                       }
 
-                      Text {
+                      PlainText {
                         width: parent.width
                         text: modelData.constructorName || ""
                         color: theme.mutedColor(root.fgColor, 0.5)
@@ -534,7 +536,7 @@ Item {
                         elide: Text.ElideRight
                       }
 
-                      Text {
+                      PlainText {
                         width: parent.width
                         text: modelData.time || (modelData.points + " pts")
                         color: theme.mutedColor(root.fgColor, 0.7)
@@ -568,13 +570,13 @@ Item {
               anchors.rightMargin: Style.space(8)
               spacing: Style.space(8)
 
-              Text {
+              PlainText {
                 text: nextSesCard.nextSes && nextSesCard.nextSes.isLive ? "🔴" : "⏱"
                 font.pixelSize: Style.font.caption
                 anchors.verticalCenter: parent.verticalCenter
               }
 
-              Text {
+              PlainText {
                 width: parent.width - Style.space(32)
                 text: nextSesCard.nextSes
                   ? ((nextSesCard.nextSes.isLive ? "LIVE NOW: " : "NEXT SESSION: ") + nextSesCard.nextSes.name + " · " + nextSesCard.nextSes.formattedTime)
@@ -595,9 +597,9 @@ Item {
             implicitWidth: driverPillRow.implicitWidth + Style.space(14)
             implicitHeight: driverPillRow.implicitHeight + Style.space(6)
             radius: theme.subtleRadius(4)
-            color: Util.alpha(Color.accent, 0.12)
+            color: Util.alpha(Commons.Color.accent, 0.12)
             border.width: 1
-            border.color: Color.accent
+            border.color: Commons.Color.accent
 
             Row {
               id: driverPillRow
@@ -605,9 +607,9 @@ Item {
               spacing: Style.space(6)
 
 
-              Text {
+              PlainText {
                 text: "★ " + ((root.favoriteDriverStanding && root.favoriteDriverStanding.name) || root.favoriteMatchTeamName) + " · " + (root.favoriteDriverStanding ? "P" + root.favoriteDriverStanding.pos + " (" + root.favoriteDriverStanding.pts + ") · " + root.favoriteDriverStanding.teamName : "")
-                color: Color.accent
+                color: Commons.Color.accent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -625,6 +627,7 @@ Item {
         visible: !root.isF1
 
         SpotlightTeam {
+          knownLogoKeys: root.knownLogoKeys
           id: homeBounding
           anchors.left: parent.left
           anchors.right: centerScoreBadge.left
@@ -637,7 +640,7 @@ Item {
           fgColor: root.fgColor
           urgentColor: root.urgentColor
           detailsExpanded: root.detailsExpanded
-          recentForm: root.matchForm && root.matchForm.home ? root.matchForm.home : []
+          recentForm: !root.scoreHidden && root.matchForm && root.matchForm.home ? root.matchForm.home : []
         }
         // Center Score Box
         Item {
@@ -654,7 +657,7 @@ Item {
             color: "transparent"
             border.width: 0
 
-            Text {
+            PlainText {
               anchors.centerIn: parent
               text: root.scoreHidden
                 ? "••••"
@@ -668,7 +671,7 @@ Item {
                       ? theme.negativeColor
                       : (root.liveState === "tied" ? theme.warningColor : root.fgColor)))
                 : (root.isUpcoming
-                   ? Color.accent
+                   ? Commons.Color.accent
                    : (!root.scoreHidden && root.isFinished
                       ? (root.outcome === "win"
                          ? theme.positiveColor
@@ -694,6 +697,7 @@ Item {
         }
 
         SpotlightTeam {
+          knownLogoKeys: root.knownLogoKeys
           id: awayBounding
           anchors.right: parent.right
           anchors.left: centerScoreBadge.right
@@ -706,7 +710,7 @@ Item {
           fgColor: root.fgColor
           urgentColor: root.urgentColor
           detailsExpanded: root.detailsExpanded
-          recentForm: root.matchForm && root.matchForm.away ? root.matchForm.away : []
+          recentForm: !root.scoreHidden && root.matchForm && root.matchForm.away ? root.matchForm.away : []
         }
 
       }
@@ -765,14 +769,14 @@ Item {
                   required property var modelData
                   anchors.right: parent.right
                   spacing: Style.space(4)
-                  Text {
+                  PlainText {
                     text: modelData.text
                     color: theme.mutedColor(root.fgColor, 0.75)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     elide: Text.ElideRight
                   }
-                  Text {
+                  PlainText {
                     text: modelData.icon
                     font.pixelSize: Style.font.caption
                   }
@@ -808,11 +812,11 @@ Item {
                   required property var modelData
                   anchors.left: parent.left
                   spacing: Style.space(4)
-                  Text {
+                  PlainText {
                     text: modelData.icon
                     font.pixelSize: Style.font.caption
                   }
-                  Text {
+                  PlainText {
                     text: modelData.text
                     color: theme.mutedColor(root.fgColor, 0.75)
                     font.family: Style.font.family
@@ -849,17 +853,17 @@ Item {
             width: parent.width
             implicitHeight: possHomeLabel.implicitHeight
 
-            Text {
+            PlainText {
               id: possHomeLabel
               anchors.left: parent.left
               text: (root.matchStats && root.matchStats.possession ? root.matchStats.possession[0] : "50") + "%"
-              color: Color.accent
+              color: Commons.Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
             }
 
-            Text {
+            PlainText {
               anchors.centerIn: parent
               text: {
                 var parts = ["POSSESSION"]
@@ -874,7 +878,7 @@ Item {
               font.bold: true
             }
 
-            Text {
+            PlainText {
               anchors.right: parent.right
               text: (root.matchStats && root.matchStats.possession ? root.matchStats.possession[1] : "50") + "%"
               color: theme.mutedColor(root.fgColor, 0.75)
@@ -896,7 +900,7 @@ Item {
               height: parent.height
               width: parent.width * ((root.matchStats && root.matchStats.possession ? root.matchStats.possession[0] : 50) / 100.0)
               radius: Style.space(2)
-              color: Color.accent
+              color: Commons.Color.accent
             }
           }
         }
@@ -925,12 +929,12 @@ Item {
             width: parent.width
             implicitHeight: leadersTitle.implicitHeight
 
-            Text {
+            PlainText {
               id: leadersTitle
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
               text: "⭐ GAME LEADERS"
-              color: Color.accent
+              color: Commons.Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -948,7 +952,7 @@ Item {
                 required property var modelData
                 spacing: Style.space(1)
 
-                Text {
+                PlainText {
                   text: (modelData.category || "").toUpperCase()
                   color: theme.mutedColor(root.fgColor, 0.5)
                   font.family: Style.font.family
@@ -958,16 +962,16 @@ Item {
 
                 Row {
                   spacing: Style.space(4)
-                  Text {
+                  PlainText {
                     text: modelData.player || ""
                     color: root.fgColor
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     font.bold: true
                   }
-                  Text {
+                  PlainText {
                     text: modelData.displayValue || ""
-                    color: Color.accent
+                    color: Commons.Color.accent
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     font.bold: true
@@ -1008,7 +1012,7 @@ Item {
               required property int index
               spacing: Style.space(2)
 
-              Text {
+              PlainText {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: {
                   var sport = root.match ? root.match.sport : ""
@@ -1027,7 +1031,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Style.space(4)
 
-                Text {
+                PlainText {
                   text: {
                     var hs = root.match && root.match.linescores && root.match.linescores.home
                     return (hs && hs[index] !== undefined && hs[index] !== null) ? String(hs[index]) : "–"
@@ -1038,14 +1042,14 @@ Item {
                   font.bold: true
                 }
 
-                Text {
+                PlainText {
                   text: "–"
                   color: theme.mutedColor(root.fgColor, 0.3)
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                 }
 
-                Text {
+                PlainText {
                   text: {
                     var as = root.match && root.match.linescores && root.match.linescores.away
                     return (as && as[index] !== undefined && as[index] !== null) ? String(as[index]) : "–"
@@ -1065,14 +1069,14 @@ Item {
         width: parent.width
         implicitHeight: Style.space(28)
 
-        Text {
+        PlainText {
           id: metaTextSub
           anchors.left: parent.left
           anchors.right: detailControl.left
           anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           text: root.isF1
-            ? (root.match && root.match.winner
+            ? (root.scoreHidden ? "Result hidden · reveal to see race details" : root.match && root.match.winner
                 ? ("🏆 Race Won by " + root.match.winner.driverName + " (" + root.match.winner.constructorName + ")")
                 : (root.match && root.match.sessions && root.match.sessions.length > 0
                     ? ("🏁 Grand Prix Weekend · " + root.match.sessions.length + " Sessions")
@@ -1092,9 +1096,9 @@ Item {
           implicitHeight: Style.space(28)
           radius: theme.subtleRadius(4)
           z: 1
-          color: detailMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : "transparent"
+          color: detailMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Commons.Color.accent) : "transparent"
           border.width: activeFocus || root.detailsFocused ? 2 : 0
-          border.color: Color.accent
+          border.color: Commons.Color.accent
           Accessible.role: Accessible.Button
           Accessible.name: root.detailsExpanded ? "Hide match details" : "Show match details"
           Accessible.onPressAction: root.toggleDetails()
@@ -1102,11 +1106,11 @@ Item {
           Keys.onReturnPressed: root.toggleDetails()
           Keys.onSpacePressed: root.toggleDetails()
 
-          Text {
+          PlainText {
             anchors.centerIn: parent
             id: detailLabel
             text: root.detailsExpanded ? "Less ▴" : "Details ▾"
-            color: Color.accent
+            color: Commons.Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }

@@ -3,20 +3,17 @@
 // snapshots. No network needed — fast and deterministic.
 // Refresh fixtures + goldens with: node tests/capture-fixtures.mjs
 // Usage: node tests/offline.mjs
-import { readFileSync, existsSync } from "node:fs"
 import assert from "node:assert/strict"
+import { loadModel } from "./model-loader.mjs"
+import { readFixture as fx, haveFixture as have } from "./fixture-io.mjs"
 
-const raw = readFileSync(new URL("../SportsModel.js", import.meta.url), "utf8")
 const exported = [
   "parseEspnScoreboard", "parseEspnStandings", "parseF1Calendar",
   "parseF1DriverStandings", "parseF1ConstructorStandings",
   "parseLeaguePage", "parseTeamPage", "groupMatches", "liveMatches",
   "parseDetails"
 ]
-const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
-const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
-const fx = (name) => readFileSync(new URL("./fixtures/" + name, import.meta.url), "utf8")
-const have = (name) => existsSync(new URL("./fixtures/" + name, import.meta.url))
+const Model = await loadModel(exported)
 
 let passed = 0, failed = 0
 const failures = []

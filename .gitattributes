@@ -1,0 +1,32 @@
+# Normalize line endings for source files.
+* text=auto eol=lf
+
+*.png binary
+*.gz binary
+*.svg text
+*.qml text
+*.js text
+*.mjs text
+*.py text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+
+# Keep installed plugin payloads lean for archive/tarball consumers.
+# `omarchy plugin add` clones the repository (including .git), so these rules
+# apply to `git archive`/release tarballs, not to a normal clone.
+/tests/ export-ignore
+/.github/ export-ignore
+/docs/ export-ignore
+/DEVELOPMENT.md export-ignore
+/RUNNING.md export-ignore
+/CHANGELOG.md export-ignore
+/CONTRIBUTING.md export-ignore
+/.editorconfig export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/.qmllint.ini export-ignore
+/package.json export-ignore
+/pyproject.toml export-ignore
+/preview.png export-ignore

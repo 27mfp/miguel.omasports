@@ -1,0 +1,77 @@
+name: Bug report
+description: Something in OmaSports is broken or looks wrong.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please redact any personal paths or team names you
+        do not want to share. The diagnostics button in Settings already omits
+        favourites, paths, tokens and raw provider URLs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the visible problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open OmaSports
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: sport
+    attributes:
+      label: Sport
+      options:
+        - Football / soccer
+        - NBA
+        - Formula 1
+        - NFL
+        - MLB
+        - NHL
+        - Panel shell / settings
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      description: FotMob, ESPN, Jolpica, or not sure.
+      placeholder: ESPN
+  - type: input
+    id: omarchy-version
+    attributes:
+      label: Omarchy version
+      description: Output of `omarchy version` (or the release you installed).
+      placeholder: 4.5
+    validations:
+      required: true
+  - type: input
+    id: qt-version
+    attributes:
+      label: Qt / Quickshell version
+      description: Output of `quickshell --version` and your Qt 6 version if known.
+      placeholder: Quickshell 0.3.2 / Qt 6.12.0
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic dump
+      description: Open Settings → Diagnostics → Copy, then paste the summary here.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Optional. Remove private data first.
+      render: text

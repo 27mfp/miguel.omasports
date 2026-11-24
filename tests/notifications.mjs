@@ -3,13 +3,12 @@
 // Validates notification event diffing, anti-spoiler concealment, crest resolution, and queue safety.
 import { readFileSync } from "node:fs"
 import assert from "node:assert/strict"
+import { loadModel } from "./model-loader.mjs"
 
-const raw = readFileSync(new URL("../SportsModel.js", import.meta.url), "utf8")
 const exported = [
-  "diffMatchNotifications", "crestCacheKey", "safeHome", "NOTIFICATION_TTL_MS"
+  "diffMatchNotifications", "crestCacheKey", "safeHome", "NOTIFICATION_TTL_MS", "escapeNotificationMarkup"
 ]
-const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
-const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
+const Model = await loadModel(exported)
 
 let passed = 0
 let failed = 0
@@ -29,6 +28,12 @@ function test(name, fn) {
 console.log("==================================================")
 console.log("  OMASports Notification & Delivery Suite")
 console.log("==================================================")
+
+test("provider markup stays literal in notification bodies", () => {
+  assert.equal(Model.escapeNotificationMarkup('<img src="https://example.invalid/tracker"> & Club'),
+    '&lt;img src="https://example.invalid/tracker"&gt; &amp; Club')
+  assert.equal(Model.escapeNotificationMarkup("Benfica 2–1 Porto"), "Benfica 2–1 Porto")
+})
 
 // Helper to construct test matches
 function createMatch(id, homeName, homeScore, awayName, awayScore, status, liveTime) {

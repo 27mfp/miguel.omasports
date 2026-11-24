@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "SportsModel.js" as Model
 
@@ -32,10 +33,10 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(10)
 
-        Text {
+        PlainText {
           anchors.verticalCenter: parent.verticalCenter
           text: controller.showingSettings ? "󰒓" : controller.activeSportIcon
-          color: Color.accent
+          color: Commons.Color.accent
           font.pixelSize: Style.font.heading
         }
 
@@ -43,7 +44,7 @@ Item {
           width: Math.max(0, headerLabels.width - Style.space(34))
           spacing: Style.space(3)
 
-          Text {
+          PlainText {
             width: parent.width
             text: controller.showingSettings ? "Preferences" : "OmaSports"
             color: root.fgColor
@@ -53,7 +54,7 @@ Item {
             elide: Text.ElideRight
           }
 
-          Text {
+          PlainText {
             width: parent.width
             text: controller.showingSettings ? "Make it your score center" : controller.statusText
             color: controller.errorMessage !== "" || controller.persistenceError !== "" || controller.dataStale
@@ -83,7 +84,7 @@ Item {
           hasCursor: controller.focusSection === controller.sectionIndex("sports")
           Accessible.name: "Choose sport"
           foreground: root.fgColor
-          background: Color.popups.background
+          background: Commons.Color.popups.background
           onChanged: function(value) { controller.switchSport(String(value)) }
         }
 
@@ -113,7 +114,7 @@ Item {
           tooltipText: controller.showingSettings ? "Return to matches" : "Preferences"
           Accessible.role: Accessible.Button
           Accessible.name: settingsButton.tooltipText
-          accent: Color.accent
+          accent: Commons.Color.accent
           foreground: root.fgColor
           onClicked: controller.toggleSettingsTab()
         }
@@ -149,9 +150,9 @@ Item {
             width: (tabsGroup.width - (controller.tabOptions.length - 1) * tabsGroup.spacing) / controller.tabOptions.length
             height: tabsGroup.height
             radius: theme.subtleRadius(4)
-            color: tabMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Color.accent) : "transparent"
+            color: tabMouse.containsMouse ? Style.hoverFillFor(root.fgColor, Commons.Color.accent) : "transparent"
             border.width: cursor || activeFocus ? 1 : 0
-            border.color: Color.accent
+            border.color: Commons.Color.accent
             Accessible.role: Accessible.PageTab
             Accessible.name: modelData.label
             Accessible.selected: selected
@@ -171,13 +172,13 @@ Item {
             Row {
               anchors.centerIn: parent
               spacing: Style.space(6)
-              Text {
+              PlainText {
                 text: modelData.icon
-                color: tab.selected ? Color.accent : theme.mutedColor(root.fgColor, 0.6)
+                color: tab.selected ? Commons.Color.accent : theme.mutedColor(root.fgColor, 0.6)
                 font.pixelSize: Style.font.body
                 anchors.verticalCenter: parent.verticalCenter
               }
-              Text {
+              PlainText {
                 text: modelData.label
                 color: tab.selected ? root.fgColor : theme.mutedColor(root.fgColor, 0.6)
                 font.family: Style.font.family
@@ -193,7 +194,7 @@ Item {
               anchors.bottom: parent.bottom
               height: Style.space(2)
               visible: tab.selected
-              color: Color.accent
+              color: Commons.Color.accent
             }
 
             MouseArea {

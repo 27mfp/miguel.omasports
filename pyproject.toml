@@ -1,0 +1,44 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = [".", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+  # Broad exception handling is deliberate at the hardened I/O boundary and in
+  # best-effort image diffing: one malformed provider response must not abort
+  # the whole refresh, and a corrupt baseline must report ERROR cleanly.
+  "BLE001",
+  "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"secure_io.py" = ["EXE001"]
+"tests/*.py" = ["EXE001"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "secure_io.py",
+  "tests/security-helper.py",
+  "tests/diff.py",
+  "tests/crop.py",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.diff", "tests.crop", "tests.security-helper"]
+# These are short command-line scripts; their internals are typed, but the
+# entrypoint globals and dynamically loaded secure_io module do not need a
+# package-level protocol.
+allow_untyped_globals = true
+
+[[tool.mypy.overrides]]
+module = ["PIL.*"]
+ignore_missing_imports = true

@@ -25,6 +25,11 @@ const steps = [
     cmd: "node tests/controller-regressions.mjs"
   },
   {
+    name: "Panel Policy & Diagnostics",
+    file: "tests/panel-logic.test.mjs",
+    cmd: "node tests/panel-logic.test.mjs"
+  },
+  {
     name: "ESPN Request Sequencing",
     file: "tests/espn-sequence.mjs",
     cmd: "node tests/espn-sequence.mjs"
@@ -83,6 +88,7 @@ const steps = [
 
 if (ARGS.includes("--runtime")) {
   steps.push({ name: "Offscreen Quickshell Lifecycle", file: "tests/runtime.mjs", cmd: "node tests/runtime.mjs" })
+  steps.push({ name: "Native UI Compatibility", file: "tests/compatibility.mjs", cmd: "node tests/compatibility.mjs" })
 }
 
 if (!QUICK) {
@@ -100,6 +106,15 @@ if (!QUICK) {
       ? "node tests/ui-session.mjs -- node tests/visual.mjs --sport=all --tab=all"
       : "node tests/ui-session.mjs -- node tests/visual.mjs --sport=f1 --tab=standings"
   })
+  if (FULL) {
+    // Fractional-scaling coverage: 1x/1.5x baselines already exist; 2x is
+    // checked here so full verification catches overflow at large scales.
+    steps.push({
+      name: "2x Scaling Regression",
+      file: "tests/visual.mjs",
+      cmd: "node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --scale=2"
+    })
+  }
 }
 
 console.log("======================================================================")

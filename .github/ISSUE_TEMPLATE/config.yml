@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Omarchy shell support
+    url: https://github.com/basecamp/omarchy/discussions
+    about: For bar, shell, Hyprland or Omarchy-wide issues that are not specific to OmaSports.

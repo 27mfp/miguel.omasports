@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "SportsModel.js" as Model
 
 // One fixture/result row: a team-vs-team card, or an expandable F1 Grand Prix
@@ -7,6 +8,7 @@ import "SportsModel.js" as Model
 // by Panel.qml.
 Item {
   id: root
+  property var knownLogoKeys: ({})
   Theme { id: theme }
 
   required property var modelData
@@ -75,20 +77,20 @@ Item {
       return s + ", finished" + (root.scoreLabel ? ", " + root.scoreLabel : "")
     }
     color: matchMouse.containsMouse
-      ? Style.hoverFillFor(root.fgColor, Color.accent)
+      ? Style.hoverFillFor(root.fgColor, Commons.Color.accent)
       : "transparent"
     border.width: (root.rowFocused || matchMouse.containsMouse) ? 1 : 0
     border.color: matchMouse.containsMouse
-      ? Color.accent
+      ? Commons.Color.accent
       : (root.rowFocused
-         ? Color.accent
+         ? Commons.Color.accent
          : (root.favLiveState === "leading"
             ? Util.alpha(theme.positiveColor, 0.35)
             : (root.favLiveState === "trailing"
                ? Util.alpha(theme.negativeColor, 0.35)
                : (root.favLiveState === "tied"
                   ? Util.alpha(theme.warningColor, 0.35)
-                  : (root.isLive ? Util.alpha(Color.accent, 0.25) : theme.mutedColor(root.fgColor, 0.06))))))
+                  : (root.isLive ? Util.alpha(Commons.Color.accent, 0.25) : theme.mutedColor(root.fgColor, 0.06))))))
 
     Rectangle {
       anchors.left: parent.left
@@ -108,14 +110,14 @@ Item {
       anchors.margins: Style.space(3)
       width: Style.space(3)
       radius: width / 2
-      visible: root.isLive || (root.isFinished && (root.favOutcome !== "" || (root.isF1 && Boolean(modelData.winner))))
+      visible: !root.scoreHidden && (root.isLive || (root.isFinished && (root.favOutcome !== "" || (root.isF1 && Boolean(modelData.winner)))))
       color: root.isLive
-        ? (root.favLiveState === "leading" ? theme.positiveColor : (root.favLiveState === "trailing" ? theme.negativeColor : (root.favLiveState === "tied" ? theme.warningColor : Color.accent)))
+        ? (root.favLiveState === "leading" ? theme.positiveColor : (root.favLiveState === "trailing" ? theme.negativeColor : (root.favLiveState === "tied" ? theme.warningColor : Commons.Color.accent)))
         : (root.favOutcome === "win"
            ? theme.positiveColor
            : (root.favOutcome === "loss"
               ? theme.negativeColor
-              : (root.favOutcome === "draw" ? theme.warningColor : (root.isF1 && modelData.winner ? theme.podiumColor : theme.mutedColor(root.fgColor, 0.2)))))
+              : (root.favOutcome === "draw" ? theme.warningColor : (root.isF1 && !root.scoreHidden && modelData.winner ? theme.podiumColor : theme.mutedColor(root.fgColor, 0.2)))))
     }
 
     // F1 Grand Prix Container Layout (with sessions dropdown)
@@ -139,7 +141,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: 1
 
-          Text {
+          PlainText {
             text: root.dateBadge
             color: theme.mutedColor(root.fgColor, 0.65)
             font.family: Style.font.family
@@ -147,9 +149,9 @@ Item {
             font.bold: true
           }
 
-          Text {
+          PlainText {
             text: modelData.round || "GP"
-            color: Color.accent
+            color: Commons.Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -161,7 +163,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(8)
 
-          Text {
+          PlainText {
             text: modelData.countryFlag || "🏁"
             font.pixelSize: Style.font.heading
             anchors.verticalCenter: parent.verticalCenter
@@ -172,7 +174,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 1
 
-            Text {
+            PlainText {
               width: parent.width
               text: modelData.raceName || modelData.home.name
               color: root.fgColor
@@ -182,7 +184,7 @@ Item {
               elide: Text.ElideRight
             }
 
-            Text {
+            PlainText {
               width: parent.width
               text: (modelData.circuitName || "") + (modelData.locality ? " · " + modelData.locality : "")
               color: theme.mutedColor(root.fgColor, 0.45)
@@ -204,33 +206,33 @@ Item {
             color: root.isLive
               ? Util.alpha(root.urgentColor, 0.14)
               : (root.isFinished
-                 ? (modelData.winner ? Util.alpha(theme.podiumColor, 0.18) : theme.mutedColor(root.fgColor, 0.08))
-                 : Util.alpha(Color.accent, 0.15))
+                 ? (!root.scoreHidden && modelData.winner ? Util.alpha(theme.podiumColor, 0.18) : theme.mutedColor(root.fgColor, 0.08))
+                 : Util.alpha(Commons.Color.accent, 0.15))
             border.width: 1
             border.color: root.isLive
               ? Util.alpha(root.urgentColor, 0.3)
               : (root.isFinished
-                 ? (modelData.winner ? Util.alpha(theme.podiumColor, 0.45) : theme.mutedColor(root.fgColor, 0.12))
-                 : Util.alpha(Color.accent, 0.3))
+                 ? (!root.scoreHidden && modelData.winner ? Util.alpha(theme.podiumColor, 0.45) : theme.mutedColor(root.fgColor, 0.12))
+                 : Util.alpha(Commons.Color.accent, 0.3))
 
-            Text {
+            PlainText {
               id: f1StatusText
               anchors.centerIn: parent
-              text: root.isFinished
+              text: root.scoreHidden ? "Result hidden · reveal" : root.isFinished
                 ? (modelData.winner ? ("🏆 " + (modelData.winner.code || modelData.winner.familyName)) : "Official")
                 : (root.isLive ? "RACE DAY" : Model.formatKickoff(modelData.time))
               color: root.isLive
-                ? theme.onUrgent(root.urgentColor)
+                ? root.urgentColor
                 : (root.isFinished
-                   ? (modelData.winner ? theme.podiumColor : theme.mutedColor(root.fgColor, 0.65))
-                   : Color.accent)
+                   ? (!root.scoreHidden && modelData.winner ? theme.podiumColor : theme.mutedColor(root.fgColor, 0.65))
+                   : Commons.Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
             }
           }
 
-          Text {
+          PlainText {
             visible: root.isF1 && Boolean(modelData && modelData.sessions && modelData.sessions.length > 0)
             text: root.expanded ? "󰅃" : "󰅀"
             color: theme.mutedColor(root.fgColor, 0.45)
@@ -276,10 +278,10 @@ Item {
               anchors.rightMargin: Style.space(6)
               spacing: Style.space(6)
 
-              Text {
+              PlainText {
                 width: Style.space(140)
                 text: (modelData.shortName === "Race" ? "🏁 " : (modelData.shortName === "Quali" ? "⏱ " : (modelData.shortName === "SQ" ? "⚡ " : "🏎 "))) + modelData.name
-                color: modelData.shortName === "Race" ? Color.accent : root.fgColor
+                color: modelData.shortName === "Race" ? Commons.Color.accent : root.fgColor
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 font.bold: modelData.shortName === "Race" || modelData.shortName === "Quali"
@@ -287,7 +289,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
               }
 
-              Text {
+              PlainText {
                 width: parent.width - Style.space(240)
                 text: Qt.formatDateTime(new Date(Date.parse(modelData.time)), "ddd d MMM · HH:mm")
                 color: theme.mutedColor(root.fgColor, 0.55)
@@ -297,10 +299,10 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
               }
 
-              Text {
+              PlainText {
                 width: Style.space(84)
                 text: {
-                  if (modelData.shortName === "Race" && root.modelData.winner) {
+                  if (!root.scoreHidden && modelData.shortName === "Race" && root.modelData.winner) {
                     return "🏆 " + (root.modelData.winner.code || root.modelData.winner.familyName)
                   }
                   var ms = Date.parse(modelData.time)
@@ -316,14 +318,14 @@ Item {
                   return "in " + hrs + "h " + mins + "m"
                 }
                 color: {
-                  if (modelData.shortName === "Race" && root.modelData.winner) return Color.accent
+                  if (!root.scoreHidden && modelData.shortName === "Race" && root.modelData.winner) return Commons.Color.accent
                   var ms2 = Date.parse(modelData.time)
                   if (root.nowMs >= ms2 && root.nowMs <= ms2 + 2.5 * 3600 * 1000) return root.urgentColor
                   return theme.mutedColor(root.fgColor, 0.45)
                 }
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
-                font.bold: (modelData.shortName === "Race" && Boolean(root.modelData.winner)) || (root.nowMs >= Date.parse(modelData.time) && root.nowMs <= Date.parse(modelData.time) + 2.5 * 3600 * 1000)
+                font.bold: (!root.scoreHidden && modelData.shortName === "Race" && Boolean(root.modelData.winner)) || (root.nowMs >= Date.parse(modelData.time) && root.nowMs <= Date.parse(modelData.time) + 2.5 * 3600 * 1000)
                 horizontalAlignment: Text.AlignRight
                 anchors.verticalCenter: parent.verticalCenter
               }
@@ -355,7 +357,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(6)
 
-          Text {
+          PlainText {
             text: root.isLive && Model.formatKickoff(modelData.time)
               ? (root.dateBadge + " · Started " + Model.formatKickoff(modelData.time))
               : root.dateBadge
@@ -365,14 +367,14 @@ Item {
             font.bold: true
           }
 
-          Text {
+          PlainText {
             text: "·"
             color: theme.mutedColor(root.fgColor, 0.35)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
 
-          Text {
+          PlainText {
             text: "🏆 " + (Model.shortTournamentName(modelData.leagueName) || (modelData.round ? modelData.round : ""))
             color: theme.mutedColor(root.fgColor, 0.55)
             font.family: Style.font.family
@@ -392,7 +394,7 @@ Item {
             border.color: theme.mutedColor(root.fgColor, 0.1)
             anchors.verticalCenter: parent.verticalCenter
 
-            Text {
+            PlainText {
               id: rowBcastText
               anchors.centerIn: parent
               text: "📺 " + String(root.broadcast).toUpperCase()
@@ -424,7 +426,7 @@ Item {
                         : (root.favOutcome === "draw" || root.generalOutcome === "draw"
                            ? Util.alpha(theme.warningColor, 0.16)
                            : theme.mutedColor(root.fgColor, 0.08)))))
-               : Util.alpha(Color.accent, 0.14))
+               : Util.alpha(Commons.Color.accent, 0.14))
           border.width: 1
           border.color: root.isLive
             ? Util.alpha(root.urgentColor, 0.3)
@@ -438,7 +440,7 @@ Item {
                         : (root.favOutcome === "draw" || root.generalOutcome === "draw"
                            ? Util.alpha(theme.warningColor, 0.45)
                            : theme.mutedColor(root.fgColor, 0.15)))))
-               : Util.alpha(Color.accent, 0.3))
+               : Util.alpha(Commons.Color.accent, 0.3))
 
           Row {
             id: statusRow
@@ -461,7 +463,7 @@ Item {
               }
             }
 
-            Text {
+            PlainText {
               text: root.isLive
                 ? root.syncedLiveTime
                 : (root.isFinished
@@ -489,7 +491,7 @@ Item {
                             : (root.favOutcome === "draw" || root.generalOutcome === "draw"
                                ? theme.warningColor
                                : theme.mutedColor(root.fgColor, 0.75)))))
-                   : Color.accent)
+                   : Commons.Color.accent)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               font.bold: true
@@ -516,6 +518,7 @@ Item {
             spacing: Style.space(6)
 
             TeamCrest {
+              knownLogoKeys: root.knownLogoKeys
               id: homeCrest
               sport: modelData.sport || "football"
               teamId: modelData.home.id
@@ -526,10 +529,10 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
+            PlainText {
               id: homeTeamName
               text: (root.favIsHome ? "★ " : "") + (modelData.home.name || modelData.home.shortName)
-              color: root.favIsHome ? Color.accent : root.fgColor
+              color: root.favIsHome ? Commons.Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               font.bold: root.favIsHome || (!root.scoreHidden && Number(modelData.homeScore) > Number(modelData.awayScore))
@@ -538,7 +541,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
+            PlainText {
               id: homeRecordText
               visible: Boolean(modelData.home && modelData.home.record)
               text: modelData.home && modelData.home.record ? ("(" + modelData.home.record + ")") : ""
@@ -549,7 +552,7 @@ Item {
             }
           }
 
-          Text {
+          PlainText {
             id: homeScoreText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
@@ -593,6 +596,7 @@ Item {
             spacing: Style.space(6)
 
             TeamCrest {
+              knownLogoKeys: root.knownLogoKeys
               id: awayCrest
               sport: modelData.sport || "football"
               teamId: modelData.away.id
@@ -603,10 +607,10 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
+            PlainText {
               id: awayTeamName
               text: (root.favIsAway ? "★ " : "") + (modelData.away.name || modelData.away.shortName)
-              color: root.favIsAway ? Color.accent : root.fgColor
+              color: root.favIsAway ? Commons.Color.accent : root.fgColor
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               font.bold: root.favIsAway || (!root.scoreHidden && Number(modelData.awayScore) > Number(modelData.homeScore))
@@ -615,7 +619,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
+            PlainText {
               id: awayRecordText
               visible: Boolean(modelData.away && modelData.away.record)
               text: modelData.away && modelData.away.record ? ("(" + modelData.away.record + ")") : ""
@@ -626,7 +630,7 @@ Item {
             }
           }
 
-          Text {
+          PlainText {
             id: awayScoreText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
@@ -669,13 +673,13 @@ Item {
             anchors.right: parent.right
             spacing: Style.space(4)
 
-            Text {
+            PlainText {
               text: "⚽"
               font.pixelSize: Style.font.caption
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
+            PlainText {
               width: parent.width - Style.space(20)
               text: {
                 if (!root.matchEvents || !root.matchEvents.goals) return ""

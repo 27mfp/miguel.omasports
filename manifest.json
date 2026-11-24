@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "miguel.omasports",
   "name": "OmaSports",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "author": "Miguel",
   "license": "MIT",
   "description": "All-in-one live sports tracker (Football, NBA, F1, NFL, MLB, NHL) on your Omarchy bar.",
@@ -28,7 +28,7 @@
         "key": "backgroundUpdates",
         "type": "boolean",
         "label": "Update in background",
-        "description": "Keep fetching matches on the refresh interval even while the panel is closed, so the bar badge shows live games. Enabled by default.",
+        "description": "Fetch scores, details, news and crests while the panel is closed. When disabled, alerts update only while the panel is open. Enabled by default.",
         "defaultValue": true
       },
       {

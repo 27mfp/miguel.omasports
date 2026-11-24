@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.5.1 — Unreleased
+
+### Fixed
+
+- Resolve Omarchy palette colors through `Commons.Color` on Qt 6.12, including private test-host palette overrides.
+- Treat provider names, news and other plugin-owned display text literally; escape notification-body markup.
+- Conceal the bar outcome indicator, F1 winners/session results, podiums and recent form while the result is hidden. Explicit per-match reveal remains available; hide the news wire in anti-spoiler mode.
+- Honor background updates as the polling switch: with the panel closed and background updates disabled, stop workers, queues and all provider retry timers. Notifications and live games no longer override this preference; reopening establishes a new alert baseline.
+- Keep local cache discovery and notification-tool detection alive when canceling network rounds; explicitly stop these local helpers on teardown.
+- Keep the translucent F1 live badge text legible in both palettes.
+- Load crests only from the helper-published local cache. A cold or failed cache displays a monogram without a direct remote Image request, and cache publication updates the visible crest.
+
+### Added
+
+- Diagnostics card in Settings with a sanitized support summary (plugin/Qt, sport/provider, fetch state, cache counts; no favourites, paths, tokens or provider URLs).
+- Accessible names/roles for settings controls, fixture/standings pickers and refresh/edit actions.
+- Focused model suites by provider/concern, panel policy/state/detail unit tests, a 2x scaling visual baseline, and a weekly live-provider workflow.
+
+### Changed
+
+- Split the data engine into `model/` provider modules behind the unchanged `SportsModel.js` facade; extract polling, state, detail and diagnostics logic into `controllers/`.
+- Compress large frozen provider fixtures transparently (8.5 MB → 2.5 MB including visual baselines) and read them through `tests/fixture-io.mjs`.
+- Add `.gitattributes` archive exclusions, `.editorconfig`, a private `package.json`, `pyproject.toml`, `.qmllint.ini`, and ruff/mypy/qmllint CI jobs.
+- Add a bounded `fetch-batch` command to `secure_io.py` for future process-spawn reduction, with per-request and aggregate byte ceilings.
+
+### Release preparation
+
+- Bump the manifest to 1.5.1 and retain the larger Omarchy 4.5 shared-service/UI plan as follow-up work.
+- Add behavioral polling/notification regressions and an opt-in native offscreen UI test with real, unpatched Omarchy imports.
+
 ## 1.5.0 — 2026-10-10
 
 ### Added

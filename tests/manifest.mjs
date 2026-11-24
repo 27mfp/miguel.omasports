@@ -28,11 +28,16 @@ const keys = schema.map((setting) => {
 })
 assert.equal(new Set(keys).size, keys.length, "manifest setting keys must be unique")
 
-for (const file of ["Panel.qml", "NetworkProcess.qml", "SecureProcess.qml", "secure_io.py", "RetryTimer.qml", "SportsModel.js"]) {
+for (const file of ["Panel.qml", "PlainText.qml", "NetworkProcess.qml", "SecureProcess.qml", "secure_io.py", "RetryTimer.qml", "SportsModel.js"]) {
   assert.ok(existsSync(new URL(file, root)), `required runtime file is missing: ${file}`)
 }
 
 const qmlFiles = readdirSync(new URL("../", import.meta.url)).filter((file) => file.endsWith(".qml"))
 assert.ok(qmlFiles.length >= 10, "unexpectedly incomplete QML package")
+
+const panelSource = readFileSync(new URL("Panel.qml", root), "utf8")
+const versionMatch = panelSource.match(/readonly property string pluginVersion:\s*"([^"]+)"/)
+assert.ok(versionMatch, "Panel.qml must expose pluginVersion for diagnostics")
+assert.equal(versionMatch[1], manifest.version, "Panel.qml pluginVersion drifted from manifest.json")
 
 console.log(`Manifest contract passed (${manifest.id} ${manifest.version}; ${keys.length} settings; ${qmlFiles.length} QML files)`)

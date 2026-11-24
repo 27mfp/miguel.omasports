@@ -4,12 +4,21 @@ Perceptual visual regression diffing engine for OmaSports.
 Compares a candidate screenshot against an approved baseline image.
 Generates a 3-way comparative diff with mismatched pixels highlighted in neon magenta.
 """
-import sys
 import json
 import math
+import sys
+from typing import cast
+
 from PIL import Image
 
-def perceptual_diff(baseline_path, candidate_path, diff_path, tolerance_percent=0.5, color_threshold=18):
+
+def perceptual_diff(
+    baseline_path: str,
+    candidate_path: str,
+    diff_path: str,
+    tolerance_percent: float = 0.5,
+    color_threshold: int = 18,
+) -> None:
     try:
         base = Image.open(baseline_path).convert("RGBA")
         cand = Image.open(candidate_path).convert("RGBA")
@@ -42,14 +51,16 @@ def perceptual_diff(baseline_path, candidate_path, diff_path, tolerance_percent=
     base_pixels = base.load()
     cand_pixels = cand.load()
     diff_pixels = diff_img.load()
+    if base_pixels is None or cand_pixels is None or diff_pixels is None:
+        raise RuntimeError("could not load image pixels")
 
     mismatched = 0
     total = w * h
 
     for y in range(h):
         for x in range(w):
-            b_r, b_g, b_b, b_a = base_pixels[x, y]
-            c_r, c_g, c_b, c_a = cand_pixels[x, y]
+            b_r, b_g, b_b, b_a = cast(tuple[int, int, int, int], base_pixels[x, y])
+            c_r, c_g, c_b, c_a = cast(tuple[int, int, int, int], cand_pixels[x, y])
 
             # Color distance (Euclidean in RGB)
             dist = math.sqrt((b_r - c_r) ** 2 + (b_g - c_g) ** 2 + (b_b - c_b) ** 2)

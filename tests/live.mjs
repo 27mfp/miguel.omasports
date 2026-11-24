@@ -4,16 +4,15 @@
 import { readFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import assert from "node:assert/strict"
+import { loadModel } from "./model-loader.mjs"
 
-const raw = readFileSync(new URL("../SportsModel.js", import.meta.url), "utf8")
 const exported = [
   "supportedLeagues", "espnDateList", "mergeEspnScoreboardPayloads", "isEspnScoreboardPayload", "parseEspnScoreboard", "parseEspnStandings",
   "parseF1Calendar", "parseF1DriverStandings", "parseF1ConstructorStandings",
   "parseLeaguePage", "parseTeamPage", "liveMatches", "matchLine",
   "groupMatches", "featuredMatchForTeam", "matchesForTeam", "parseDetails"
 ]
-const src = raw.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
-const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
+const Model = await loadModel(exported)
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36"
 function curl(url, { compressed = false, ua = null } = {}) {
