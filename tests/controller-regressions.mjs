@@ -5,9 +5,20 @@ import vm from "node:vm"
 import { test } from "node:test"
 
 const panel = readFileSync(new URL("../Panel.qml", import.meta.url), "utf8")
+function loadControllerModule(file, name, state) {
+  const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+    .replace(/^\.pragma library\s*$/gm, "")
+  const exported = [...source.matchAll(/^function ([A-Za-z_$][\w$]*)\s*\(/gm)].map(match => match[1])
+  vm.runInContext(source, state)
+  vm.runInContext(`var ${name} = { ${exported.join(", ")} };`, state)
+}
 function load(names, state) {
   state.root = state
   vm.createContext(state)
+  loadControllerModule("controllers/PanelPolicy.js", "Policy", state)
+  loadControllerModule("controllers/PanelDiagnostics.js", "Diagnostics", state)
+  loadControllerModule("controllers/PanelState.js", "PanelState", state)
+  loadControllerModule("controllers/PanelDetails.js", "PanelDetails", state)
   for (const name of names) {
     const match = panel.match(new RegExp(`^  function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?^  \\}`, "m"))
     assert.ok(match, name)

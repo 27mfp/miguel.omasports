@@ -21,6 +21,9 @@ jobs:
       - name: Controller regressions
         run: node tests/controller-regressions.mjs
 
+      - name: Panel policy & diagnostics
+        run: node tests/panel-logic.test.mjs
+
       - name: ESPN request sequencing
         run: node tests/espn-sequence.mjs
 
@@ -57,6 +60,27 @@ jobs:
             node --check "$file"
           done
 
+  python-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install optional lint/typecheck tools
+        run: python -m pip install --disable-pip-version-check ruff mypy pillow
+
+      - name: Ruff
+        run: ruff check secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+
+      - name: Mypy
+        run: mypy secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+
+      - name: Python syntax check
+        run: python -m py_compile secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+
   qml-syntax:
     runs-on: ubuntu-latest
     steps:
@@ -73,6 +97,8 @@ jobs:
           LINT=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qmllint)
           out_file=$(mktemp)
           set +e
+          # .qmllint.ini disables Quickshell-specific false positives while
+          # keeping syntax/unresolved-type diagnostics actionable.
           "$LINT" ./*.qml >"$out_file" 2>&1
           set -e
           cat "$out_file"

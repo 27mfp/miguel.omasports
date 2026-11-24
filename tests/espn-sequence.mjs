@@ -2,12 +2,13 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import vm from "node:vm"
+import { modelScript } from "./model-loader.mjs"
+import { readFixture } from "./fixture-io.mjs"
 import { test } from "node:test"
 
 const panel = readFileSync(new URL("../Panel.qml", import.meta.url), "utf8")
-const modelSource = readFileSync(new URL("../SportsModel.js", import.meta.url), "utf8")
 const Model = vm.createContext({})
-vm.runInContext(modelSource.replace(/^\.pragma library\s*$/m, ""), Model)
+vm.runInContext(modelScript(), Model)
 
 // Execute the production Panel functions, with QML services supplied below.
 // Panel's top-level functions end at a two-space closing brace.
@@ -87,9 +88,7 @@ function harness() {
   return { state, requests, dayList, deferred, deliver, drain, standings }
 }
 
-const captured = JSON.parse(readFileSync(
-  new URL("./fixtures/espn-mlb-scoreboard.json", import.meta.url), "utf8"
-))
+const captured = JSON.parse(readFixture("espn-mlb-scoreboard.json"))
 assert.ok(captured.events.length > 0, "MLB fixture must contain a game")
 const gameDay = JSON.stringify({ leagues: captured.leagues, events: [captured.events[0]] })
 

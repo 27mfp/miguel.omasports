@@ -126,6 +126,14 @@ async function run() {
     ipc("setSuppressFocus", "true")
     assert.equal(bool(ipc("getSuppressFocus")), true, "focus suppression could not be confirmed")
 
+    await test("Diagnostics IPC is sanitized", async () => {
+      const diagnostics = ipc("getDiagnostics")
+      assert.match(diagnostics, /^OmaSports diagnostics/)
+      assert.match(diagnostics, /plugin: miguel\.omasports \d+\.\d+\.\d+/)
+      assert.match(diagnostics, /sport: [a-z0-9]+ \((FotMob|Jolpica|ESPN)\)/)
+      assert.doesNotMatch(diagnostics, /https?:\/\/|sports-favorites|\.config|\/home\//)
+    })
+
     await test("Sport Switching IPC transitions", async () => {
       for (const sport of ["f1", "nba", "football"]) {
         ipc("sport", sport)

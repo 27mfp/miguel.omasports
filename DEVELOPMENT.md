@@ -19,14 +19,28 @@ The plugin uses a clean decoupled architecture: **pure JavaScript data engine** 
 
 ```
 miguel.omasports/
-├── SportsModel.js         # Core data engine: parsers, caching, catalogs, state management (pure JS, 0 QML deps)
+├── SportsModel.js         # Public facade: QML .imports the model modules and re-exports the same API
+├── model/
+│   ├── core.js            # Catalogs, constants, state parsing, provider-neutral helpers
+│   ├── urls.js            # Provider URL validation and safe external-link resolution
+│   ├── matches.js         # Selection, grouping, merging, live-clock and identity helpers
+│   ├── mock.js            # Deterministic OMASPORTS_MOCK=1 simulation
+│   ├── notifications.js   # Notification diffing and markup-safe delivery helpers
+│   └── providers/
+│       ├── espn.js        # ESPN scoreboards, standings, broadcast, leaders, news
+│       ├── f1.js          # Jolpica calendar, standings, results, podium, pole
+│       └── fotmob.js      # FotMob league/team pages, match details, events, stats
+├── controllers/
+│   ├── PanelPolicy.js     # Pure polling/status/IPC policy used by Panel.qml
+│   └── PanelDiagnostics.js# Sanitized support summary builder
 ├── Panel.qml              # Main panel coordinator, IPC target "miguel.omasports", layout, fixed header & focus management
 ├── PanelHeader.qml        # Fixed header: compact sport picker, tabs, live indicators, refresh & settings
 ├── FixturesTab.qml        # Schedule tab: spotlight, recent/upcoming sections with expansion, team filters
 ├── LiveTab.qml            # Dedicated live score feed, live count badge, idle fallback card
 ├── StandingsTab.qml       # League tables: Football, US sports (NBA/NFL/MLB/NHL), F1 (Drivers & Constructors)
 ├── PlainText.qml          # Literal provider text; never interprets markup
-├── SettingsTab.qml        # Grouped preferences: notifications, anti-spoiler, refresh cadence, followed teams
+├── SectionLabel.qml       # Shared uppercase settings-card heading
+├── SettingsTab.qml        # Grouped preferences + sanitized diagnostics copy button
 ├── NewsCard.qml           # Collapsible league wire & breaking news headlines card
 ├── MatchSpotlight.qml     # Compact spotlight for the followed team's next/live match, optional details
 ├── SpotlightTeam.qml      # Shared home/away block for the spotlight: crest, two-line name, record, form
@@ -39,12 +53,27 @@ miguel.omasports/
 ├── NetworkProcess.qml     # argv-based provider request wrapper: one output/failure signal, no stale callbacks
 ├── SecureProcess.qml      # Process wrapper with explicit environment and process-group hardStop()
 ├── RetryTimer.qml         # Coalesced, guarded retry timer shared by provider retry slots
-├── secure_io.py           # Hardened I/O boundary: atomic, symlink-safe writes and public network reads
+├── secure_io.py           # Hardened I/O boundary: state/cache, public reads, batch fetch, allowlisted tools
 ├── BarWidget.qml          # Omarchy top bar widget: live score ticker, sport icon, and live pulsing dot
 ├── manifest.json          # Omarchy plugin manifest
+├── package.json           # Dev scripts only (private, zero runtime dependencies)
+├── pyproject.toml         # Optional ruff/mypy configuration
+├── .qmllint.ini           # qmllint profile for Quickshell's qs.* imports
 └── tests/
     ├── run-all.mjs        # Unified test orchestrator (--quick / --full / --runtime)
-    ├── sportsmodel.test.mjs # Unit tests covering the pure JS functions
+    ├── model-loader.mjs   # Expands QML .import modules for Node tests
+    ├── fixture-io.mjs     # Transparent .gz fixture reader
+    ├── stage-files.mjs    # Stages nested runtime files into private Quickshell roots
+    ├── sportsmodel.test.mjs # Aggregates the focused model suites in tests/model/
+    ├── model/
+    │   ├── harness.mjs    # Shared model loader/test counter and export contract
+    │   ├── core.test.mjs  # Helpers, state, catalogs, mock mode
+    │   ├── espn.test.mjs
+    │   ├── f1.test.mjs
+    │   ├── fotmob.test.mjs
+    │   ├── matches.test.mjs
+    │   └── notifications.test.mjs
+    ├── panel-logic.test.mjs # PanelPolicy and sanitized diagnostics tests
     ├── compatibility.mjs  # Native offscreen palette, markup, F1 and crest checks
     ├── controller-regressions.mjs # Panel controller regressions (notifications, kickoff, mock state)
     ├── espn-sequence.mjs  # ESPN day sequencing, today-first ordering, cache and retry cases
@@ -66,7 +95,7 @@ miguel.omasports/
     ├── live.mjs           # Live E2E integration tests against real provider APIs
     ├── capture-fixtures.mjs # Captures new real-world payloads for offline testing (network required)
     └── fixtures/
-        ├── goldens.json   # Frozen JSON payloads and parser golden results
+        ├── *.json|*.html|*.gz # Frozen payloads; large files are gzip-compressed
         └── visual-goldens/# Approved baseline visual PNG snapshots
 ```
 
@@ -108,9 +137,11 @@ node tests/run-all.mjs --full --runtime # all sports/tabs plus isolated runtime 
 ```
 
 ### B. Unit Tests (Pure Model Engine)
-Always run before committing changes to `SportsModel.js`:
+Always run before committing changes to `SportsModel.js` or `model/`:
 ```bash
-node tests/sportsmodel.test.mjs
+node tests/sportsmodel.test.mjs          # all focused model suites
+node tests/model/espn.test.mjs           # one provider in isolation
+node tests/panel-logic.test.mjs          # PanelPolicy / diagnostics
 ```
 Use the suite output for the current case count; new regressions are added as bugs are fixed.
 
@@ -178,6 +209,16 @@ omarchy plugin validate .
 ```
 *Must always exit with return code 0.*
 
+### K2. Optional Python and QML static analysis
+These tools are CI-only and are not runtime dependencies:
+```bash
+uvx ruff check secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+uvx mypy secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+qmllint -i /usr/share/omarchy/shell/Commons/qmldir -i /usr/share/omarchy/shell/Ui/qmldir ./*.qml
+```
+`.qmllint.ini` documents the Quickshell-specific false positives that are
+intentionally non-blocking. CI runs ruff/mypy and a syntax-focused qmllint pass.
+
 ### L. Live Provider E2E Integration
 Hits real provider APIs (FotMob, ESPN, Jolpica) to verify parsers work against live data. Requires network access; only runs in standard and `--full` modes:
 ```bash
@@ -198,6 +239,7 @@ node tests/ui-session.mjs -- node tests/interaction.mjs
 node tests/ui-session.mjs -- node tests/visual.mjs --sport=football --tab=all --capture-only
 node tests/ui-session.mjs --palette=light -- node tests/visual.mjs --sport=football --tab=all --capture-only --artifacts=test-artifacts/light-ui
 node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --expanded --scale=1.5 --capture-only
+node tests/ui-session.mjs -- node tests/visual.mjs --sport=mlb --tab=fixtures --scale=2 --capture-only
 node tests/ui-session.mjs --source-ref=HEAD --empty -- node tests/visual.mjs --sport=football --tab=fixtures --capture-only
 ```
 
@@ -267,3 +309,26 @@ Run `node tests/run-all.mjs --quick --runtime` on an installed Omarchy host. The
 All plugin-owned text derives from `PlainText.qml`. All image downloads use the bounded helper cache; TeamCrest consumes the published key map through the tab/row components. Keep these files in copied installations. The shared-service redesign and its full integration matrix remain in [the follow-up plan](docs/omarchy-4.5-plan.md); the current panel still owns the model per widget.
 
 The private UI harness defaults to a fixed dark palette; use `--palette=light` for the second palette. Its HOME and preferences are temporary, so the mock screenshots exercise the cold-cache monogram path without live CDN fallback. The checked-in dark baselines were reviewed for Omarchy 4.5 / Qt 6.12; see [release evidence](docs/release-checklist.md) before updating them. The installed desktop theme does not determine these captures.
+
+Fractional-scaling coverage includes 1x, 1.5x and 2x baselines for the MLB
+fixtures card. `--full` runs the 2x case; the npm scripts `test:visual:scale1`,
+`test:visual:scale1.5` and `test:visual:scale2` run each scale directly.
+
+## 6. Localization readiness
+
+User-facing text currently lives in QML string literals and is written whole
+(with `%1`-style placeholders where a value is interpolated). This keeps the
+strings ready for translation, but the plugin does **not** ship translation
+catalogs yet. Omarchy's runtime localization path is `Commons.Translations`
+with flat JSON files in an `i18n/` directory beside the QML; a full pass should
+introduce `en.json` first, then add languages, and must preserve visual goldens
+because English output stays byte-identical. Do not substitute `qsTr()` alone
+for this: it would not use Omarchy's language selection.
+
+## 7. Continuous integration
+
+`.github/workflows/tests.yml` runs the Node suites, Python ruff/mypy, and a
+qmllint syntax pass on every push and pull request.
+`.github/workflows/live-providers.yml` runs `tests/live.mjs all` weekly and on
+demand to catch FotMob/ESPN/Jolpica schema drift. Dev tooling is never imported
+by runtime code.

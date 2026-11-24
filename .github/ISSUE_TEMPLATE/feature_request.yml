@@ -1,0 +1,42 @@
+name: Sport or league request
+description: Ask for a new sport, league, cup, or provider.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Request type
+      options:
+        - New league or cup (existing sport)
+        - New sport
+        - Provider / data-source change
+        - Panel feature
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: sport
+    attributes:
+      label: Sport
+      placeholder: Football / soccer, NBA, Formula 1, NFL, MLB, NHL
+    validations:
+      required: true
+  - type: input
+    id: league
+    attributes:
+      label: League, cup, or competition
+      description: Include the provider page or identifier when you know it.
+      placeholder: UEFA Europa League (FotMob 73)
+  - type: textarea
+    id: why
+    attributes:
+      label: What should OmaSports show?
+      description: Fixtures, standings, live scores, news, follow behaviour, etc.
+    validations:
+      required: true
+  - type: input
+    id: provider-url
+    attributes:
+      label: Public provider URL (optional)
+      description: A public, unauthenticated page or API endpoint for the competition.

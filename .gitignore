@@ -5,6 +5,9 @@ sports-favorites.json
 test-artifacts/
 __pycache__/
 *.py[cod]
+.ruff_cache/
+.mypy_cache/
+.qmllint_cache/
 
 # Internal working notes; keep locally, outside the published plugin.
 /docs/adal/

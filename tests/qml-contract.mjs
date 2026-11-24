@@ -15,6 +15,9 @@ const visual = read("tests/visual.mjs")
 const interaction = read("tests/interaction.mjs")
 const networkProcess = read("NetworkProcess.qml")
 const secureProcess = read("SecureProcess.qml")
+const settingsTab = read("SettingsTab.qml")
+const policy = read("controllers/PanelPolicy.js")
+const diagnostics = read("controllers/PanelDiagnostics.js")
 for (const [file, component] of [["FixturesTab.qml", "MatchRow"], ["LiveTab.qml", "LiveRow"], ["StandingsTab.qml", "StandingsRow"]]) {
   assert.match(read(file), new RegExp(`delegate: ${component} \\{\\s*knownLogoKeys: controller\\.knownLogoKeys`),
     `${component} must receive cache publications from its controller`)
@@ -55,4 +58,12 @@ assert.match(panel, /\/usr\/bin\/python3/, "runtime helper must be launched by a
 assert.match(panel, /crest-batch/, "crest downloads must route through the hardened cache publisher")
 assert.match(panel, /state-write/, "state writes must route through the hardened descriptor-relative writer")
 
-console.log("QML cross-file contract passed (UI contracts, bounded I/O, closed environment, hard cleanup)")
+// Diagnostics stay local, sanitized, and wired to a real Settings control.
+assert.match(panel, /function getDiagnostics\(\): string/, "Panel must expose diagnostics over IPC")
+assert.match(panel, /function copyDiagnosticInfo\(\)/, "Panel must expose a copy helper")
+assert.match(settingsTab, /Copy diagnostic info/, "SettingsTab must expose the diagnostics button")
+assert.match(diagnostics, /function errorCode\(/, "diagnostics must map raw errors to stable codes")
+assert.doesNotMatch(diagnostics, /userHome|secureHome|savedState|selectedTeamIds/, "diagnostics must not read personal paths or favorites")
+assert.match(policy, /function nextPollDelay\(/, "polling policy must live outside Panel.qml")
+
+console.log("QML cross-file contract passed (UI contracts, bounded I/O, closed environment, hard cleanup, diagnostics)")

@@ -3,10 +3,11 @@
 // Existing visual/interaction runners create and remove their own HEADLESS
 // outputs. The desktop shell, bar layout and user preferences are untouched.
 import { spawn, spawnSync } from "node:child_process"
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { listRuntimeFiles, listRuntimeFilesAtRef } from "./stage-files.mjs"
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const directory = mkdtempSync(join(tmpdir(), "omasports-ui-session-"))
@@ -46,14 +47,10 @@ try {
   const dismissModel = "model: root.open ? Quickshell.screens : []"
   if (!keyboardSource.includes(dismissModel)) throw new Error("Headless dismissal isolation contract changed")
   writeFileSync(keyboardPanel, keyboardSource.replace(dismissModel, "model: []"))
-  let runtimeFiles = readdirSync(repository)
-  if (ref) {
-    const listing = spawnSync("git", ["ls-tree", "--name-only", ref], { cwd: repository, encoding: "utf8" })
-    if (listing.status !== 0) throw new Error(listing.stderr)
-    runtimeFiles = listing.stdout.trim().split("\n")
-  }
-  for (const name of runtimeFiles.filter(name => /\.(qml|js|py)$/.test(name))) {
+  const runtimeFiles = ref ? listRuntimeFilesAtRef(ref, repository) : listRuntimeFiles(repository)
+  for (const name of runtimeFiles) {
     const target = join(shell, "sports", name)
+    mkdirSync(dirname(target), { recursive: true })
     if (ref) {
       const result = spawnSync("git", ["show", `${ref}:${name}`], { cwd: repository, encoding: "utf8" })
       if (result.status !== 0) throw new Error(result.stderr)

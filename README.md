@@ -82,7 +82,7 @@ omarchy plugin remove miguel.omasports
 
 ## Configuration
 
-The panel’s settings screen controls notifications, background polling, anti-spoiler mode, refresh cadence, followed teams, the bar ticker, the spotlight card, and the league news wire.
+The panel’s settings screen controls notifications, background polling, anti-spoiler mode, refresh cadence, followed teams, the bar ticker, the spotlight card, and the league news wire. It also has a **Copy** button under Diagnostics for a sanitized support summary (plugin/Qt version, sport/provider, fetch state and cache counts; no favourites, paths, tokens or provider URLs).
 
 With **Update in the background** off, closing the panel stops automatic score, detail, news and crest requests, including retries. Alerts then update only while the panel is open. Reopening establishes a fresh baseline so goals scored while paused are not replayed as new alerts.
 
@@ -158,6 +158,16 @@ node tests/ui-session.mjs                  # isolated visual regression suite
 node tests/offline.mjs                     # frozen provider payload regressions
 node tests/live.mjs all                     # live provider acceptance tests; network required
 node tests/release-guard.mjs                # release payload safety checks
+npm test                                    # alias for the quick quality gate
+npm run test:visual:scale2                  # 2x fractional-scaling comparison
+```
+
+Optional CI-only static analysis (no runtime dependencies):
+
+```bash
+uvx ruff check secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+uvx mypy secure_io.py tests/security-helper.py tests/diff.py tests/crop.py
+qmllint -i /usr/share/omarchy/shell/Commons/qmldir -i /usr/share/omarchy/shell/Ui/qmldir ./*.qml
 ```
 
 The UI session runs production components in a private Quickshell host with temporary preferences. Visual and interaction tests create a temporary `HEADLESS-*` Wayland monitor, suppress keyboard focus, and clean up when finished. Cross-display dismissal surfaces are disabled only in the private host; your running shell and bar layout are untouched. The visual suite uses the built-in deterministic mock mode so screenshots do not depend on changing match data.
@@ -168,7 +178,7 @@ For local UI work, launch the shell with mock data:
 OMASPORTS_MOCK=1 omarchy-launch-shell
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the architecture map, provider polling floors, IPC details, and the full testing playbook.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the architecture map, provider polling floors, IPC details, and the full testing playbook, and [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## License
 

@@ -9,7 +9,9 @@ needed to reject symlink parents and publish files atomically.
 from __future__ import annotations
 
 import argparse
+import base64
 import concurrent.futures
+import contextlib
 import hashlib
 import json
 import os
@@ -22,12 +24,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
+from typing import Any
 
 STATE_MAX_BYTES = 256 * 1024
 FETCH_HARD_MAX_BYTES = 8 * 1024 * 1024
+FETCH_BATCH_MAX_REQUESTS = 16
+FETCH_BATCH_HARD_MAX_BYTES = 16 * 1024 * 1024
 CREST_MAX_BYTES = 512 * 1024
 CREST_MAX_DIMENSION = 2048
 MAX_CACHE_ENTRIES = 4096
@@ -45,6 +49,11 @@ class SecurityError(RuntimeError):
     pass
 
 
+# ---------------------------------------------------------------------------
+# Descriptor-relative path and state persistence
+# ---------------------------------------------------------------------------
+
+
 def become_process_group_leader() -> None:
     try:
         os.setsid()
@@ -52,7 +61,7 @@ def become_process_group_leader() -> None:
         # A caller that already made us a session leader still has the desired
         # process-group property. Verify it instead of silently weakening it.
         if os.getpgrp() != os.getpid():
-            raise SecurityError("could not create isolated process group")
+            raise SecurityError("could not create isolated process group") from None
 
 
 def _validate_component(name: str) -> None:
@@ -170,10 +179,8 @@ def atomic_write_at(dir_fd: int, name: str, data: bytes, mode: int = 0o600) -> N
             offset += os.write(fd, view[offset:])
         os.fsync(fd)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temp, dir_fd=dir_fd)
-        except OSError:
-            pass
         raise
     finally:
         os.close(fd)
@@ -181,10 +188,8 @@ def atomic_write_at(dir_fd: int, name: str, data: bytes, mode: int = 0o600) -> N
         os.replace(temp, name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
         os.fsync(dir_fd)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temp, dir_fd=dir_fd)
-        except OSError:
-            pass
         raise
 
 
@@ -237,12 +242,25 @@ def state_write(payload: str) -> int:
         os.close(fd)
 
 
+# ---------------------------------------------------------------------------
+# Public network reads (allowlisted hosts, redirects, byte ceilings)
+# ---------------------------------------------------------------------------
+
+
 class RestrictedRedirectHandler(urllib.request.HTTPRedirectHandler):
     def __init__(self, allowed_hosts: frozenset[str]):
         super().__init__()
         self.allowed_hosts = allowed_hosts
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
         validate_https_url(newurl, self.allowed_hosts)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -311,6 +329,98 @@ def fetch_command(args: argparse.Namespace) -> int:
     )
     sys.stdout.buffer.write(raw)
     return 0
+
+
+@dataclass(frozen=True)
+class BatchRequest:
+    url: str
+    max_bytes: int
+    timeout: float
+    user_agent: str = ""
+    no_cache: bool = False
+
+
+def parse_batch_requests(payload: str) -> list[BatchRequest]:
+    """Validate the JSON manifest used by `fetch-batch`.
+
+    Only provider-data hosts are accepted; crests stay on the dedicated,
+    content-validated `crest-batch` path. Limits are rejected before any
+    socket is opened so a malformed manifest cannot bypass the per-response
+    or aggregate byte ceilings.
+    """
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise SecurityError("batch manifest is not valid JSON") from exc
+    if not isinstance(parsed, list) or not parsed:
+        raise SecurityError("batch manifest must be a non-empty array")
+    if len(parsed) > FETCH_BATCH_MAX_REQUESTS:
+        raise SecurityError("batch manifest exceeds request limit")
+    requests: list[BatchRequest] = []
+    total_bytes = 0
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise SecurityError("batch request must be an object")
+        url = item.get("url")
+        if not isinstance(url, str) or not url:
+            raise SecurityError("batch request requires a URL")
+        max_bytes = item.get("maxBytes")
+        if not isinstance(max_bytes, int) or isinstance(max_bytes, bool):
+            raise SecurityError("batch request requires an integer maxBytes")
+        if max_bytes <= 0 or max_bytes > FETCH_HARD_MAX_BYTES:
+            raise SecurityError("batch request byte limit is invalid")
+        timeout = item.get("timeout", 12.0)
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not (1 <= timeout <= 30):
+            raise SecurityError("batch request timeout is invalid")
+        user_agent = item.get("userAgent", "")
+        if not isinstance(user_agent, str) or len(user_agent) > 256 or any(ord(ch) < 32 for ch in user_agent):
+            raise SecurityError("batch request user agent is invalid")
+        no_cache = item.get("noCache", False)
+        if not isinstance(no_cache, bool):
+            raise SecurityError("batch request noCache must be boolean")
+        total_bytes += max_bytes
+        if total_bytes > FETCH_BATCH_HARD_MAX_BYTES:
+            raise SecurityError("batch manifest exceeds aggregate byte limit")
+        requests.append(BatchRequest(url, max_bytes, float(timeout), user_agent, no_cache))
+    return requests
+
+
+def run_batch(requests: list[BatchRequest]) -> dict[str, list[dict[str, object]]]:
+    """Fetch a validated batch in parallel; return ordered, path-free results."""
+
+    def run(index: int, item: BatchRequest) -> dict[str, object]:
+        try:
+            raw = fetch_bytes(
+                item.url,
+                allowed_hosts=DATA_HOSTS,
+                max_bytes=item.max_bytes,
+                timeout=item.timeout,
+                user_agent=item.user_agent,
+                no_cache=item.no_cache,
+            )
+            return {"index": index, "ok": True, "body": base64.b64encode(raw).decode("ascii")}
+        except (SecurityError, OSError, urllib.error.URLError, ValueError) as exc:
+            # Never echo the URL or exception text; callers only need a stable
+            # category for retry/backoff decisions.
+            return {"index": index, "ok": False, "error": type(exc).__name__}
+
+    responses = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(requests))) as pool:
+        futures = [pool.submit(run, index, item) for index, item in enumerate(requests)]
+        for future in futures:
+            responses.append(future.result())
+    return {"responses": responses}
+
+
+def fetch_batch_command(args: argparse.Namespace) -> int:
+    requests = parse_batch_requests(args.requests)
+    sys.stdout.write(json.dumps(run_batch(requests), separators=(",", ":")))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Crest cache: PNG validation and atomic publication
+# ---------------------------------------------------------------------------
 
 
 def validate_png(data: bytes) -> tuple[int, int]:
@@ -385,10 +495,8 @@ def validate_cached_entry(dir_fd: int, key: str) -> bool:
 
 def remove_cache_entry(dir_fd: int, key: str) -> None:
     for suffix in (".png", ".meta"):
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(key + suffix, dir_fd=dir_fd)
-        except FileNotFoundError:
-            pass
 
 
 def cache_scan() -> int:
@@ -487,6 +595,11 @@ def crest_batch(values: list[str]) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Allowlisted desktop tools and command dispatch
+# ---------------------------------------------------------------------------
+
+
 def exec_tool(tool: str, args: list[str]) -> int:
     executable = ALLOWED_TOOLS.get(tool)
     if executable is None:
@@ -508,6 +621,9 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--timeout", type=float, default=12.0)
     fetch.add_argument("--user-agent", default="")
     fetch.add_argument("--no-cache", action="store_true")
+
+    batch = sub.add_parser("fetch-batch", add_help=False)
+    batch.add_argument("--requests", required=True)
 
     sub.add_parser("state-read", add_help=False)
 
@@ -533,6 +649,8 @@ def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "fetch":
         return fetch_command(args)
+    if args.command == "fetch-batch":
+        return fetch_batch_command(args)
     if args.command == "state-read":
         return state_read()
     if args.command == "state-write":
@@ -553,4 +671,4 @@ if __name__ == "__main__":
         raise SystemExit(main(sys.argv[1:]))
     except (SecurityError, OSError, urllib.error.URLError, json.JSONDecodeError, ValueError) as exc:
         sys.stderr.write(f"omasports secure I/O: {exc}\n")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc

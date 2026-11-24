@@ -7,21 +7,22 @@ import importlib.util
 import json
 import os
 import pathlib
+import sys
 import tempfile
 import zlib
-
+from typing import Any, cast
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location("omasports_secure_io", ROOT / "secure_io.py")
 assert SPEC and SPEC.loader
 secure_io = importlib.util.module_from_spec(SPEC)
-import sys
 sys.modules[SPEC.name] = secure_io
 SPEC.loader.exec_module(secure_io)
 
 
 def use_home(path: pathlib.Path) -> None:
-    secure_io.canonical_home = lambda: str(path)
+    # The helper is loaded dynamically, so mypy cannot see this attribute.
+    cast(Any, secure_io).canonical_home = lambda: str(path)
 
 
 def tiny_png() -> bytes:
@@ -101,4 +102,42 @@ with tempfile.TemporaryDirectory(prefix="omasports-png-") as tmp:
         except secure_io.SecurityError:
             pass
 
-print("secure_io behavioral checks passed")
+# Batch provider fetches share the same allowlist and byte ceilings, and only
+# return stable error categories (never URLs or exception text).
+valid = json.dumps([
+    {"url": "https://www.fotmob.com/leagues/47", "maxBytes": 1024, "timeout": 5, "userAgent": "test"},
+    {"url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard", "maxBytes": 2048},
+])
+parsed = secure_io.parse_batch_requests(valid)
+assert len(parsed) == 2
+for bad_manifest in (
+    "[]",
+    json.dumps([{"url": "https://example.invalid/x", "maxBytes": 10}] * 17),
+    json.dumps([{"url": "https://www.fotmob.com/x", "maxBytes": 0}]),
+    json.dumps([{"url": "https://www.fotmob.com/x", "maxBytes": secure_io.FETCH_HARD_MAX_BYTES + 1}]),
+    json.dumps([{"url": "https://www.fotmob.com/x", "maxBytes": 10, "timeout": 0}]),
+):
+    try:
+        secure_io.parse_batch_requests(bad_manifest)
+        raise AssertionError("invalid batch manifest was accepted")
+    except secure_io.SecurityError:
+        pass
+
+calls: list[tuple[str, int]] = []
+original_fetch = secure_io.fetch_bytes
+
+
+def fake_fetch(url: str, **kwargs: Any) -> bytes:
+    calls.append((url, int(kwargs["max_bytes"])))
+    return b"ok"
+
+
+cast(Any, secure_io).fetch_bytes = fake_fetch
+try:
+    batch = secure_io.run_batch(parsed)
+finally:
+    cast(Any, secure_io).fetch_bytes = original_fetch
+assert len(calls) == 2
+assert [row["ok"] for row in batch["responses"]] == [True, True]
+assert batch["responses"][0]["body"] == "b2s="
+print("secure_io behavioral checks passed (state, cache, PNG, batch limits)")

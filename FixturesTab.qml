@@ -482,6 +482,7 @@ Column {
 
       Dropdown {
         id: fixtureFilterDropdown
+        Accessible.name: "Choose fixture filter"
         anchors.fill: parent
         label: ""
         showLabel: false

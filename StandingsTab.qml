@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import qs.Commons as Commons
-import qs.Ui
 
 Column {
   id: root
@@ -65,6 +64,7 @@ Column {
 
       SelectionDropdown {
         id: standingsPicker
+        Accessible.name: "Choose standings group"
         anchors.fill: parent
         label: ""
         showLabel: false

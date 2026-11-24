@@ -2,7 +2,6 @@ import QtQuick
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
-import "SportsModel.js" as Model
 
 Column {
   id: root
@@ -24,6 +23,9 @@ Column {
   component PreferenceToggle: Toggle {
     titleSize: Style.font.body
     borderSpec: activeFocus || hasCursor ? Border.controlSpec("focus", foreground, accent) : Border.none()
+    Accessible.role: Accessible.CheckBox
+    Accessible.name: label
+    Accessible.checked: checked
   }
 
   // ---- 1. Score & Match Notifications Card ------------------------
@@ -42,13 +44,9 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      PlainText {
+      SectionLabel {
         text: "ALERTS & UPDATES"
-        color: theme.mutedColor(root.fgColor, 0.6)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 0.8
+        foreground: root.fgColor
       }
 
       PreferenceToggle {
@@ -170,13 +168,9 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      PlainText {
+      SectionLabel {
         text: "SCORE PRIVACY"
-        color: theme.mutedColor(root.fgColor, 0.6)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 0.8
+        foreground: root.fgColor
       }
 
       PreferenceToggle {
@@ -207,13 +201,9 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(10)
 
-      PlainText {
+      SectionLabel {
         text: "DISPLAY"
-        color: theme.mutedColor(root.fgColor, 0.6)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 0.8
+        foreground: root.fgColor
       }
 
       PreferenceToggle {
@@ -254,13 +244,9 @@ Column {
       anchors.margins: Style.space(8)
       spacing: Style.space(8)
 
-      PlainText {
+      SectionLabel {
         text: "NEWS"
-        color: theme.mutedColor(root.fgColor, 0.6)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 0.8
+        foreground: root.fgColor
       }
 
       PreferenceToggle {
@@ -499,6 +485,7 @@ Column {
             id: settingsIntervalPicker
             anchors.fill: parent
             showLabel: false
+            Accessible.name: "Refresh interval when nothing is live"
             value: controller.refreshIntervalLabel()
             options: controller.refreshIntervalOptions
             foreground: root.fgColor
@@ -580,6 +567,8 @@ Column {
           text: "Edit"
           iconText: "󰒓"
           foreground: root.fgColor
+          Accessible.role: Accessible.Button
+          Accessible.name: "Edit followed teams and leagues"
           onClicked: {
             controller.showingSettings = false
             controller.tabIndex = 0
@@ -657,7 +646,76 @@ Column {
           iconText: "󰑐"
           iconSpinning: controller.loading
           foreground: root.fgColor
+          Accessible.role: Accessible.Button
+          Accessible.name: "Refresh all match data now"
           onClicked: controller.forceRefresh()
+        }
+      }
+    }
+  }
+
+  // ---- 8. Diagnostics & Support Card -------------------------------
+  Rectangle {
+    width: parent.width
+    implicitHeight: diagnosticsCardCol.implicitHeight + Style.space(24)
+    radius: theme.subtleRadius(6)
+    color: "transparent"
+    border.width: 0
+
+    Column {
+      id: diagnosticsCardCol
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.margins: Style.space(8)
+      spacing: Style.space(8)
+
+      SectionLabel {
+        text: "DIAGNOSTICS"
+        foreground: root.fgColor
+      }
+
+      Item {
+        width: parent.width
+        implicitHeight: Math.max(diagnosticsText.implicitHeight, copyDiagnosticsBtn.implicitHeight)
+
+        Column {
+          id: diagnosticsText
+          anchors.left: parent.left
+          anchors.right: copyDiagnosticsBtn.left
+          anchors.rightMargin: Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Style.space(2)
+
+          PlainText {
+            text: "Support summary"
+            color: root.fgColor
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+
+          PlainText {
+            width: parent.width
+            text: "Plugin, Qt, sport/provider, fetch state and cache counts. No favorites, tokens or paths."
+            color: theme.mutedColor(root.fgColor, 0.6)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+        }
+
+        Button {
+          id: copyDiagnosticsBtn
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          text: controller.diagnosticCopied ? "Copied" : "Copy"
+          iconText: "󰆏"
+          tooltipText: "Copy diagnostic info"
+          foreground: root.fgColor
+          Accessible.role: Accessible.Button
+          Accessible.name: "Copy diagnostic info"
+          onClicked: controller.copyDiagnosticInfo()
         }
       }
     }

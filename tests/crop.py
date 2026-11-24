@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Crop the popup's IPC-reported rectangle from a headless capture."""
 import sys
+
 from PIL import Image
 
 if len(sys.argv) != 7:

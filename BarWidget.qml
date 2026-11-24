@@ -29,7 +29,7 @@ BarWidget {
     return setting("showBarTicker", true) === true
   }
 
-  readonly property bool vertical: root.bar ? root.bar.vertical : false
+  // `vertical` is inherited from BarWidget; do not redeclare it.
   readonly property bool hasTicker: !vertical && showBarTicker && favoriteLive && favoriteSummary !== ""
 
   readonly property string barDisplayLabel: {

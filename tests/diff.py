@@ -4,12 +4,20 @@ Perceptual visual regression diffing engine for OmaSports.
 Compares a candidate screenshot against an approved baseline image.
 Generates a 3-way comparative diff with mismatched pixels highlighted in neon magenta.
 """
-import sys
 import json
 import math
+import sys
+
 from PIL import Image
 
-def perceptual_diff(baseline_path, candidate_path, diff_path, tolerance_percent=0.5, color_threshold=18):
+
+def perceptual_diff(
+    baseline_path: str,
+    candidate_path: str,
+    diff_path: str,
+    tolerance_percent: float = 0.5,
+    color_threshold: int = 18,
+) -> None:
     try:
         base = Image.open(baseline_path).convert("RGBA")
         cand = Image.open(candidate_path).convert("RGBA")

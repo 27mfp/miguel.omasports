@@ -5,18 +5,19 @@
 // Run occasionally (or before releases) to refresh the frozen data.
 // Usage: node tests/capture-fixtures.mjs
 import { execFileSync } from "node:child_process"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { gzipSync } from "node:zlib"
+import { loadModel } from "./model-loader.mjs"
+import { readFixture } from "./fixture-io.mjs"
 
 // Load the real parser module (same trick as tests/offline.mjs)
-const modelSrc = readFileSync(fileURLToPath(new URL("../SportsModel.js", import.meta.url)), "utf8")
 const exported = [
   "parseEspnScoreboard", "parseEspnStandings", "parseF1Calendar",
   "parseF1DriverStandings", "parseF1ConstructorStandings",
   "parseLeaguePage", "parseTeamPage", "espnDateList", "mergeEspnScoreboardPayloads", "parseDetails"
 ]
-const src = modelSrc.replace(/^\.pragma library\s*$/m, "") + "\nexport { " + exported.join(", ") + " }\n"
-const Model = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))
+const Model = await loadModel(exported)
 
 const dir = fileURLToPath(new URL("./fixtures/", import.meta.url))
 mkdirSync(dir, { recursive: true })
@@ -35,9 +36,23 @@ function curl(url, { compressed = false, ua = null } = {}) {
 const capturedAt = Date.now()
 const goldens = []
 
+// Large payloads are gzipped transparently; fixture-io.mjs reads either form.
+const COMPRESS_THRESHOLD = 32 * 1024
+
 function save(name, data) {
-  writeFileSync(dir + name, data)
-  console.log("  saved " + name + " (" + Math.round(data.length / 1024) + " KB)")
+  const plain = dir + name
+  const compressed = plain + ".gz"
+  for (const stale of [plain, compressed]) {
+    if (existsSync(stale)) rmSync(stale)
+  }
+  if (Buffer.byteLength(data) > COMPRESS_THRESHOLD) {
+    writeFileSync(compressed, gzipSync(Buffer.from(data), { level: 9 }))
+    console.log("  saved " + name + ".gz (" + Math.round(data.length / 1024) + " KB → " +
+      Math.round(Buffer.byteLength(gzipSync(Buffer.from(data))) / 1024) + " KB)")
+  } else {
+    writeFileSync(plain, data)
+    console.log("  saved " + name + " (" + Math.round(data.length / 1024) + " KB)")
+  }
 }
 
 function golden(name, data) {
@@ -58,7 +73,7 @@ golden("fotmob-team-9825", Model.parseTeamPage(teamHtml, "9825"))
 // Match detail page (stadium/referee/FT correction feed). Picked dynamically
 // from the league page just captured so there is always a current id.
 try {
-  const league47 = Model.parseLeaguePage(readFileSync(dir + "fotmob-league-47.html", "utf8"), "47")
+  const league47 = Model.parseLeaguePage(readFixture("fotmob-league-47.html"), "47")
   const candidate = (league47.matches || []).find(m => m.pageUrl) || null
   if (candidate) {
     const matchUrl = String(candidate.pageUrl).indexOf("http") === 0
@@ -97,10 +112,10 @@ const f1Ctor = curl("https://api.jolpi.ca/ergast/f1/current/constructorStandings
 save("f1-constructors.json", f1Ctor)
 golden("f1-constructors", Model.parseF1ConstructorStandings(f1Ctor))
 
-writeFileSync(
-  dir + "goldens.json",
+save(
+  "goldens.json",
   JSON.stringify({ capturedAt, goldens: Object.fromEntries(goldens.map(g => [g.name, g.data])) }, null, 1)
 )
-console.log("  saved goldens.json (" + goldens.length + " snapshots)")
+console.log("  saved goldens for " + goldens.length + " snapshots")
 
 console.log("done")

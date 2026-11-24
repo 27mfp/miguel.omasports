@@ -7,12 +7,19 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "SportsModel.js" as Model
+import "controllers/PanelPolicy.js" as Policy
+import "controllers/PanelDiagnostics.js" as Diagnostics
+import "controllers/PanelState.js" as PanelState
+import "controllers/PanelDetails.js" as PanelDetails
 
 Panel {
   id: root
   moduleName: "miguel.omasports"
   ipcTarget: "miguel.omasports"
   manageIpc: false
+
+  // Keep in sync with manifest.json (tests/manifest.mjs enforces this).
+  readonly property string pluginVersion: "1.5.1"
 
   Theme { id: theme }
 
@@ -1075,15 +1082,12 @@ Panel {
 
   // ---- State persistence ----------------------------------------------------
   function selectedLeagueNameList() {
-    if (activeSport !== "football") return activeSportMeta.label
-    var names = []
-    var ids = Model.arrayFrom(selectedLeagueIds)
-    for (var i = 0; i < ids.length; i++) names.push(Model.leagueLabel(ids[i]))
-    return names.join(", ")
+    return PanelState.selectedLeagueNameList(
+      root.activeSport, root.activeSportMeta.label, root.selectedLeagueIds, Model.leagueLabel, Model.arrayFrom)
   }
 
   function stateFilePath() {
-    return (root.secureHome || root.userHome) + "/.config/omarchy/sports-favorites.json"
+    return PanelState.stateFilePath(root.secureHome || root.userHome)
   }
 
   function loadStateSecure() {
@@ -1094,36 +1098,29 @@ Panel {
   }
 
   function applyState(raw) {
-    var str = String(raw || "")
-    var nextState = Model.parseState(str)
-    var ownWrite = ignoredStateSignature !== ""
-      && JSON.stringify(nextState) === ignoredStateSignature
-    if (ownWrite) {
-      ignoredStateSignature = ""
+    var loaded = PanelState.loadedState(raw, root.ignoredStateSignature, Model.parseState)
+    if (loaded.ownWrite) {
+      root.ignoredStateSignature = ""
       return
     }
-    savedState = nextState
-    activeSport = String(savedState.sport || "football")
-    antiSpoiler = savedState.antiSpoiler === true
-    enableNotifications = savedState.notifications !== false
-    showNewsWire = savedState.showNewsWire !== false
-    if (savedState.backgroundUpdates !== undefined) {
-      backgroundUpdates = savedState.backgroundUpdates === true
-    } else {
-      backgroundUpdates = setting("backgroundUpdates", true) === true
-    }
-    if (savedState.showBarTicker !== undefined) {
-      showBarTicker = savedState.showBarTicker === true
-    } else {
-      showBarTicker = setting("showBarTicker", true) === true
-    }
-    showSpotlight = savedState.showSpotlight !== false
+    savedState = loaded.state
+    var nextSettings = PanelState.settings(savedState, {
+      backgroundUpdates: setting("backgroundUpdates", true),
+      showBarTicker: setting("showBarTicker", true)
+    })
+    activeSport = nextSettings.activeSport
+    antiSpoiler = nextSettings.antiSpoiler
+    enableNotifications = nextSettings.enableNotifications
+    showNewsWire = nextSettings.showNewsWire
+    backgroundUpdates = nextSettings.backgroundUpdates
+    showBarTicker = nextSettings.showBarTicker
+    showSpotlight = nextSettings.showSpotlight
     restoreSportSelections()
     stateLoaded = true
 
     if (fixturesTab && fixturesTab.leaguePicker) fixturesTab.leaguePicker.values = selectedLeagueIds
     ensureStandingsSelection()
-    if (!ownWrite && monitoringAllowed()) {
+    if (!loaded.ownWrite && monitoringAllowed()) {
       espnRetryCount = 0
       f1RetryCount = 0
       root.startRound()
@@ -1134,9 +1131,8 @@ Panel {
 
   function persistState() {
     if (!stateLoaded) return
-    var tabName = tabIndex === 3 ? "settings" : (tabIndex === 2 ? "standings" : (tabIndex === 1 ? "live" : "fixtures"))
-    savedState = Model.buildPersistedState(activeSport, savedState, {
-      tabName: tabName,
+    savedState = PanelState.persistedState(activeSport, savedState, {
+      tabName: PanelState.tabName(tabIndex),
       selectedLeagueIds: selectedLeagueIds,
       selectedTeamIds: selectedTeamIds,
       selectedTeamName: selectedTeamName,
@@ -1145,15 +1141,12 @@ Panel {
       enableNotifications: enableNotifications,
       backgroundUpdates: backgroundUpdates,
       showBarTicker: showBarTicker,
-      showSpotlight: showSpotlight
-    })
-    savedState.showNewsWire = showNewsWire
-    savedState.backgroundUpdates = backgroundUpdates
-    savedState.showBarTicker = showBarTicker
-    savedState.showSpotlight = showSpotlight
+      showSpotlight: showSpotlight,
+      showNewsWire: showNewsWire
+    }, Model.buildPersistedState)
     ignoredStateSignature = JSON.stringify(savedState)
     persistenceError = ""
-    pendingStatePayload = JSON.stringify(savedState, null, 2) + "\n"
+    pendingStatePayload = PanelState.serialize(savedState)
     if (!stateWriteProc.running) startStateWrite()
   }
 
@@ -2367,20 +2360,10 @@ Panel {
 
   // ---- Football Detail Enrichment ------------------------------------------
   function startDetailFetch() {
-    if (!monitoringAllowed()) return
-    if (activeSport !== "football") return
-    var wanted = []
-    var live = Model.liveMatches(allMatches, matchDetails, root.mockModeOverride ? root.nowMs : Date.now())
-    for (var i = 0; i < live.length && wanted.length < 8; i++) {
-      var lid = String(live[i].id)
-      if (wanted.indexOf(lid) === -1) wanted.push(lid)
-    }
-    var source = teamMatchesRaw && teamMatchesRaw.length > 0 ? teamMatchesRaw : teamMatches
-    for (var j = 0; j < source.length && wanted.length < 8; j++) {
-      var tid = String(source[j].id)
-      if (wanted.indexOf(tid) === -1 && (!matchDetails[tid] || (source[j] && source[j].status === "live"))) wanted.push(tid)
-    }
-    detailQueue = wanted.slice(0, 8)
+    if (!monitoringAllowed() || activeSport !== "football") return
+    detailQueue = PanelDetails.wantedDetails(
+      true, root.activeSport, root.allMatches, root.matchDetails,
+      root.teamMatchesRaw, root.teamMatches, root.mockModeOverride ? root.nowMs : Date.now(), Model)
     Qt.callLater(nextDetail)
   }
 
@@ -2430,98 +2413,23 @@ Panel {
     var id = String(proc.detailId || "")
     if (id !== "" && String(raw || "").trim()) {
       try {
-        var parsed = Model.parseDetails(raw)
-        if (parsed) {
-          var next = {}
-          for (var key in matchDetails) next[key] = matchDetails[key]
-          next[id] = parsed
-          matchDetails = next
+        var enriched = PanelDetails.enrich(
+          raw, id, root.matchDetails, root.matchEvents, root.matchForm, root.matchStats, Model)
+        if (enriched) {
+          root.matchDetails = enriched.details
+          if (enriched.events) root.matchEvents = enriched.events
+          if (enriched.form) root.matchForm = enriched.form
+          if (enriched.stats) root.matchStats = enriched.stats
 
-          var props = Model.extractPageProps(raw)
-          if (props && props.content) {
-            var evs = Model.parseFotmobEvents(props.content)
-            if (evs && (evs.goals.length > 0 || evs.redCards.length > 0)) {
-              var nextEvs = {}
-              for (var k1 in matchEvents) nextEvs[k1] = matchEvents[k1]
-              nextEvs[id] = evs
-              matchEvents = nextEvs
-            }
-            if (props.content.overview && props.content.overview.teams) {
-              var form = Model.parseFotmobForm(props.content.overview.teams)
-              if (form && (form.home.length > 0 || form.away.length > 0)) {
-                var nextForm = {}
-                for (var k2 in matchForm) nextForm[k2] = matchForm[k2]
-                nextForm[id] = form
-                matchForm = nextForm
-              }
-            }
-            if (props.content.stats) {
-              var stats = Model.parseFotmobStats(props.content.stats)
-              if (stats) {
-                var nextStats = {}
-                for (var k3 in matchStats) nextStats[k3] = matchStats[k3]
-                nextStats[id] = stats
-                matchStats = nextStats
-              }
-            }
+          // Mutate arrays in place and re-assign ONCE so a busy Saturday's
+          // batch of detail responses does not tear down every fixture row.
+          var reconciled = PanelDetails.reconcile(
+            enriched.parsed, id, root.allMatches, root.teamMatchesRaw, Model)
+          if (reconciled.allTouched) {
+            root.allMatches = reconciled.allMatches
+            root.checkScoreNotifications()
           }
-
-          // A Full-Time detail must close out the live card in both the global
-          // fixture list and the followed-team schedule. Mutate the arrays in
-          // place, then re-assign ONCE — a per-row in-place edit followed by
-          // an immediate re-broadcast would tear the fixtures Repeater down
-          // for every detail that lands during a busy Saturday afternoon.
-          var isFT = parsed.finished === true || parsed.reason === "FT" || parsed.reason === "AET" || parsed.reason === "PEN" || (parsed.statusLong && /full|extra|penalt|finish|ended/i.test(parsed.statusLong))
-          var allNext = Model.arrayFrom(allMatches)
-          var allTouched = false
-          for (var m = 0; m < allNext.length; m++) {
-            if (String(allNext[m].id) === id) {
-              var mObj = Object.assign({}, allNext[m])
-              if (isFT && mObj.status === "live") {
-                mObj.status = "finished"
-                mObj.statusReason = parsed.reason || "FT"
-                mObj.liveTime = ""
-                allTouched = true
-              }
-              if (parsed.liveTime && mObj.status === "live") {
-                mObj.liveTime = parsed.liveTime
-                allTouched = true
-              }
-              if (parsed.liveScore && mObj.status === "live") {
-                mObj.scoreText = parsed.liveScore
-                allTouched = true
-              }
-              allNext[m] = mObj
-            }
-          }
-          var teamNext = Model.arrayFrom(teamMatchesRaw)
-          var teamTouched = false
-          for (var t = 0; t < teamNext.length; t++) {
-            if (String(teamNext[t].id) === id) {
-              var tObj = Object.assign({}, teamNext[t])
-              if (isFT && tObj.status === "live") {
-                tObj.status = "finished"
-                tObj.statusReason = parsed.reason || "FT"
-                tObj.liveTime = ""
-                teamTouched = true
-              }
-              if (parsed.liveTime && tObj.status === "live") {
-                tObj.liveTime = parsed.liveTime
-                teamTouched = true
-              }
-              if (parsed.liveScore && tObj.status === "live") {
-                tObj.scoreText = parsed.liveScore
-                teamTouched = true
-              }
-              teamNext[t] = tObj
-              break
-            }
-          }
-          if (allTouched) {
-            allMatches = allNext
-            checkScoreNotifications()
-          }
-          if (teamTouched) teamMatchesRaw = teamNext
+          if (reconciled.teamTouched) root.teamMatchesRaw = reconciled.teamMatchesRaw
         }
       } catch (e) { console.warn("omasports: detail parse failed for", id, e) }
     }
@@ -2579,33 +2487,82 @@ Panel {
   }
 
   function relativeAge() {
-    var mins = Math.floor(Math.max(0, root.nowMs - root.lastUpdated.getTime()) / 60000)
-    if (mins < 1) return "just now"
-    if (mins < 60) return mins + " min ago"
-    var h = Math.floor(mins / 60)
-    return h + "h" + (mins % 60 > 0 ? (mins % 60) + "m" : "") + " ago"
+    return Policy.relativeAge(root.nowMs, root.lastUpdated.getTime())
   }
 
   function statusLine() {
-    if (loading && !hasData) return "󰥔 Loading " + activeSportMeta.label + "…"
-    if (loading) return "󰥔 Updating scores…"
-    if (persistenceError !== "") return persistenceError
-    if (errorMessage !== "") return errorMessage
-    if (!hasData) {
-      return fetchedOnce
-        ? "Nothing scheduled in the next few days."
-        : "Follow teams or leagues to track " + activeSportMeta.label + "."
-    }
-    var age = relativeAge()
-    // The "~40s auto-update" hint already lives right below — don't repeat it
-    if (fastPolling) return "● LIVE · updated " + age
-    if (loadedFromCache) return "Cached · updated " + age
-    return "Updated " + age
+    return Policy.statusLine({
+      loading: root.loading,
+      hasData: root.hasData,
+      fetchedOnce: root.fetchedOnce,
+      persistenceError: root.persistenceError,
+      errorMessage: root.errorMessage,
+      activeSportLabel: root.activeSportMeta.label,
+      fastPolling: root.fastPolling,
+      loadedFromCache: root.loadedFromCache,
+      nowMs: root.nowMs,
+      lastUpdatedMs: root.lastUpdated.getTime()
+    })
   }
 
   readonly property string statusText: {
     var _ = root.nowMs
     return root.statusLine()
+  }
+
+  property bool diagnosticCopied: false
+
+  function diagnosticProvider() {
+    if (root.activeSport === "football") return "FotMob"
+    if (root.activeSport === "f1") return "Jolpica"
+    return "ESPN"
+  }
+
+  function qtRuntimeVersion() {
+    var version = String(Qt.application.version || "")
+    return /^\d+\.\d+/.test(version) ? version : "6.x"
+  }
+
+  function diagnosticInfo() {
+    return Diagnostics.build({
+      pluginVersion: root.pluginVersion,
+      sport: root.activeSport,
+      provider: root.diagnosticProvider(),
+      opened: root.opened,
+      mock: root.mockMode,
+      qtVersion: root.qtRuntimeVersion(),
+      platform: Qt.platform.os,
+      loading: root.loading,
+      hasData: root.hasData,
+      fetchedOnce: root.fetchedOnce,
+      loadedFromCache: root.loadedFromCache,
+      persistenceError: root.persistenceError,
+      errorMessage: root.errorMessage,
+      lastUpdatedMs: root.lastUpdated.getTime(),
+      failedSources: root.failedLeagues.length,
+      knownCrests: Object.keys(root.knownLogoKeys || {}).length,
+      pendingCrests: root.pendingLogoKeys.length,
+      backgroundUpdates: root.backgroundUpdates,
+      showBarTicker: root.showBarTicker,
+      showSpotlight: root.showSpotlight,
+      showNewsWire: root.showNewsWire,
+      antiSpoiler: root.antiSpoiler,
+      enableNotifications: root.enableNotifications
+    })
+  }
+
+  function copyDiagnosticInfo() {
+    var text = root.diagnosticInfo()
+    if (!text) return false
+    // Fixed interpreter/tool paths and shellQuote keep diagnostic text data,
+    // never command syntax. No user or provider content is interpolated raw.
+    Quickshell.execDetached([
+      "/usr/bin/bash", "-c",
+      "printf %s " + Util.shellQuote(text) + " | /usr/bin/wl-copy"
+    ])
+    root.diagnosticCopied = true
+    diagnosticCopyTimer.restart()
+    return true
   }
 
   Component.onCompleted: {
@@ -2692,6 +2649,12 @@ Panel {
     interval: 500
     repeat: false
     onTriggered: root.dispatchNextNotification()
+  }
+  Timer {
+    id: diagnosticCopyTimer
+    interval: 2200
+    repeat: false
+    onTriggered: root.diagnosticCopied = false
   }
   SecureProcess {
     id: notifierProc
@@ -2912,42 +2875,27 @@ Panel {
   function hasLiveFollowedMatch() {
     // Same contract as favoriteTeamLive: only followed-team games justify
     // the provider-safe adaptive polling cadence
-    for (var i = 0; i < teamMatches.length; i++)
-      if (teamMatches[i] && teamMatches[i].status === "live") return true
-    return false
+    return Policy.hasLiveFollowedMatch(teamMatches)
   }
 
   function shouldFastPoll() {
-    // Followed team is playing live
-    if (hasLiveFollowedMatch()) return true
-    // Panel is open or background monitoring active with live events
-    if (monitoringAllowed() && root.liveCount > 0) return true
-    return false
+    // Followed team live, or an open/background-monitored panel with live events
+    return Policy.shouldFastPoll(monitoringAllowed(), root.liveCount, root.hasLiveFollowedMatch())
   }
 
   function livePollIntervalMs() {
-    if (activeSport === "nba" || activeSport === "nfl" || activeSport === "mlb" || activeSport === "nhl") {
-      return 15000 // 15s for ESPN direct JSON API
-    }
-    return 20000   // 20s for FotMob & F1 (safe edge cache limit)
+    return Policy.livePollIntervalMs(root.activeSport)
   }
 
   function scheduleNextPoll() {
     var wantRunning = monitoringAllowed()
-    fastPolling = wantRunning && (root.hasLiveFollowedMatch() || shouldFastPoll())
+    fastPolling = wantRunning && root.shouldFastPoll()
     if (!wantRunning) {
       refreshTimer.stop()
       return
     }
-    var ms
-    if (fastPolling) {
-      ms = livePollIntervalMs()
-    } else if (root.opened) {
-      ms = Math.min(root.slowRefreshMs, 60000)
-    } else {
-      ms = root.slowRefreshMs
-    }
-    root.setRefreshTimerInterval(ms)
+    root.setRefreshTimerInterval(Policy.nextPollDelay(
+      wantRunning, root.opened, root.slowRefreshMs, root.fastPolling, root.activeSport))
   }
 
   Timer {
@@ -2982,8 +2930,8 @@ Panel {
   property var lastIpcAt: 0
   function ipcThrottle() {
     var now = Date.now()
-    if (now - lastIpcAt < 250) return false
-    lastIpcAt = now
+    if (!Policy.ipcAllowed(root.lastIpcAt, now, 250)) return false
+    root.lastIpcAt = now
     return true
   }
 
@@ -3033,6 +2981,8 @@ Panel {
     function getSuppressFocus(): bool { return root.suppressFocus }
     function getTargetScreen(): string { return root.targetScreenName }
     function getOpened(): bool { return root.opened }
+    function getDiagnostics(): string { return root.diagnosticInfo() }
+    function copyDiagnostics(): void { root.copyDiagnosticInfo() }
     function testNotification(): void {
       root.sendDesktopNotification("OmaSports", "Goal and kickoff notifications are active!", "", "normal")
     }

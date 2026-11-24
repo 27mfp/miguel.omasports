@@ -2,9 +2,11 @@
 // Real Qt/Omarchy imports without OmarchyLoadPatch, windows or live data.
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { listRuntimeFiles } from "./stage-files.mjs"
 
 const directory = mkdtempSync(join(tmpdir(), "omasports-compatibility-"))
 try {
@@ -14,8 +16,11 @@ try {
   copyFileSync(new URL("../icon.png", import.meta.url), join(cache, "football-9825.png"))
   for (const name of ["Commons", "Ui"])
     cpSync(join(process.env.OMARCHY_PATH || "/usr/share/omarchy", "shell", name), join(directory, name), { recursive: true })
-  for (const name of readdirSync(new URL("../", import.meta.url)).filter(name => /\.(qml|js)$/.test(name)))
-    copyFileSync(new URL(`../${name}`, import.meta.url), join(directory, "sports", name))
+  for (const name of listRuntimeFiles(fileURLToPath(new URL("../", import.meta.url)))) {
+    const target = join(directory, "sports", name)
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(new URL(`../${name}`, import.meta.url), target)
+  }
   copyFileSync(new URL("runtime/compatibility.qml", import.meta.url), join(directory, "shell.qml"))
   const env = { ...process.env, HOME: directory, QT_QPA_PLATFORM: "offscreen", QT_QUICK_BACKEND: "software" }
   delete env.WAYLAND_DISPLAY

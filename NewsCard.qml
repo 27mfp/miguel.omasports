@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import qs.Commons as Commons
-import qs.Ui
 
 // Collapsible League Wire / Breaking News card displaying top stories
 // from official sport feeds (ESPN/FotMob).

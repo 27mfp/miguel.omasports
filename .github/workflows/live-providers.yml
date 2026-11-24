@@ -1,0 +1,22 @@
+name: live-providers
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC: catch upstream FotMob/ESPN/Jolpica schema drift
+    # before a release rather than during one.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Live provider acceptance (all sports)
+        run: node tests/live.mjs all

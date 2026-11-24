@@ -2,6 +2,7 @@
 import assert from "node:assert/strict"
 import { readFileSync, existsSync } from "node:fs"
 import { spawnSync } from "node:child_process"
+import { fixtureBytes } from "./fixture-io.mjs"
 
 const helperSource = readFileSync(new URL("../secure_io.py", import.meta.url), "utf8")
 const panelSource = readFileSync(new URL("../Panel.qml", import.meta.url), "utf8")
@@ -18,6 +19,11 @@ assert.match(helperSource, /FETCH_HARD_MAX_BYTES\s*=\s*8\s*\*\s*1024\s*\*\s*1024
 assert.match(helperSource, /CREST_MAX_BYTES\s*=\s*512\s*\*\s*1024/)
 assert.match(helperSource, /Content-Length.*exceeds byte limit/)
 assert.match(helperSource, /response exceeded byte limit/)
+assert.match(helperSource, /FETCH_BATCH_MAX_REQUESTS/)
+assert.match(helperSource, /FETCH_BATCH_HARD_MAX_BYTES/)
+assert.match(helperSource, /def parse_batch_requests\(/)
+assert.match(helperSource, /def run_batch\(/)
+assert.match(helperSource, /allowed_hosts=DATA_HOSTS/, "batch fetch must stay on provider-data hosts")
 
 // Writable roots come from the authenticated OS account, not HOME or another
 // inherited environment variable.
@@ -33,11 +39,13 @@ assert.match(helperSource, /os\.replace\(temp, name, src_dir_fd=dir_fd, dst_dir_
 assert.match(panelSource, /crest-batch/)
 
 for (const fixture of [
-  "tests/fixtures/fotmob-team-9825.html",
-  "tests/fixtures/fotmob-league-47.html",
-  "tests/fixtures/espn-nba-scoreboard.json"
+  "fotmob-team-9825.html",
+  "fotmob-league-47.html",
+  "espn-nba-scoreboard.json"
 ]) {
-  const bytes = readFileSync(new URL(`../${fixture}`, import.meta.url)).byteLength
+  // Compare the decompressed payload against the provider cap, not the
+  // repository's gzip on-disk size.
+  const bytes = fixtureBytes(fixture).byteLength
   assert.ok(bytes < 4 * 1024 * 1024, `${fixture} exceeds the configured provider cap`)
 }
 
