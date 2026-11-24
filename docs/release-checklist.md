@@ -1,4 +1,4 @@
-# 1.5.1 — Omarchy 4.5 compatibility patch (unreleased)
+# 1.5.1 — Omarchy 4.5 compatibility patch (2026-11-24)
 
 Local target: Omarchy 4.5.0-3 / Qt 6.12.0, 2026-11-06.
 
@@ -11,8 +11,8 @@ Local target: Omarchy 4.5.0-3 / Qt 6.12.0, 2026-11-06.
 - [x] Baseline updates were reviewed as images before accepting them. Existing goldens were unchanged; the only new baseline is the reviewed 2x MLB fixtures capture. Captures use a fixed palette, private preferences and a cold local crest cache; no live CDN images enter the mock screenshots.
 - [x] Final visual comparison: 24/24 standard dark views plus 2x scaling passed (0–0.012% perceptual difference, within tolerance).
 - [x] Production/native-fixture QML parsing, JavaScript syntax, Omarchy manifest validation, ruff/mypy (0 issues), qmllint (0 actionable warnings) and `git diff --check` passed.
-- [ ] Hosted CI on the PR head.
-- [ ] Review and merge the PR before creating a release/tag.
+- [x] Hosted CI on the PR head (`tests` run 45300846199: node-tests, python-checks, qml-syntax).
+- [x] Review and merge PR #3 before creating the release/tag.
 
 Review sheets: [dark](screenshots/release-1.5.1-dark.png), [light](screenshots/release-1.5.1-light.png), [expanded and scaled](screenshots/release-1.5.1-extra.png). They use synthetic data, not live match results.
 
