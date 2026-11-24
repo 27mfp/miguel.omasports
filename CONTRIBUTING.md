@@ -50,6 +50,35 @@ node tests/offline.mjs
 Visual goldens are reviewed screenshots, not generated truth. Capture at the
 requested scale, inspect the candidate, then update the matching baseline.
 
+## Marketplace checks
+
+The `Marketplace` workflow runs the Omarchy plugin marketplace's own update
+validation and automated security baseline (from
+`omacom/omarchy-plugin-marketplace`) on every push, pull request and release
+tag. It fails when the commit would not be accepted as is:
+
+- marketplace compatibility validation fails;
+- the security baseline reports any finding (for example
+  `remote-git-execution-unpinned` or `curl-pipe-shell`); fix the code rather
+  than asking a maintainer to accept it;
+- the baseline detects a capability that is not listed in
+  `.github/marketplace/allowed-capabilities.json`. Add one only after deciding
+  it is intended, and say why in the pull request.
+
+To check a pushed commit locally (`npm ci --ignore-scripts` in a marketplace
+clone first):
+
+```bash
+GITHUB_TOKEN=$(gh auth token) node .github/marketplace/check.mjs \
+  --marketplace=../omarchy-plugin-marketplace --plugin-id=miguel.omasports \
+  --repo=https://github.com/27mfp/miguel.omasports --commit="$(git rev-parse HEAD)" \
+  --allowed-capabilities=.github/marketplace/allowed-capabilities.json
+```
+
+After the release commit is on the default branch, open a
+[Plugin verification](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=verify-plugin.yml)
+request for that exact SHA.
+
 ## Commits and pull requests
 
 Keep changes focused. Describe the user-visible effect, the exact commands you
