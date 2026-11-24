@@ -48,6 +48,7 @@ export function test(name, fn) {
     console.log("  ✓ " + name)
   } catch (error) {
     failures.push(name)
+    process.exitCode = 1
     console.log("  ✗ " + name + "\n    " + String(error.message || error).split("\n").slice(0, 6).join("\n    "))
   }
 }
