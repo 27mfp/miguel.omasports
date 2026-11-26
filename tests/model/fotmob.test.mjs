@@ -6,6 +6,19 @@ import { Model, test } from "./harness.mjs"
 
 // ---------------------------------------------------------------- FotMob
 console.log("FotMob parsers")
+test("parseLeaguePage accepts the crossorigin attribute on the Next.js payload", () => {
+  const data = { props: { pageProps: { details: { id: 47, name: "Premier League" } } } }
+  const html = `<script id="__NEXT_DATA__" type="application/json" crossorigin="anonymous">${JSON.stringify(data)}</script>`
+  assert.equal(Model.parseLeaguePage(html, "47")?.league.name, "Premier League")
+})
+
+test("Next.js payload lookup uses actual script attributes regardless of order", () => {
+  const decoy = `<script type="application/json" data-note=' id="__NEXT_DATA__" '>{}</script>`
+  const data = { props: { pageProps: { header: { status: { reason: { short: "FT" } } } } } }
+  const script = `<script type='application/json' data-note="a > b" id='__NEXT_DATA__'>${JSON.stringify(data)}</script>`
+  assert.equal(Model.parseDetails(decoy + script)?.reason, "FT")
+})
+
 test("parseScore reads scoreStr", () => {
   assert.deepEqual(Model.parseScore({ scoreStr: "2-1" }), { home: 2, away: 1, text: "2–1" })
   assert.deepEqual(Model.parseScore({ aggregateStr: "3-3" }), { home: 0, away: 0, text: "3-3" })

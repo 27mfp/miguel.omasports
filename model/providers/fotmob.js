@@ -20,18 +20,32 @@ function extractPageProps(html) {
       if (direct && typeof direct === "object") return direct
     } catch (e) {}
   }
-  var marker = '<script id="__NEXT_DATA__" type="application/json">'
-  var start = html.indexOf(marker)
-  if (start === -1) return {}
-  start += marker.length
-  var end = html.indexOf("</script>", start)
-  if (end === -1) return {}
-  try {
-    var parsed = JSON.parse(html.substring(start, end))
-    return (parsed && parsed.props && parsed.props.pageProps) || {}
-  } catch (e) {
-    return {}
+  var scriptTags = /<script(?=\s|>)((?:[^"'<>]|"[^"]*"|'[^']*')*)>/gi
+  var script
+  while ((script = scriptTags.exec(html)) !== null) {
+    var attributes = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>]+)))?/g
+    var id = ""
+    var type = ""
+    var attribute
+    while ((attribute = attributes.exec(script[1])) !== null) {
+      var name = attribute[1].toLowerCase()
+      var value = attribute[2] || attribute[3] || attribute[4] || ""
+      if (name === "id") id = value
+      if (name === "type") type = value
+    }
+    if (id !== "__NEXT_DATA__" || type.toLowerCase() !== "application/json") continue
+
+    var start = scriptTags.lastIndex
+    var end = html.indexOf("</script>", start)
+    if (end === -1) return {}
+    try {
+      var parsed = JSON.parse(html.substring(start, end))
+      return (parsed && parsed.props && parsed.props.pageProps) || {}
+    } catch (e) {
+      return {}
+    }
   }
+  return {}
 }
 
 function parseScore(status) {

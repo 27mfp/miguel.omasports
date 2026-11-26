@@ -4,20 +4,39 @@ Omarchy bar-widget plugin (Quickshell/QML + a pure-JS data engine). There is
 no build step and no virtualenv: the shell loads the QML straight from the
 plugin directory, and `secure_io.py` runs on the system `python3`.
 
+## Update an installation from GitHub
+
+Run `omarchy plugin update miguel.omasports` for a plugin installed with
+`omarchy plugin add`. The updater previews available changes and asks for
+confirmation. For unattended updates, Omarchy requires `--yes`.
+After an update, use the reload check below if the widget was already loaded.
+
 ## Install the working tree into the live bar
 
+Use this from the repository root for a copied installation. Check the
+destination first if you already have a linked development checkout.
+
 ```bash
-omarchy plugin validate .
-install_dir="$HOME/.config/omarchy/plugins/miguel.omasports"
-mkdir -p "$install_dir"
-command cp -f -- *.qml *.py SportsModel.js manifest.json icon.svg icon.png "$install_dir/"
-omarchy-shell shell rescanPlugins
-omarchy plugin enable miguel.omasports --section right   # or left / center
-# Restart only if your host does not reload changed components; see below.
+(
+  set -e
+  install_dir="$HOME/.config/omarchy/plugins/miguel.omasports"
+  if [ -L "$install_dir" ]; then
+    echo "Follow the linked checkout instructions below." >&2
+    exit 1
+  fi
+  mkdir -p "$install_dir"
+  command cp -f -- *.qml secure_io.py SportsModel.js manifest.json icon.svg icon.png "$install_dir/"
+  command cp -Rf -- controllers model "$install_dir/"
+  omarchy plugin validate "$install_dir"
+  omarchy-shell shell rescanPlugins
+)
 ```
 
-For a copied installation, re-run the `cp` line after editing code, then
-rescan plugins to load the updated QML.
+For a new installation, enable it with
+`omarchy plugin enable miguel.omasports --section right`. For updates to a
+copied installation, repeat the copy and validation steps.
+
+### Linked development checkouts
 
 Some development installations link the plugin directory to the checkout.
 Check with:
@@ -27,17 +46,21 @@ ls -ld "$HOME/.config/omarchy/plugins/miguel.omasports"
 readlink -f "$HOME/.config/omarchy/plugins/miguel.omasports"
 ```
 
-If the plugin directory points to this checkout, skip `mkdir` and `cp`.
-Validate the resolved checkout path and rescan plugins.
-The plugin validator rejects a symlink passed as the plugin folder even
-when its target validates successfully.
+Update the checkout at the resolved path using Git, then pass that path to
+`omarchy plugin validate` and run `omarchy-shell shell rescanPlugins`.
+Omarchy 4.5 rejects the symlink path during validation, so its plugin
+updater can roll back an otherwise valid update of a linked checkout.
 
-`rescanPlugins` unloads and remounts plugins, but component-cache clearing
-is host/version dependent. On the tested host it still served previous QML;
-`omarchy-restart-shell` was needed to load source changes. The visual suite
-checks a source revision before capturing, so it refuses to test stale code.
+### Check the loaded version
+
+For an enabled widget, run `omarchy-shell miguel.omasports getDiagnostics`
+and check the `plugin:` line. The 1.5.0 widget does not have this IPC method.
+In an isolated 1.5.0 to 1.5.1 upgrade on Omarchy 4.5, rescanning kept the old
+QML in memory. If the shell still serves the old widget after a rescan, run
+`omarchy-restart-shell` when you can interrupt the bar briefly, then check
+the loaded version again. The visual suite also checks a source revision
+before capturing.
 Rescanning can close plugin panels, and restarting briefly redraws the bar.
-`command cp -f` bypasses an interactive `cp` alias for copied installations.
 
 Remove with `omarchy plugin remove miguel.omasports`.
 
@@ -72,6 +95,5 @@ interaction tests use a headless monitor; see DEVELOPMENT.md before running them
   browser-like User-Agent gets an Akamai "Access Denied".
 - Crests use only the validated local cache. A cold cache shows a monogram
   until the helper publishes the image; no remote Image fallback is used.
-- Keep all `*.qml` files when copying an installation, including `PlainText.qml`.
 - A one-time `computeStandingsRows is not a function` warning at shell
   startup is pre-existing and harmless.

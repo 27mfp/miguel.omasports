@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Restore FotMob league, team and match parsing when the embedded Next.js data script has extra attributes.
+- Include the nested model and controller modules in the source installation instructions and document how to verify the loaded version after an update.
+
 ### Added
 
 - `Marketplace` CI workflow that runs the Omarchy plugin marketplace's update validation and security baseline on every push, pull request and `v*` tag. Any finding, or a capability not listed in `.github/marketplace/allowed-capabilities.json` (currently none), fails the check.
